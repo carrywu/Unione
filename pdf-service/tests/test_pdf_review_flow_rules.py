@@ -10,6 +10,7 @@ from models import PageContent, TextBlock
 from layout_models import ExerciseBlock, LayoutElement, QuestionCoreBlock, VisualBlock
 from block_segmenter import segment_question_cores
 from parser_kernel.adapter import parse_extractor_with_kernel
+from pipeline import _normalize_images
 from question_splitter import split_questions
 from strategies.markdown_question_strategy import MarkdownQuestionStrategy
 from tests.test_scanned_question_book_kernel import FakeScannedQuestionExtractor
@@ -37,6 +38,17 @@ def visual_bbox(question: dict, visual_id: str) -> list[float] | None:
         if item.get("id") == visual_id or item.get("ref") == visual_id:
             return item.get("bbox")
     return None
+
+
+def image_by_ref(question: dict, visual_id: str) -> dict:
+    for image in question.get("images") or []:
+        if image.get("ref") == visual_id or image.get("id") == visual_id:
+            return image
+    raise AssertionError(f"{visual_id} not found in question images")
+
+
+def bbox_contains(outer: list[float], inner: list[float]) -> bool:
+    return outer[0] <= inner[0] and outer[1] <= inner[1] and outer[2] >= inner[2] and outer[3] >= inner[3]
 
 
 class PdfReviewFlowRulesTest(unittest.TestCase):
@@ -319,6 +331,9 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
                     "page": 1,
                     "kind": "chart",
                     "bbox": [108, 197, 434, 351],
+                    "raw_bbox": [108, 197, 434, 351],
+                    "expanded_bbox": [108, 197, 434, 351],
+                    "absorbed_texts": [],
                     "caption": "2016~2022 年中国可穿戴设备产量",
                     "image_path": "images/p1-img1.png",
                     "assignment_confidence": 0.87,
@@ -327,6 +342,33 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
         )
         self.assertEqual(question["images"][0]["ref"], "p1-img1")
         self.assertEqual(question["images"][0]["bbox"], [108, 197, 434, 351])
+        self.assertEqual(question["images"][0]["raw_bbox"], [108, 197, 434, 351])
+        self.assertEqual(question["images"][0]["expanded_bbox"], [108, 197, 434, 351])
+
+    def test_pipeline_preserves_visual_expansion_metadata_on_images(self):
+        images = _normalize_images(
+            [
+                {
+                    "base64": "fake-b64",
+                    "ref": "p1-img1",
+                    "bbox": [100, 190, 440, 374],
+                    "raw_bbox": [108, 197, 434, 351],
+                    "expanded_bbox": [100, 190, 440, 374],
+                    "absorbed_texts": [
+                        {
+                            "type": "caption",
+                            "text": "2016~2022 年中国可穿戴设备产量",
+                            "bbox": [154, 358, 406, 370],
+                        }
+                    ],
+                }
+            ]
+        )
+
+        image = images[0].model_dump()
+        self.assertEqual(image["raw_bbox"], [108, 197, 434, 351])
+        self.assertEqual(image["expanded_bbox"], [100, 190, 440, 374])
+        self.assertEqual(image["absorbed_texts"][0]["type"], "caption")
 
     def test_question_core_ignores_header_and_post_option_visual_titles(self):
         elements = [
@@ -398,6 +440,7 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
             )
             assertions = run_visual_assertions(layout, case)
             questions_by_index = {int(question["index"]): question for question in layout["questions"]}
+            elements = layout["layout_elements"]
 
         self.assertTrue(
             assertions["passed"],
@@ -406,6 +449,40 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
         self.assertEqual([image["ref"] for image in questions_by_index[4]["images"]], ["p2-img2"])
         self.assertEqual(questions_by_index[5]["images"], [])
         self.assertEqual([image["ref"] for image in questions_by_index[6]["images"]], ["p3-img1", "p3-img2"])
+        self._assert_visual_absorbed_text(questions_by_index[1], "p1-img1", "2016~2022 年中国可穿戴设备产量", elements)
+        self._assert_visual_absorbed_text(questions_by_index[2], "p1-img2", "2012~2016 年社会消费品零售总额", elements)
+        self._assert_visual_absorbed_text(questions_by_index[3], "p2-img1", "2009~2018 年我国教育经费投入", elements)
+        self._assert_visual_absorbed_text(questions_by_index[4], "p2-img2", "2016~2021 年我国工业大数据市场规模增长及预测", elements)
+        self._assert_visual_absorbed_text(questions_by_index[6], "p3-img1", "2023 年全国规模以上文化及相关产业企业相关指标情况", elements)
+        self._assert_visual_absorbed_text(questions_by_index[6], "p3-img2", "2023 年全国规模以上文化及相关产业企业相关指标情况", elements)
+        self._assert_visual_absorbed_text(questions_by_index[7], "p4-img1", "2015~2018 年D 省软件及信息服务业营业额", elements)
+        self._assert_visual_absorbed_text(questions_by_index[7], "p4-img1", "注：“1 季”表示第一季度数值，后同。", elements)
+
+    def _assert_visual_absorbed_text(self, question: dict, visual_id: str, expected_text: str, elements: list[dict]):
+        image = image_by_ref(question, visual_id)
+        raw_bbox = image.get("raw_bbox")
+        expanded_bbox = image.get("bbox")
+        self.assertIsInstance(raw_bbox, list)
+        self.assertIsInstance(expanded_bbox, list)
+        self.assertNotEqual(raw_bbox, expanded_bbox)
+        absorbed_texts = image.get("absorbed_texts") or []
+        self.assertTrue(
+            any(expected_text in item.get("text", "") for item in absorbed_texts),
+            json.dumps({"visual_id": visual_id, "absorbed_texts": absorbed_texts}, ensure_ascii=False, indent=2),
+        )
+        text_element = next(item for item in elements if expected_text in str(item.get("text") or ""))
+        self.assertTrue(
+            bbox_contains(expanded_bbox, text_element["bbox"]),
+            json.dumps(
+                {"visual_id": visual_id, "expanded_bbox": expanded_bbox, "text_bbox": text_element["bbox"]},
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
+        self.assertFalse(
+            any((item.get("type") in {"question_marker", "option"}) for item in absorbed_texts),
+            json.dumps({"visual_id": visual_id, "absorbed_texts": absorbed_texts}, ensure_ascii=False, indent=2),
+        )
 
     def test_validator_accepts_options_dict_without_options_missing_warning(self):
         result = validate_and_clean(

@@ -49,6 +49,9 @@ class QuestionImage(BaseModel):
     image_order: Optional[int] = None
     insert_position: Optional[str] = None
     bbox: Optional[List[float]] = None
+    raw_bbox: Optional[List[float]] = None
+    expanded_bbox: Optional[List[float]] = None
+    absorbed_texts: List[Dict[str, Any]] = []
     same_visual_group_id: Optional[str] = None
     assignment_confidence: Optional[float] = None
     ai_desc: Optional[str] = None

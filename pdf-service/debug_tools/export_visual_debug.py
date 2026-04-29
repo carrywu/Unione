@@ -171,6 +171,26 @@ def render_report(
             f"- {record['question']}: expected={record['expected_visuals']} actual={record['actual_visuals']} "
             f"source_page={record['source_page']} source_bbox={record['source_bbox']}"
         )
+    lines.extend(["", "## Visual Expansion Debug"])
+    visual_by_id = {visual.get("id"): visual for visual in layout.get("visuals") or []}
+    questions_by_key = case.get("questions") or {}
+    for q_key, expected in questions_by_key.items():
+        if int(expected.get("index") or str(q_key).lstrip("q") or 0) > 7:
+            continue
+        lines.append(f"- {q_key}:")
+        for visual_id in expected.get("expected_visuals") or []:
+            visual = visual_by_id.get(visual_id) or {}
+            absorbed = [
+                str(item.get("text") or "")
+                for item in visual.get("absorbed_texts") or []
+                if str(item.get("text") or "").strip()
+            ]
+            lines.append(
+                f"  - {visual_id}: raw_bbox={visual.get('raw_bbox')} expanded_bbox={visual.get('expanded_bbox') or visual.get('bbox')} "
+                f"crop={visual.get('image_path')} absorbed_texts={absorbed}"
+            )
+        if not expected.get("expected_visuals"):
+            lines.append("  - no visuals")
     lines.extend(["", "## Failed Assertions"])
     if assertions.get("failures"):
         for failure in assertions["failures"]:

@@ -30,6 +30,15 @@ export interface Question {
     image_order?: number;
     insert_position?: 'above_stem' | 'below_stem' | 'above_options' | 'below_options' | string;
     bbox?: number[];
+    raw_bbox?: number[];
+    expanded_bbox?: number[];
+    absorbed_texts?: Array<{
+      id?: string;
+      type?: string;
+      text?: string;
+      bbox?: number[];
+      order_index?: number;
+    }>;
     source?: string;
     assignment_confidence?: number;
     same_visual_group_id?: string;

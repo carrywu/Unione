@@ -155,6 +155,9 @@ class MarkdownQuestionStrategy:
             "page": visual.page,
             "role": role,
             "bbox": visual.bbox,
+            "raw_bbox": visual.raw_bbox or visual.bbox,
+            "expanded_bbox": visual.expanded_bbox or visual.bbox,
+            "absorbed_texts": visual.absorbed_texts,
             "assignment_confidence": visual.assignment_confidence,
         }
 
@@ -164,6 +167,9 @@ class MarkdownQuestionStrategy:
             "page": visual.page,
             "kind": visual.kind,
             "bbox": visual.bbox,
+            "raw_bbox": visual.raw_bbox or visual.bbox,
+            "expanded_bbox": visual.expanded_bbox or visual.bbox,
+            "absorbed_texts": visual.absorbed_texts,
             "caption": visual.caption,
             "image_path": visual.image_path,
             "assignment_confidence": visual.assignment_confidence,

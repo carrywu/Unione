@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 BBox = list[float]
 
@@ -44,6 +44,9 @@ class VisualBlock:
     kind: Literal["image", "table", "chart"]
     bbox: BBox
     image_path: str
+    raw_bbox: BBox | None = None
+    expanded_bbox: BBox | None = None
+    absorbed_texts: list[dict[str, Any]] = field(default_factory=list)
     caption: str | None = None
     nearby_text_before: str | None = None
     nearby_text_after: str | None = None

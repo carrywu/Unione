@@ -55,6 +55,13 @@ function visualRefs(question) {
       id: item.id || item.ref || '',
       page: item.page ?? null,
       bbox: roundBbox(asBbox(item.bbox)),
+      raw_bbox: roundBbox(asBbox(item.raw_bbox)),
+      expanded_bbox: roundBbox(asBbox(item.expanded_bbox)),
+      absorbed_texts: asArray(item.absorbed_texts).map((text) => ({
+        text: text.text || '',
+        type: text.type || '',
+        bbox: roundBbox(asBbox(text.bbox)),
+      })),
     }))
     .filter((item) => item.id || item.bbox);
 }
@@ -68,6 +75,13 @@ function images(question) {
           ref: item.ref || null,
           page: item.page ?? null,
           bbox: roundBbox(asBbox(item.bbox)),
+          raw_bbox: roundBbox(asBbox(item.raw_bbox)),
+          expanded_bbox: roundBbox(asBbox(item.expanded_bbox)),
+          absorbed_texts: asArray(item.absorbed_texts).map((text) => ({
+            text: text.text || '',
+            type: text.type || '',
+            bbox: roundBbox(asBbox(text.bbox)),
+          })),
           role: item.role || item.image_role || null,
         })
     .filter((item) => item.id || item.bbox);

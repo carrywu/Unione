@@ -6,6 +6,7 @@ from typing import Any
 
 BANNED_SOURCE_ELEMENT_TYPES = {"caption", "heading", "image", "table"}
 HEADER_FOOTER_RE = re.compile(r"^(?:\d{1,4}|.*(?:资料分析题库|夸夸刷|第[一二三四五六七八九十百千万\d]+章).*)$")
+QUESTION_OR_OPTION_RE = re.compile(r"^\s*(?:(?:【\s*)?例\s*\d+|第\s*\d+\s*题|[A-D][.．、])")
 
 
 def run_visual_assertions(layout: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
@@ -46,6 +47,68 @@ def run_visual_assertions(layout: dict[str, Any], case: dict[str, Any]) -> dict[
                     _visual_boxes(visuals, set(expected_visuals) | set(actual_visuals)),
                 )
             )
+
+        expected_absorbed_texts = list(expected.get("expected_absorbed_texts") or [])
+        if expected_absorbed_texts:
+            absorbed_texts: list[dict[str, Any]] = []
+            for visual_id in actual_visuals:
+                visual = visuals.get(visual_id) or {}
+                raw_bbox = _bbox(visual.get("raw_bbox"))
+                expanded_bbox = _bbox(visual.get("expanded_bbox") or visual.get("bbox"))
+                if not raw_bbox or not expanded_bbox:
+                    failures.append(
+                        _failure(
+                            "visual_expansion_missing",
+                            q_key,
+                            f"{visual_id} must expose raw_bbox and expanded_bbox",
+                            _visual_boxes(visuals, {visual_id}),
+                        )
+                    )
+                elif raw_bbox == expanded_bbox:
+                    failures.append(
+                        _failure(
+                            "visual_not_expanded",
+                            q_key,
+                            f"{visual_id} bbox was not expanded",
+                            [
+                                {"page": int(visual.get("page") or 0), "bbox": raw_bbox, "label": f"{visual_id} raw"},
+                                {"page": int(visual.get("page") or 0), "bbox": expanded_bbox, "label": f"{visual_id} expanded"},
+                            ],
+                        )
+                    )
+                visual_absorbed = list(visual.get("absorbed_texts") or [])
+                absorbed_texts.extend(visual_absorbed)
+                for text in expected_absorbed_texts:
+                    if not any(str(text) in str(item.get("text") or "") for item in visual_absorbed):
+                        failures.append(
+                            _failure(
+                                "visual_absorbed_text_missing_for_visual",
+                                q_key,
+                                f"{visual_id} did not absorb expected caption/title text: {text}",
+                                _visual_boxes(visuals, {visual_id}),
+                            )
+                        )
+            for text in expected_absorbed_texts:
+                if not any(str(text) in str(item.get("text") or "") for item in absorbed_texts):
+                    failures.append(
+                        _failure(
+                            "visual_absorbed_text_missing",
+                            q_key,
+                            f"expected visual caption/title text not absorbed: {text}",
+                            _visual_boxes(visuals, set(actual_visuals)),
+                        )
+                    )
+            for item in absorbed_texts:
+                absorbed_text = str(item.get("text") or "")
+                if item.get("type") in {"question_marker", "option"} or QUESTION_OR_OPTION_RE.match(absorbed_text):
+                    failures.append(
+                        _failure(
+                            "visual_absorbed_question_or_option",
+                            q_key,
+                            f"visual absorbed question/option text: {absorbed_text}",
+                            _visual_boxes(visuals, set(actual_visuals)),
+                        )
+                    )
 
         if not source_bbox:
             failures.append(_failure("source_bbox_missing", q_key, "source_bbox is missing", []))

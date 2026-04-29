@@ -6,18 +6,22 @@ questions:
   q1:
     index: 1
     expected_visuals: [p1-img1]
+    expected_absorbed_texts: [2016~2022 年中国可穿戴设备产量]
     must_not_overlap_visuals: [p1-img2]
   q2:
     index: 2
     expected_visuals: [p1-img2]
+    expected_absorbed_texts: [2012~2016 年社会消费品零售总额]
     must_not_overlap_questions: [q1]
   q3:
     index: 3
     expected_visuals: [p2-img1]
+    expected_absorbed_texts: [2009~2018 年我国教育经费投入]
     must_not_overlap_visuals: [p2-img2]
   q4:
     index: 4
     expected_visuals: [p2-img2]
+    expected_absorbed_texts: [表1, 2016~2021 年我国工业大数据市场规模增长及预测]
     must_not_overlap_visuals: [p2-img1]
   q5:
     index: 5
@@ -26,10 +30,12 @@ questions:
   q6:
     index: 6
     expected_visuals: [p3-img1, p3-img2]
+    expected_absorbed_texts: [2023 年全国规模以上文化及相关产业企业相关指标情况]
     must_not_overlap_questions: [q5]
   q7:
     index: 7
     expected_visuals: [p4-img1]
+    expected_absorbed_texts: [2015~2018 年D 省软件及信息服务业营业额, 注：“1 季”表示第一季度数值，后同。]
     must_not_overlap_questions: [q6]
   q8:
     index: 8
