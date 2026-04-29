@@ -254,6 +254,7 @@ import { getBanks, type Bank } from '@/api/bank';
 import { pdfProxyUrl } from '@/api/pdf';
 import { getQuestion, getQuestions, updateQuestion, type Question } from '@/api/question';
 import PdfLocator from '@/components/PdfLocator.vue';
+import { buildSourceHighlights, sourcePageForQuestion } from '@/utils/pdfHighlights';
 
 type OptionKey = 'A' | 'B' | 'C' | 'D';
 type ImageSlot = 'stem' | 'options';
@@ -325,14 +326,7 @@ const saveStateText = computed(() => {
   return '有未保存修改';
 });
 
-const sourcePage = computed(() =>
-  selectedQuestion.value?.pdf_source?.source_page_start ||
-  selectedQuestion.value?.source_page_start ||
-  selectedQuestion.value?.pdf_source?.page_num ||
-  selectedQuestion.value?.page_num ||
-  selectedQuestion.value?.page_range?.[0] ||
-  1,
-);
+const sourcePage = computed(() => sourcePageForQuestion(selectedQuestion.value));
 const pdfLocatorSrc = computed(() => {
   const taskId = selectedQuestion.value?.pdf_source?.task_id;
   return taskId ? pdfProxyUrl(taskId) : selectedQuestion.value?.pdf_source?.file_url || '';
@@ -341,21 +335,7 @@ const pdfRequestHeaders = computed(() => {
   const token = localStorage.getItem('admin_token');
   return token ? { Authorization: `Bearer ${token}` } : undefined;
 });
-const pdfHighlights = computed(() => {
-  const bbox = selectedQuestion.value?.pdf_source?.source_bbox || selectedQuestion.value?.source_bbox;
-  if (!bbox || bbox.length !== 4) return [];
-  const page = selectedQuestion.value?.pdf_source?.source_page_start || selectedQuestion.value?.source_page_start || sourcePage.value;
-  return [
-    {
-      page: Math.max(1, Number(page) || 1),
-      x: bbox[0],
-      y: bbox[1],
-      width: Math.max(1, bbox[2] - bbox[0]),
-      height: Math.max(1, bbox[3] - bbox[1]),
-      label: '题目区域',
-    },
-  ];
-});
+const pdfHighlights = computed(() => buildSourceHighlights(selectedQuestion.value));
 
 async function fetchBanks() {
   bankLoading.value = true;

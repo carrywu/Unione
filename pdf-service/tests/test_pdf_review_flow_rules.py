@@ -26,6 +26,19 @@ def make_page(page_num: int, blocks: list[tuple[list[float], str]]) -> PageConte
     )
 
 
+def bbox_intersects(left: list[float] | None, right: list[float] | None) -> bool:
+    if not left or not right:
+        return False
+    return max(left[0], right[0]) < min(left[2], right[2]) and max(left[1], right[1]) < min(left[3], right[3])
+
+
+def visual_bbox(question: dict, visual_id: str) -> list[float] | None:
+    for item in (question.get("visual_refs") or []) + (question.get("images") or []):
+        if item.get("id") == visual_id or item.get("ref") == visual_id:
+            return item.get("bbox")
+    return None
+
+
 class PdfReviewFlowRulesTest(unittest.TestCase):
     def test_repeated_header_is_removed_from_cross_page_question(self):
         pages = [
@@ -354,6 +367,14 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
             self.assertEqual([image["ref"] for image in by_index[index]["images"]], refs)
             self.assertNotIn("资料分析题库", by_index[index]["content"])
             self.assertNotIn("夸夸刷", by_index[index]["content"])
+        self.assertFalse(
+            bbox_intersects(by_index[1]["source_bbox"], visual_bbox(by_index[2], "p1-img2")),
+            "q1 source_bbox must not cover q2 visual bbox",
+        )
+        self.assertFalse(
+            bbox_intersects(by_index[2]["source_bbox"], by_index[1]["source_bbox"]),
+            "q2 source_bbox must not overlap q1 source_bbox",
+        )
 
     def test_admin_demo_examples_1_to_10_visual_assignment_and_source_bbox_regression(self):
         case_path = Path(__file__).resolve().parents[1] / "debug_tools" / "cases" / "example_1_10.yml"

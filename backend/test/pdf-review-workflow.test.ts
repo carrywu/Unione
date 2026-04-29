@@ -25,6 +25,12 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function bboxIntersects(left: number[] | null | undefined, right: number[] | null | undefined) {
+  if (!left || !right) return false;
+  return Math.max(left[0], right[0]) < Math.min(left[2], right[2])
+    && Math.max(left[1], right[1]) < Math.min(left[3], right[3]);
+}
+
 function createRepository<T extends Row>(rows: T[]) {
   return {
     create(payload: Partial<T>) {
@@ -190,6 +196,7 @@ function harness() {
 async function run() {
   await testPublishSkipsLowConfidenceAndWarningQuestions();
   await testReadabilityReviewSendsSourceBboxSeparatelyFromImages();
+  await testReadabilityReviewKeepsAdjacentSourceAndVisualLayersSeparated();
   await testQuestionImageOperationsOnlyTouchCurrentQuestion();
   await testMergeAdjacentQuestionImagesMarksSharedGroup();
   await testAiRepairReturnsProposalWithoutPersisting();
@@ -248,6 +255,62 @@ async function testReadabilityReviewSendsSourceBboxSeparatelyFromImages() {
   assert.deepEqual(requestBody.question.visual_refs, [{ id: 'p1-img1', page: 1, bbox: [108, 197, 434, 351] }]);
   assert.deepEqual(requestBody.question.images, h.questions[0].images);
   assert.equal(requestBody.question.source_bbox, undefined);
+}
+
+async function testReadabilityReviewKeepsAdjacentSourceAndVisualLayersSeparated() {
+  const h = harness();
+  Object.assign(h.questions[0], {
+    page_num: 1,
+    source_page_start: 1,
+    source_page_end: 1,
+    source_bbox: [65, 378, 476, 494],
+    images: [{ ref: 'p1-img1', bbox: [108, 197, 434, 351] }],
+    image_refs: ['p1-img1'],
+    visual_refs: [{ id: 'p1-img1', page: 1, bbox: [108, 197, 434, 351] }],
+  });
+  Object.assign(h.questions[1], {
+    page_num: 1,
+    source_page_start: 1,
+    source_page_end: 2,
+    source_bbox: [65, 646, 476, 678],
+    images: [{ ref: 'p1-img2', bbox: [143, 503, 398, 619] }],
+    image_refs: ['p1-img2'],
+    visual_refs: [{ id: 'p1-img2', page: 1, bbox: [143, 503, 398, 619] }],
+  });
+  const requestBodies: any[] = [];
+  const originalPost = axios.post;
+  (axios as any).post = async (_url: string, body: any) => {
+    requestBodies.push(body);
+    return {
+      data: {
+        readable: true,
+        needs_review: false,
+        score: 0.91,
+        reasons: [],
+        prompts: [],
+        focus_areas: [],
+        source: 'test',
+      },
+    };
+  };
+  try {
+    await h.questionService.reviewReadability('q1');
+    await h.questionService.reviewReadability('q2');
+  } finally {
+    (axios as any).post = originalPost;
+  }
+
+  assert.equal(requestBodies.length, 2);
+  assert.deepEqual(requestBodies[0].source.source_bbox, [65, 378, 476, 494]);
+  assert.deepEqual(requestBodies[0].question.visual_refs.map((item: any) => item.id), ['p1-img1']);
+  assert.deepEqual(requestBodies[0].question.images.map((item: any) => item.ref), ['p1-img1']);
+  assert.deepEqual(requestBodies[1].source.source_bbox, [65, 646, 476, 678]);
+  assert.deepEqual(requestBodies[1].question.visual_refs.map((item: any) => item.id), ['p1-img2']);
+  assert.deepEqual(requestBodies[1].question.images.map((item: any) => item.ref), ['p1-img2']);
+  assert.equal(requestBodies[0].question.source_bbox, undefined);
+  assert.equal(requestBodies[1].question.source_bbox, undefined);
+  assert.equal(bboxIntersects(requestBodies[0].source.source_bbox, requestBodies[1].question.visual_refs[0].bbox), false);
+  assert.equal(bboxIntersects(requestBodies[1].source.source_bbox, requestBodies[0].source.source_bbox), false);
 }
 
 async function testQuestionImageOperationsOnlyTouchCurrentQuestion() {

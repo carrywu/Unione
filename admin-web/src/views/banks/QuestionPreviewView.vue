@@ -310,6 +310,7 @@ import ImagePreview from '@/components/ImagePreview.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import PdfLocator from '@/components/PdfLocator.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import { buildSourceHighlights, sourcePageForQuestion } from '@/utils/pdfHighlights';
 
 type PreviewImage = {
   src: string;
@@ -450,14 +451,7 @@ const options = computed(() => [
 
 const questionImages = computed(() => normalizeImageList(question.value?.images || []));
 const materialImages = computed(() => normalizeImageList(question.value?.material?.images || []));
-const sourcePage = computed(() =>
-  question.value?.pdf_source?.source_page_start ||
-  question.value?.source_page_start ||
-  question.value?.pdf_source?.page_num ||
-  question.value?.page_num ||
-  question.value?.page_range?.[0] ||
-  1,
-);
+const sourcePage = computed(() => sourcePageForQuestion(question.value));
 const pdfLocatorSrc = computed(() => {
   const taskId = question.value?.pdf_source?.task_id;
   return taskId ? pdfProxyUrl(taskId) : question.value?.pdf_source?.file_url || '';
@@ -471,21 +465,7 @@ const pdfRequestHeaders = computed(() => {
   const token = localStorage.getItem('admin_token');
   return token ? { Authorization: `Bearer ${token}` } : undefined;
 });
-const pdfHighlights = computed(() => {
-  const bbox = question.value?.pdf_source?.source_bbox || question.value?.source_bbox;
-  if (!bbox || bbox.length !== 4) return [];
-  const page = question.value?.pdf_source?.source_page_start || question.value?.source_page_start || sourcePage.value;
-  return [
-    {
-      page: Math.max(1, Number(page) || 1),
-      x: bbox[0],
-      y: bbox[1],
-      width: Math.max(1, bbox[2] - bbox[0]),
-      height: Math.max(1, bbox[3] - bbox[1]),
-      label: '题目区域',
-    },
-  ];
-});
+const pdfHighlights = computed(() => buildSourceHighlights(question.value));
 const ocrDialogTitle = computed(() => {
   return {
     stem: '确认题干识别结果',
