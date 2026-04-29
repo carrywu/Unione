@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from parser_kernel.adapter import parse_extractor_with_kernel
+from parser_kernel.adapter import _bbox_to_page_rect, parse_extractor_with_kernel
 
 
 class FakeScannedQuestionExtractor:
@@ -34,6 +34,51 @@ class FakeScannedQuestionExtractor:
 
 
 class ScannedQuestionBookKernelTest(unittest.TestCase):
+    def test_visual_bbox_conversion_uses_actual_capped_render_scale(self):
+        class CappedRenderExtractor(FakeScannedQuestionExtractor):
+            class _FakePage:
+                class _Rect:
+                    x0 = 0.0
+                    y0 = 0.0
+                    x1 = 1000.0
+                    y1 = 2000.0
+
+                rect = _Rect()
+
+            doc = [_FakePage()]
+
+            def get_page_screenshot_size(self, page_num: int, dpi: int = 150, max_side: int | None = None):
+                return {"width": 800, "height": 1600}
+
+        warnings: list[str] = []
+        rect, normalized = _bbox_to_page_rect(
+            CappedRenderExtractor(),
+            0,
+            [80, 160, 400, 800],
+            warnings,
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertIsNotNone(rect)
+        self.assertEqual(normalized, [100.0, 200.0, 500.0, 1000.0])
+
+    def test_visual_bbox_conversion_reuses_render_size_per_page(self):
+        class CountingRenderExtractor(FakeScannedQuestionExtractor):
+            size_calls = 0
+
+            def get_page_screenshot_size(self, page_num: int, dpi: int = 150, max_side: int | None = None):
+                self.size_calls += 1
+                return {"width": 1000, "height": 1400}
+
+        extractor = CountingRenderExtractor()
+        warnings: list[str] = []
+
+        _bbox_to_page_rect(extractor, 0, [10, 20, 100, 120], warnings)
+        _bbox_to_page_rect(extractor, 0, [30, 40, 200, 240], warnings)
+
+        self.assertEqual(warnings, [])
+        self.assertEqual(extractor.size_calls, 1)
+
     def test_scanned_question_book_uses_lower_cost_vision_capture_and_records_sizes(self):
         class RecordingExtractor(FakeScannedQuestionExtractor):
             calls: list[dict[str, int | None]] = []
@@ -63,6 +108,46 @@ class ScannedQuestionBookKernelTest(unittest.TestCase):
             visual_pages = json.loads(Path(tmpdir, "debug", "visual_pages.json").read_text(encoding="utf-8"))
             self.assertEqual(visual_pages[0]["image_size"], {"width": 900, "height": 1200})
             self.assertEqual(visual_pages[0]["base64_size"], 128)
+
+    def test_in_bounds_visual_bboxes_do_not_emit_clamped_warning(self):
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [
+                    {
+                        "temp_id": "m1",
+                        "content": "根据以下资料：材料正文",
+                        "bbox": [81, 280, 810, 644],
+                    }
+                ],
+                "questions": [
+                    {
+                        "index": 1,
+                        "material_temp_id": "m1",
+                        "content": "题干内容",
+                        "bbox": [91, 688, 558, 775],
+                        "stem_bbox": [91, 688, 455, 708],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                        "options": [
+                            {"label": "A", "text": "甲", "bbox": [112, 722, 168, 740]},
+                            {"label": "B", "text": "乙", "bbox": [427, 722, 484, 740]},
+                            {"label": "C", "text": "丙", "bbox": [112, 754, 168, 772]},
+                            {"label": "D", "text": "丁", "bbox": [427, 754, 484, 772]},
+                        ],
+                    }
+                ],
+                "visuals": [],
+            },
+        ):
+            parse_extractor_with_kernel(FakeScannedQuestionExtractor(), debug_dir=tmpdir)
+
+            visual_pages = json.loads(Path(tmpdir, "debug", "visual_pages.json").read_text(encoding="utf-8"))
+            self.assertNotIn("visual_bbox_clamped", visual_pages[0]["page_warnings"])
 
     def test_scanned_question_book_retries_once_and_classifies_schema_error(self):
         attempts = 0

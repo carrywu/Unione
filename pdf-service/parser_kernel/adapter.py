@@ -5,6 +5,8 @@ import queue
 import re
 import tempfile
 import threading
+import json
+from pathlib import Path
 from typing import Any
 
 import ai_client
@@ -20,8 +22,10 @@ from parser_kernel.types import MaterialGroup, QuestionGroup
 
 
 OPTION_RE = re.compile(r"^\s*([A-D])[．.、。]\s*(.+)$")
-VISUAL_PAGE_DPI = 150
+VISUAL_PAGE_DPI = 110
+VISUAL_PAGE_MAX_SIDE = 1600
 DEFAULT_VISUAL_PAGE_TIMEOUT_SECONDS = 45.0
+VISUAL_BBOX_CLAMP_EPSILON = 1e-3
 
 load_dotenv()
 
@@ -62,6 +66,7 @@ def parse_extractor_with_kernel(
     *,
     page_limit: int | None = None,
     debug_dir: str | None = None,
+    retry_failed_pages_only: bool = False,
 ) -> dict[str, Any]:
     file_name = os.path.basename(getattr(extractor, "pdf_path", "") or "")
     total_pages = min(
@@ -82,7 +87,12 @@ def parse_extractor_with_kernel(
 
     debug_dir = debug_dir or tempfile.mkdtemp(prefix="pdf-parser-kernel-")
     pages = (
-        _pages_from_visual_fallback(extractor, total_pages)
+        _pages_from_visual_fallback(
+            extractor,
+            total_pages,
+            debug_dir=debug_dir,
+            retry_failed_pages_only=retry_failed_pages_only,
+        )
         if pdf_kind == "scanned_question_book"
         else _pages_from_extractor(extractor, total_pages)
     )
@@ -177,6 +187,7 @@ def parse_extractor_with_kernel(
     write_debug_bundle(
         debug_dir,
         visual_pages=getattr(extractor, "_parser_kernel_visual_pages", []),
+        failed_pages={"failed_pages": getattr(extractor, "_parser_kernel_failed_pages", [])},
         page_elements=elements,
         annotated_elements=annotated,
         material_groups=material_groups,
@@ -262,9 +273,78 @@ def _pages_from_extractor(extractor: Any, total_pages: int) -> list[PageContent]
     return pages
 
 
-def _pages_from_visual_fallback(extractor: Any, total_pages: int) -> list[PageContent]:
+def _visual_page_indexes(total_pages: int, debug_dir: str, retry_failed_pages_only: bool) -> list[int]:
+    if not retry_failed_pages_only:
+        return list(range(total_pages))
+    failed_pages_file = Path(debug_dir) / "debug" / "failed_pages.json"
+    try:
+        payload = json.loads(failed_pages_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return list(range(total_pages))
+    failed_pages = payload.get("failed_pages") or []
+    indexes: list[int] = []
+    for page_num in failed_pages:
+        try:
+            page_index = int(page_num) - 1
+        except (TypeError, ValueError):
+            continue
+        if 0 <= page_index < total_pages:
+            indexes.append(page_index)
+    return indexes
+
+
+def _get_page_screenshot(
+    extractor: Any,
+    page_index: int,
+    *,
+    dpi: int,
+    max_side: int | None,
+) -> str:
+    try:
+        return extractor.get_page_screenshot(page_index, dpi=dpi, max_side=max_side)
+    except TypeError:
+        return extractor.get_page_screenshot(page_index, dpi=dpi)
+
+
+def _get_page_screenshot_size(
+    extractor: Any,
+    page_index: int,
+    *,
+    dpi: int,
+    max_side: int | None,
+) -> dict[str, Any] | None:
+    if not hasattr(extractor, "get_page_screenshot_size"):
+        return None
+    try:
+        return extractor.get_page_screenshot_size(page_index, dpi=dpi, max_side=max_side)
+    except TypeError:
+        return extractor.get_page_screenshot_size(page_index, dpi=dpi)
+    except Exception:
+        return None
+
+
+def _write_visual_page_cache(cache_dir: Path, page_num: int, visual_result: dict[str, Any]) -> None:
+    if _visual_result_failed(visual_result):
+        return
+    (cache_dir / f"page_{page_num}.json").write_text(
+        json.dumps(visual_result, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _pages_from_visual_fallback(
+    extractor: Any,
+    total_pages: int,
+    *,
+    debug_dir: str,
+    retry_failed_pages_only: bool = False,
+) -> list[PageContent]:
     pages: list[PageContent] = []
     visual_pages: list[dict[str, Any]] = []
+    failed_pages: list[int] = []
+    page_indexes = _visual_page_indexes(total_pages, debug_dir, retry_failed_pages_only)
+    cache_dir = Path(debug_dir) / "debug" / "visual_page_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
     visual_links: dict[str, Any] = {
         "materials": {},
         "questions": {},
@@ -276,9 +356,21 @@ def _pages_from_visual_fallback(extractor: Any, total_pages: int) -> list[PageCo
         "warnings": [],
     }
     parser_warnings: list[dict[str, Any]] = []
-    for page_index in range(total_pages):
-        page_b64 = extractor.get_page_screenshot(page_index, dpi=150)
-        visual_result = _parse_page_visual_with_timeout(page_b64)
+    for page_index in page_indexes:
+        page_b64 = _get_page_screenshot(
+            extractor,
+            page_index,
+            dpi=VISUAL_PAGE_DPI,
+            max_side=VISUAL_PAGE_MAX_SIDE,
+        )
+        image_size = _get_page_screenshot_size(
+            extractor,
+            page_index,
+            dpi=VISUAL_PAGE_DPI,
+            max_side=VISUAL_PAGE_MAX_SIDE,
+        )
+        _cache_visual_render_size(extractor, page_index, image_size)
+        visual_result, attempt_errors, attempts = _parse_page_visual_with_retry(page_b64)
         blocks = []
         regions: list[Region] = []
         lines: list[str] = []
@@ -292,6 +384,11 @@ def _pages_from_visual_fallback(extractor: Any, total_pages: int) -> list[PageCo
                 for key, value in visual_result.items()
                 if key != "raw_model_result"
             },
+            "request_status": "failed" if _visual_result_failed(visual_result) else "ok",
+            "attempts": attempts,
+            "attempt_errors": attempt_errors,
+            "image_size": image_size,
+            "base64_size": len(page_b64),
         }
         page_material_keys: dict[str, str] = {}
 
@@ -427,12 +524,15 @@ def _pages_from_visual_fallback(extractor: Any, total_pages: int) -> list[PageCo
         visual_debug["page_warnings"] = sorted(set((visual_result.get("warnings") or []) + page_warnings))
         visual_debug["schema_validation"] = visual_result.get("schema_validation") or {}
         visual_pages.append(visual_debug)
+        if _visual_result_failed(visual_result):
+            failed_pages.append(page_index + 1)
         parser_warnings.append(
             {
                 "page_num": page_index + 1,
                 "warnings": visual_debug["page_warnings"],
             }
         )
+        _write_visual_page_cache(cache_dir, page_index + 1, visual_result)
         pages.append(
             PageContent(
                 page_num=page_index + 1,
@@ -444,6 +544,7 @@ def _pages_from_visual_fallback(extractor: Any, total_pages: int) -> list[PageCo
     setattr(extractor, "_parser_kernel_visual_pages", visual_pages)
     setattr(extractor, "_parser_kernel_visual_links", visual_links)
     setattr(extractor, "_parser_kernel_warnings", parser_warnings)
+    setattr(extractor, "_parser_kernel_failed_pages", failed_pages)
     return pages
 
 
@@ -524,7 +625,12 @@ def _full_page_region(extractor: Any, page_index: int, region_type: str = "page_
     return Region(
         type=region_type,
         bbox=bbox,
-        base64=extractor.get_page_screenshot(page_index, dpi=150),
+        base64=_get_page_screenshot(
+            extractor,
+            page_index,
+            dpi=VISUAL_PAGE_DPI,
+            max_side=VISUAL_PAGE_MAX_SIDE,
+        ),
     )
 
 
@@ -558,15 +664,18 @@ def _bbox_to_page_rect(
     except (TypeError, ValueError):
         warnings.append("visual_bbox_invalid")
         return None, None
-    scale = VISUAL_PAGE_DPI / 72.0
-    rect = fitz.Rect(x0 / scale, y0 / scale, x1 / scale, y1 / scale)
     page_rect = _page_rect(extractor, page_index)
+    scale_x, scale_y = _visual_render_scale(extractor, page_index, page_rect)
+    rect = fitz.Rect(x0 / scale_x, y0 / scale_y, x1 / scale_x, y1 / scale_y)
     clipped = rect & page_rect
     if clipped.is_empty or clipped.width < 2 or clipped.height < 2:
         warnings.append("visual_bbox_out_of_page")
         return None, None
     normalized = [clipped.x0, clipped.y0, clipped.x1, clipped.y1]
-    if normalized != [rect.x0, rect.y0, rect.x1, rect.y1]:
+    if any(
+        abs(clipped_value - original_value) > VISUAL_BBOX_CLAMP_EPSILON
+        for clipped_value, original_value in zip(normalized, [rect.x0, rect.y0, rect.x1, rect.y1])
+    ):
         warnings.append("visual_bbox_clamped")
     return clipped, normalized
 
@@ -581,6 +690,63 @@ def _page_rect(extractor: Any, page_index: int) -> fitz.Rect:
         float(rect.x1),
         float(rect.y1),
     )
+
+
+def _visual_render_scale(extractor: Any, page_index: int, page_rect: fitz.Rect) -> tuple[float, float]:
+    image_size = _cached_visual_render_size(extractor, page_index)
+    if page_index not in _visual_render_size_cache(extractor):
+        image_size = _get_page_screenshot_size(
+            extractor,
+            page_index,
+            dpi=VISUAL_PAGE_DPI,
+            max_side=VISUAL_PAGE_MAX_SIDE,
+        )
+        _cache_visual_render_size(extractor, page_index, image_size)
+    if image_size:
+        try:
+            width = float(image_size.get("width") or 0)
+            height = float(image_size.get("height") or 0)
+        except (TypeError, ValueError, AttributeError):
+            width = 0.0
+            height = 0.0
+        if width > 0 and height > 0 and page_rect.width > 0 and page_rect.height > 0:
+            return width / page_rect.width, height / page_rect.height
+    fallback = VISUAL_PAGE_DPI / 72.0
+    return fallback, fallback
+
+
+def _visual_render_size_cache(extractor: Any) -> dict[int, dict[str, Any] | None]:
+    cache = getattr(extractor, "_parser_kernel_visual_render_sizes", None)
+    if isinstance(cache, dict):
+        return cache
+    cache = {}
+    setattr(extractor, "_parser_kernel_visual_render_sizes", cache)
+    return cache
+
+
+def _cached_visual_render_size(extractor: Any, page_index: int) -> dict[str, Any] | None:
+    return _visual_render_size_cache(extractor).get(page_index)
+
+
+def _cache_visual_render_size(extractor: Any, page_index: int, image_size: dict[str, Any] | None) -> None:
+    _visual_render_size_cache(extractor)[page_index] = image_size
+
+
+def _parse_page_visual_with_retry(page_b64: str) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
+    attempt_errors: list[dict[str, Any]] = []
+    first_result = _parse_page_visual_with_timeout(page_b64)
+    if not _visual_result_retryable(first_result):
+        return first_result, attempt_errors, 1
+
+    attempt_errors.append(
+        {
+            "warnings": list(first_result.get("warnings") or []),
+            "schema_validation": first_result.get("schema_validation") or {},
+            "error": first_result.get("error"),
+        }
+    )
+    second_result = _parse_page_visual_with_timeout(page_b64)
+    return second_result, attempt_errors, 2
 
 
 def _parse_page_visual_with_timeout(
@@ -614,6 +780,21 @@ def _parse_page_visual_with_timeout(
         return result_queue.get()
 
     return _visual_failure_result("visual_page_empty_result")
+
+
+def _visual_result_retryable(result: dict[str, Any]) -> bool:
+    warnings = set(str(item) for item in result.get("warnings") or [])
+    schema_validation = result.get("schema_validation") or {}
+    if "visual_schema_invalid" in warnings:
+        return True
+    if schema_validation and result.get("page_type") == "unknown":
+        return "vision_page_timeout" not in warnings and "visual_model_failed" not in warnings
+    return False
+
+
+def _visual_result_failed(result: dict[str, Any]) -> bool:
+    warnings = set(str(item) for item in result.get("warnings") or [])
+    return bool(warnings & {"vision_page_timeout", "visual_model_failed"})
 
 
 def _visual_page_timeout_seconds() -> float:

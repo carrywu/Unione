@@ -18,12 +18,15 @@ class PDFExtractor:
         """Extract plain text from one zero-based page."""
         return self.doc[page_num].get_text("text")
 
-    def get_page_screenshot(self, page_num: int, dpi: int = 150) -> str:
+    def get_page_screenshot(self, page_num: int, dpi: int = 150, max_side: int | None = None) -> str:
         """Render a full page to PNG and return base64."""
-        page = self.doc[page_num]
-        mat = fitz.Matrix(dpi / 72, dpi / 72)
-        pix = page.get_pixmap(matrix=mat)
+        pix = self._render_page_pixmap(page_num, dpi=dpi, max_side=max_side)
         return base64.b64encode(pix.tobytes("png")).decode("utf-8")
+
+    def get_page_screenshot_size(self, page_num: int, dpi: int = 150, max_side: int | None = None) -> dict[str, int]:
+        """Return the rendered full-page PNG dimensions without encoding it."""
+        pix = self._render_page_pixmap(page_num, dpi=dpi, max_side=max_side)
+        return {"width": pix.width, "height": pix.height}
 
     def get_region_screenshot(
         self,
@@ -43,6 +46,16 @@ class PDFExtractor:
         mat = fitz.Matrix(2.0, 2.0)
         pix = page.get_pixmap(matrix=mat, clip=padded)
         return base64.b64encode(pix.tobytes("png")).decode("utf-8")
+
+    def _render_page_pixmap(self, page_num: int, dpi: int, max_side: int | None = None) -> fitz.Pixmap:
+        page = self.doc[page_num]
+        scale = dpi / 72
+        if max_side and max_side > 0:
+            projected_max_side = max(page.rect.width * scale, page.rect.height * scale)
+            if projected_max_side > max_side:
+                scale *= max_side / projected_max_side
+        mat = fitz.Matrix(scale, scale)
+        return page.get_pixmap(matrix=mat)
 
     def get_page_images(self, page_num: int) -> list[dict[str, Any]]:
         """Return embedded image regions as base64 screenshots."""
