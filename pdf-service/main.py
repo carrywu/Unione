@@ -6,11 +6,15 @@ import tempfile
 import logging
 import time
 import asyncio
+import re
+import shutil
+from pathlib import Path
 
 import fitz
 import httpx
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from answer_book_parser import parse_answer_book
@@ -26,12 +30,15 @@ from monitor import (
     update_runtime_config,
 )
 from pipeline import parse_pdf
+from tools.visual_api_smoke import run_visual_api_smoke
 
 
 load_dotenv()
 
 app = FastAPI(title="Quiz PDF Service")
 logger = logging.getLogger(__name__)
+DEBUG_SMOKE_ROOT = Path(__file__).resolve().parent / "tmp" / "visual-api-smoke" / "tasks"
+_debug_smoke_lock = asyncio.Lock()
 
 
 class TestParseRequest(BaseModel):
@@ -53,6 +60,15 @@ class OcrRegionRequest(BaseModel):
 class ReadabilityReviewRequest(BaseModel):
     question: dict
     ai_config: dict[str, str] | None = None
+
+
+class DebugSmokeByUrlRequest(BaseModel):
+    url: str
+    task_id: str | None = None
+    pages: str = "9-14"
+    clean_output: bool = False
+    refresh_cache: bool = False
+    retry_failed_pages_only: bool = False
 
 
 
@@ -227,6 +243,46 @@ async def test_parse(payload: TestParseRequest, _: None = Depends(_require_inter
             _remove(parse_path)
 
 
+@app.post("/admin/debug-smoke-by-url")
+async def debug_smoke_by_url(
+    payload: DebugSmokeByUrlRequest,
+    _: None = Depends(_require_internal_token),
+):
+    source_path = await _download_pdf(payload.url)
+    try:
+        run_id = _debug_smoke_run_id(payload.task_id, payload.pages)
+        output_dir = DEBUG_SMOKE_ROOT / run_id
+        async with _debug_smoke_lock:
+            if payload.clean_output and output_dir.exists() and not payload.retry_failed_pages_only:
+                shutil.rmtree(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            summary = await asyncio.to_thread(
+                run_visual_api_smoke,
+                source_path,
+                pages=payload.pages,
+                output_dir=str(output_dir),
+                retry_failed_pages_only=payload.retry_failed_pages_only,
+                refresh_cache=payload.refresh_cache,
+            )
+        return _debug_smoke_metadata(run_id, payload.pages, output_dir, summary)
+    except Exception as exc:
+        logger.error("visual smoke debug failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+    finally:
+        _remove(source_path)
+
+
+@app.get("/admin/debug-artifacts/{run_id}")
+async def debug_artifact(
+    run_id: str,
+    path: str = Query(...),
+    _: None = Depends(_require_internal_token),
+):
+    run_dir = _debug_smoke_run_dir(run_id)
+    artifact_path = _resolve_debug_artifact_path(run_dir, path)
+    return FileResponse(str(artifact_path))
+
+
 @app.get("/admin/config")
 async def get_runtime_config(_: None = Depends(_require_internal_token)):
     return masked_config_payload()
@@ -253,6 +309,90 @@ def _summary_payload(result):
         "detection": result.stats.detection,
         "callback_delivered": True,
     }
+
+
+def _debug_smoke_run_id(task_id: str | None, pages: str) -> str:
+    prefix = f"task_{task_id}" if task_id else f"run_{int(time.time())}"
+    return f"{_debug_slug(prefix)}_pages_{_debug_slug(pages)}"
+
+
+def _debug_slug(value: object) -> str:
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "").strip())
+    slug = slug.replace("-", "_").strip("._")
+    return slug[:120] or "default"
+
+
+def _debug_smoke_metadata(run_id: str, pages: str, output_dir: Path, summary: dict):
+    files = {
+        "summary": "summary.json",
+        "page_parse_summary": "page_parse_summary.json",
+        "review_manifest_json": "review_manifest.json",
+        "review_manifest_csv": "review_manifest.csv",
+        "raw_model_response": "raw_model_response.json",
+        "rejected_candidates": "rejected_candidates.json",
+        "visual_pages": "debug/visual_pages.json",
+        "bbox_lineage": "debug/bbox_lineage.json",
+    }
+    existing_files = {
+        key: value
+        for key, value in files.items()
+        if (output_dir / value).is_file()
+    }
+    dirs = {
+        "overlays": "debug/overlays",
+        "crops": "debug/crops",
+        "page_screenshots": "page_screenshots",
+    }
+    existing_dirs = {
+        key: value
+        for key, value in dirs.items()
+        if (output_dir / value).is_dir()
+    }
+    return {
+        "run_id": run_id,
+        "pages": pages,
+        "output_dir": str(output_dir),
+        "files": existing_files,
+        "dirs": existing_dirs,
+        "summary_preview": {
+            "page_limit": summary.get("page_limit"),
+            "pages_attempted": summary.get("pages_attempted"),
+            "cache_hits": summary.get("cache_hits"),
+            "cache_misses": summary.get("cache_misses"),
+            "failed_pages": summary.get("failed_pages") or [],
+            "timeout_pages": summary.get("timeout_pages") or [],
+            "candidate_counts": summary.get("candidate_counts") or {},
+        },
+    }
+
+
+def _debug_smoke_run_dir(run_id: str) -> Path:
+    if not run_id or "/" in run_id or "\\" in run_id or "\0" in run_id:
+        raise HTTPException(status_code=400, detail={"error": "invalid run_id"})
+    root = DEBUG_SMOKE_ROOT.resolve()
+    run_dir = (root / run_id).resolve()
+    if os.path.commonpath([str(root), str(run_dir)]) != str(root):
+        raise HTTPException(status_code=400, detail={"error": "invalid run_id"})
+    if not run_dir.is_dir():
+        raise HTTPException(status_code=404, detail={"error": "debug run not found"})
+    return run_dir
+
+
+def _resolve_debug_artifact_path(run_dir: Path, relative_path: str) -> Path:
+    if (
+        not relative_path
+        or "\0" in relative_path
+        or Path(relative_path).is_absolute()
+        or any(part == ".." for part in Path(relative_path).parts)
+    ):
+        raise HTTPException(status_code=400, detail={"error": "invalid artifact path"})
+    root = run_dir.resolve()
+    target = (root / relative_path).resolve()
+    if os.path.commonpath([str(root), str(target)]) != str(root):
+        raise HTTPException(status_code=400, detail={"error": "invalid artifact path"})
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail={"error": "artifact not found"})
+    return target
 
 
 async def _send_parse_callback(

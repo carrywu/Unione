@@ -35,6 +35,59 @@ export class PdfController {
     return this.pdfService.getTask(taskId);
   }
 
+  @Post('task/:taskId/debug/generate')
+  @ApiOperation({ summary: '生成 PDF visual smoke 调试产物' })
+  generateDebugArtifacts(
+    @Param('taskId') taskId: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.pdfService.generateDebugArtifacts(taskId, body);
+  }
+
+  @Get('task/:taskId/debug')
+  @ApiOperation({ summary: '获取 PDF 调试产物 metadata' })
+  getDebugArtifacts(@Param('taskId') taskId: string) {
+    return this.pdfService.getDebugArtifacts(taskId);
+  }
+
+  @Get('task/:taskId/debug/summary')
+  @ApiOperation({ summary: '读取 PDF 调试 summary.json' })
+  getDebugSummary(@Param('taskId') taskId: string) {
+    return this.pdfService.getDebugSummary(taskId);
+  }
+
+  @Get('task/:taskId/debug/review-manifest')
+  @ApiOperation({ summary: '读取 PDF 调试 review manifest' })
+  async getDebugReviewManifest(
+    @Param('taskId') taskId: string,
+    @Query('format') format: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const artifact = await this.pdfService.getDebugReviewManifest(
+      taskId,
+      format === 'csv' ? 'csv' : 'json',
+    );
+    if (artifact.contentType) {
+      res.setHeader('Content-Type', artifact.contentType);
+    }
+    return artifact.data;
+  }
+
+  @Get('task/:taskId/debug/artifact')
+  @ApiOperation({ summary: '读取 PDF 调试 overlay/crop/screenshot artifact' })
+  async getDebugArtifact(
+    @Param('taskId') taskId: string,
+    @Query('path') path: string,
+    @Res() res: Response,
+  ) {
+    const artifact = await this.pdfService.getDebugArtifact(taskId, path);
+    res.setHeader('Content-Type', artifact.contentType);
+    if (artifact.contentLength) {
+      res.setHeader('Content-Length', artifact.contentLength);
+    }
+    res.send(artifact.data);
+  }
+
   @Get('proxy/:taskId')
   @ApiOperation({ summary: '代理预览原始 PDF' })
   proxy(@Param('taskId') taskId: string, @Res() res: Response) {

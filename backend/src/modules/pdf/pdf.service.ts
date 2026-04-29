@@ -269,6 +269,129 @@ export class PdfService {
     }
   }
 
+  async generateDebugArtifacts(taskId: string, body: Record<string, unknown>) {
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('解析任务不存在');
+    if (!task.file_url) throw new BadRequestException('解析任务没有原始 PDF 地址');
+
+    const pdfServiceUrl = this.configService.get<string>(
+      'PDF_SERVICE_URL',
+      'http://localhost:8001',
+    );
+    const token = this.configService.get<string>('PDF_SERVICE_INTERNAL_TOKEN', '');
+    const response = await axios.post(
+      `${pdfServiceUrl}/admin/debug-smoke-by-url`,
+      {
+        url: task.file_url,
+        task_id: task.id,
+        pages: typeof body.pages === 'string' ? body.pages : '9-14',
+        clean_output: Boolean(body.clean_output),
+        refresh_cache: Boolean(body.refresh_cache),
+        retry_failed_pages_only: Boolean(body.retry_failed_pages_only),
+      },
+      {
+        timeout: 15 * 60 * 1000,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      },
+    );
+
+    const metadata = response.data as Record<string, any>;
+    const summary = this.parseResultSummary(task.result_summary);
+    summary.debug_artifacts = metadata;
+    await this.taskRepository.update(task.id, {
+      result_summary: JSON.stringify(summary),
+    });
+    return metadata;
+  }
+
+  async getDebugArtifacts(taskId: string) {
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('解析任务不存在');
+    const artifacts = this.parseResultSummary(task.result_summary).debug_artifacts;
+    if (!artifacts?.run_id) {
+      throw new NotFoundException('调试产物不存在');
+    }
+    return artifacts;
+  }
+
+  async getDebugSummary(taskId: string) {
+    const artifacts = await this.getDebugArtifacts(taskId);
+    const path = this.resolveDebugArtifactPath(artifacts, 'summary.json');
+    return this.fetchDebugArtifact(artifacts.run_id, path, 'json').then(
+      (artifact) => artifact.data,
+    );
+  }
+
+  async getDebugReviewManifest(taskId: string, format: 'json' | 'csv') {
+    const artifacts = await this.getDebugArtifacts(taskId);
+    const key = format === 'csv' ? 'review_manifest_csv' : 'review_manifest_json';
+    const fallback = format === 'csv' ? 'review_manifest.csv' : 'review_manifest.json';
+    const path = this.resolveDebugArtifactPath(artifacts, artifacts.files?.[key] || fallback);
+    return this.fetchDebugArtifact(artifacts.run_id, path, format);
+  }
+
+  async getDebugArtifact(taskId: string, path: string) {
+    const artifacts = await this.getDebugArtifacts(taskId);
+    const safePath = this.resolveDebugArtifactPath(artifacts, path);
+    return this.fetchDebugArtifact(artifacts.run_id, safePath, 'binary');
+  }
+
+  private parseResultSummary(value?: string | null): Record<string, any> {
+    if (!value) return {};
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private resolveDebugArtifactPath(artifacts: Record<string, any>, path: unknown) {
+    if (typeof path !== 'string' || !path || path.includes('\0')) {
+      throw new BadRequestException('非法 artifact path');
+    }
+    if (path.startsWith('/') || path.includes('..') || path.includes('\\')) {
+      throw new BadRequestException('非法 artifact path');
+    }
+    const files = artifacts.files && typeof artifacts.files === 'object'
+      ? Object.values(artifacts.files as Record<string, unknown>)
+      : [];
+    const isListedFile = files.includes(path);
+    const allowedPrefixes = ['debug/overlays/', 'debug/crops/', 'page_screenshots/'];
+    if (!isListedFile && !allowedPrefixes.some((prefix) => path.startsWith(prefix))) {
+      throw new BadRequestException('artifact path 不在允许范围内');
+    }
+    return path;
+  }
+
+  private async fetchDebugArtifact(
+    runId: string,
+    path: string,
+    mode: 'json' | 'csv' | 'binary',
+  ) {
+    const pdfServiceUrl = this.configService.get<string>(
+      'PDF_SERVICE_URL',
+      'http://localhost:8001',
+    );
+    const token = this.configService.get<string>('PDF_SERVICE_INTERNAL_TOKEN', '');
+    const response = await axios.get(
+      `${pdfServiceUrl}/admin/debug-artifacts/${encodeURIComponent(runId)}`,
+      {
+        params: { path },
+        responseType: mode === 'json' ? 'json' : 'arraybuffer',
+        timeout: 60 * 1000,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      },
+    );
+    return {
+      data: response.data,
+      contentType:
+        String(response.headers?.['content-type'] || '') ||
+        (mode === 'csv' ? 'text/csv; charset=utf-8' : 'application/octet-stream'),
+      contentLength: String(response.headers?.['content-length'] || ''),
+    };
+  }
+
   private async processTask(taskId: string) {
     const task = await this.taskRepository.findOne({ where: { id: taskId } });
     if (!task) {
