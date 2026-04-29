@@ -56,6 +56,15 @@
             >
               匹配页
             </el-button>
+            <el-button
+              v-if="canPublishResult(row)"
+              link
+              type="success"
+              :loading="publishLoadingMap[row.id || '']"
+              @click="handlePublishResult(row)"
+            >
+              一键发布结果
+            </el-button>
             <el-button link type="warning" :disabled="!canPause(row.status)" @click="handlePause(row.id)">
               暂停
             </el-button>
@@ -92,7 +101,15 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { getBanks, type Bank } from '@/api/bank';
-import { deleteTask, getTaskList, getTaskStatus, pauseTask, retryTask, type ParseTask } from '@/api/pdf';
+import {
+  deleteTask,
+  getTaskList,
+  getTaskStatus,
+  pauseTask,
+  publishParseResult,
+  retryTask,
+  type ParseTask,
+} from '@/api/pdf';
 import { pdfServiceApi, type PdfServiceStats, type PdfServiceStatus } from '@/api/pdf-service';
 import PageHeader from '@/components/PageHeader.vue';
 
@@ -109,6 +126,7 @@ const statusDrawerVisible = ref(false);
 const liveConnected = ref(false);
 const lastLiveRefreshAt = ref('');
 const terminalLines = ref<string[]>([]);
+const publishLoadingMap = ref<Record<string, boolean>>({});
 let refreshTimer: number | undefined;
 let liveTimer: number | undefined;
 
@@ -284,6 +302,27 @@ async function handlePause(id?: string) {
   if (selectedTask.value?.id === id) await refreshSelectedTask();
 }
 
+async function handlePublishResult(task: ParseTask) {
+  if (!task.id || !canPublishResult(task)) return;
+  await ElMessageBox.confirm(
+    '将发布本次解析入库的题目，并发布题库，H5 将可见。是否继续？',
+    '发布解析结果',
+    { type: 'warning' },
+  );
+
+  publishLoadingMap.value = { ...publishLoadingMap.value, [task.id]: true };
+  try {
+    const result = await publishParseResult(task.id, { publish_bank: true });
+    ElMessage.success(
+      `已发布 ${result.published_count} 题，题库状态 ${result.bank_status}，总题数 ${result.total_count}`,
+    );
+    await fetchTasks();
+    if (selectedTask.value?.id === task.id) await refreshSelectedTask();
+  } finally {
+    publishLoadingMap.value = { ...publishLoadingMap.value, [task.id]: false };
+  }
+}
+
 async function handleDelete(id?: string) {
   if (!id) return;
   await ElMessageBox.confirm('确认删除该任务记录？', '删除任务', { type: 'warning' });
@@ -309,6 +348,10 @@ function canPause(status: string) {
 
 function canRetry(status: string) {
   return ['failed', 'paused'].includes(status);
+}
+
+function canPublishResult(task: ParseTask) {
+  return task.status === 'done' && task.task_type !== 'answer_book';
 }
 
 function openResult(task: ParseTask) {

@@ -40,6 +40,18 @@ export interface OcrRegionResult {
   warnings: string[];
 }
 
+export interface PublishParseResultPayload {
+  publish_bank: boolean;
+}
+
+export interface PublishParseResultResponse {
+  task_id: string;
+  bank_id: string;
+  published_count: number;
+  bank_status: 'draft' | 'published';
+  total_count: number;
+}
+
 export function parsePdf(bankId: string, fileUrl: string, fileName?: string) {
   return http.post<{ task_id: string }, { task_id: string }>('/admin/pdf/parse', {
     bank_id: bankId,
@@ -71,6 +83,13 @@ export function retryTask(taskId: string) {
 export function pauseTask(taskId: string) {
   return http.post<{ task_id: string; status: string }, { task_id: string; status: string }>(
     `/admin/pdf/pause/${taskId}`,
+  );
+}
+
+export function publishParseResult(taskId: string, payload: PublishParseResultPayload) {
+  return http.post<PublishParseResultResponse, PublishParseResultResponse>(
+    `/admin/pdf/task/${taskId}/publish-result`,
+    payload,
   );
 }
 
