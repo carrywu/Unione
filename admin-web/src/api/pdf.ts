@@ -48,6 +48,8 @@ export interface PublishParseResultResponse {
   task_id: string;
   bank_id: string;
   published_count: number;
+  review_count?: number;
+  skipped_count?: number;
   bank_status: 'draft' | 'published';
   total_count: number;
 }
@@ -66,6 +68,13 @@ export function getTaskStatus(taskId: string) {
 
 export function ocrPdfRegion(payload: OcrRegionPayload) {
   return http.post<OcrRegionResult, OcrRegionResult>('/admin/pdf/ocr-region', payload);
+}
+
+export function addHeaderFooterBlacklist(data: { text?: string; texts?: string[] }) {
+  return http.post<{ key: string; texts: string[] }, { key: string; texts: string[] }>(
+    '/admin/pdf/header-footer-blacklist',
+    data,
+  );
 }
 
 export function getTaskList(bankId: string) {

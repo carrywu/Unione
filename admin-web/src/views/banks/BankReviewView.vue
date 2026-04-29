@@ -106,7 +106,10 @@
             <div class="editor-head">
               <div>
                 <span class="index">第 {{ form.index_num }} 题</span>
-                <el-tag size="small">{{ form.type === 'judge' ? '判断题' : '单选题' }}</el-tag>
+                <el-select v-model="form.type" size="small" class="type-select" @change="dirty = true">
+                  <el-option label="单选题" value="single" />
+                  <el-option label="判断题" value="judge" />
+                </el-select>
               </div>
               <div class="editor-actions">
                 <el-button size="small" :icon="Iphone" @click="mobilePreviewVisible = true">
@@ -115,6 +118,9 @@
                 <el-button size="small" @click="router.push(`/banks/${bankId}/questions/${selected.id}/preview`)">
                   <el-icon><Aim /></el-icon>
                   PDF定位
+                </el-button>
+                <el-button size="small" :loading="aiRepairLoading" @click="handleAiRepair">
+                  AI修复当前题
                 </el-button>
                 <StatusTag :status="form.status" :needs-review="form.needs_review" />
               </div>
@@ -145,6 +151,17 @@
                 <span class="meta-label">解析警告</span>
                 <el-tag v-for="warning in form.parse_warnings" :key="warning" size="small" type="danger">{{ warningLabel(warning) }}</el-tag>
               </div>
+              <div class="blacklist-row">
+                <el-input
+                  v-model="blacklistText"
+                  size="small"
+                  placeholder="输入或粘贴页眉页脚文本"
+                  clearable
+                />
+                <el-button size="small" :loading="blacklistLoading" @click="handleAddBlacklistText">
+                  加入黑名单
+                </el-button>
+              </div>
             </div>
             <el-collapse v-if="form.raw_text" class="raw-text-collapse">
               <el-collapse-item title="原始文本" name="raw">
@@ -171,17 +188,32 @@
 
             <div class="image-review-block">
               <div class="section-title">题目图片 / 图表</div>
-              <div v-if="normalizeImages(selected).length" class="image-section">
-                <div v-for="(image, index) in normalizeImages(selected)" :key="index" class="image-item">
+              <div v-if="currentImages.length" class="image-section">
+                <div v-for="(image, index) in currentImages" :key="image.key" class="image-item">
                   <ImagePreview :src="image.src" />
                   <div class="image-meta">
                     <el-tag v-if="image.ref" size="small">{{ image.ref }}</el-tag>
-                    <el-tag v-if="image.role" size="small" type="info">{{ image.role }}</el-tag>
+                    <el-tag v-if="image.role" size="small" type="info">{{ imageRoleLabel(image.role) }}</el-tag>
+                    <el-tag v-if="image.insertPosition" size="small" type="info">{{ insertPositionLabel(image.insertPosition) }}</el-tag>
+                    <el-tag v-if="image.sameVisualGroupId" size="small" type="success">同组表格</el-tag>
                     <el-tag v-if="image.assignmentConfidence != null" size="small" :type="image.assignmentConfidence >= 0.65 ? 'success' : 'warning'">
                       {{ (image.assignmentConfidence * 100).toFixed(0) }}%
                     </el-tag>
                     <span v-if="image.caption">{{ image.caption }}</span>
                   </div>
+                  <el-select
+                    class="image-position-select"
+                    size="small"
+                    :model-value="image.insertPosition || 'below_stem'"
+                    @change="handleImagePositionChange(index, $event)"
+                  >
+                    <el-option
+                      v-for="item in imagePositionOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
                   <el-input
                     v-model="imageDescs[index]"
                     type="textarea"
@@ -189,6 +221,14 @@
                     placeholder="AI 描述"
                     @input="dirty = true"
                   />
+                  <div class="image-actions">
+                    <el-button size="small" :disabled="imageBusy || index === 0" @click.stop="handleReorderImage(index, -1)">上移</el-button>
+                    <el-button size="small" :disabled="imageBusy || index === currentImages.length - 1" @click.stop="handleReorderImage(index, 1)">下移</el-button>
+                    <el-button size="small" :disabled="imageBusy || index === currentImages.length - 1" @click.stop="handleMergeImage(index)">合并下一张</el-button>
+                    <el-button size="small" :loading="imageBusy" @click.stop="handleMoveImage(index, 'previous')">移到上一题</el-button>
+                    <el-button size="small" :loading="imageBusy" @click.stop="handleMoveImage(index, 'next')">移到下一题</el-button>
+                    <el-button size="small" type="danger" :loading="imageBusy" @click.stop="handleDeleteImage(index)">删除</el-button>
+                  </div>
                 </div>
               </div>
               <el-empty v-else description="该题暂无图片；如果题干需要图表，请重新解析 PDF 或检查解析结果" :image-size="56" />
@@ -265,10 +305,22 @@
               <span>{{ form.type === 'judge' ? '判断' : '单选' }}</span>
               <span>第 {{ form.index_num || '-' }} 题</span>
             </div>
+            <img
+              v-for="(image, index) in imagesForPosition('above_stem')"
+              :key="`preview-image-above-stem-${index}`"
+              :src="image.src"
+              :alt="image.caption || '题目图片'"
+            />
             <h3>{{ form.content || '暂无题干' }}</h3>
             <img
-              v-for="(image, index) in normalizeImages(selected)"
-              :key="`preview-image-${index}`"
+              v-for="(image, index) in imagesForPosition('below_stem')"
+              :key="`preview-image-below-stem-${index}`"
+              :src="image.src"
+              :alt="image.caption || '题目图片'"
+            />
+            <img
+              v-for="(image, index) in imagesForPosition('above_options')"
+              :key="`preview-image-above-options-${index}`"
               :src="image.src"
               :alt="image.caption || '题目图片'"
             />
@@ -285,6 +337,12 @@
                 <span>{{ option.label }}</span>
               </button>
             </div>
+            <img
+              v-for="(image, index) in imagesForPosition('below_options')"
+              :key="`preview-image-below-options-${index}`"
+              :src="image.src"
+              :alt="image.caption || '题目图片'"
+            />
 
             <div v-if="mobilePreviewMode === 'analysis'" class="phone-analysis">
               <div class="phone-section-label">解析详情</div>
@@ -309,15 +367,21 @@ import { Aim, Check, Delete, DocumentChecked, Iphone, List, Picture, Refresh } f
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
+  mergeQuestionImages,
+  moveQuestionImage,
+  reorderQuestionImages,
   batchPublish,
   deleteQuestion,
+  deleteQuestionImage,
   getQuestion,
   getQuestions,
   getReviewStats,
+  repairQuestionWithAi,
   updateQuestion,
   type Question,
   type ReviewStats,
 } from '@/api/question';
+import { addHeaderFooterBlacklist } from '@/api/pdf';
 import ImagePreview from '@/components/ImagePreview.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
@@ -328,6 +392,12 @@ const route = useRoute();
 const router = useRouter();
 const bankId = String(route.params.id);
 const optionKeys = ['A', 'B', 'C', 'D'];
+const imagePositionOptions = [
+  { label: '题干上方', value: 'above_stem' },
+  { label: '题干下方', value: 'below_stem' },
+  { label: '选项上方', value: 'above_options' },
+  { label: '选项下方', value: 'below_options' },
+];
 const warningLabelMap: Record<string, string> = {
   low_confidence: '低置信度',
   missing_answer: '缺少答案',
@@ -347,7 +417,11 @@ const saving = ref(false);
 const publishing = ref(false);
 const deleting = ref(false);
 const batchLoading = ref(false);
+const imageBusy = ref(false);
+const aiRepairLoading = ref(false);
+const blacklistLoading = ref(false);
 const dirty = ref(false);
+const blacklistText = ref('');
 const mobilePreviewVisible = ref(false);
 const mobilePreviewMode = ref<'answering' | 'analysis'>('answering');
 const questions = ref<Question[]>([]);
@@ -404,6 +478,12 @@ const answerPreviewLabel = computed(() => {
   const option = mobilePreviewOptions.value.find((item) => item.value === answer);
   return option ? `${option.value}. ${option.label}` : answer || '未设置';
 });
+
+const currentImages = computed(() => normalizeImageList((form.images || []) as NonNullable<Question['images']>));
+
+function imagesForPosition(position: string) {
+  return currentImages.value.filter((image) => (image.insertPosition || 'below_stem') === position);
+}
 
 const currentParams = computed(() => {
   const params: Record<string, unknown> = {
@@ -486,8 +566,9 @@ function fillForm(question: Question) {
     page_range: question.page_range || [],
     image_refs: question.image_refs || [],
     parse_warnings: question.parse_warnings || [],
+    images: cloneImages(question.images || []),
   });
-  imageDescs.value = normalizeImages(question).map((image) => image.aiDesc || '');
+  imageDescs.value = normalizeImageList(question.images || []).map((image) => image.aiDesc || '');
   dirty.value = false;
 }
 
@@ -503,15 +584,18 @@ function normalizeMaterialImages(question: Question | null) {
 
 function normalizeImageList(images: NonNullable<Question['images']>) {
   return images
-    .map((image) => {
-      if (typeof image === 'string') return { src: image, aiDesc: '' };
+    .map((image, index) => {
+      if (typeof image === 'string') return { key: `${image}-${index}`, src: image, aiDesc: '' };
       const base64 = image.base64 ? `data:image/png;base64,${image.base64}` : '';
       return {
+        key: image.url || image.base64 || image.ref || `${index}`,
         src: image.url || base64,
         aiDesc: image.ai_desc || '',
         ref: image.ref || '',
         caption: image.caption || '',
-        role: image.role || '',
+        role: image.image_role || image.role || '',
+        insertPosition: image.insert_position || '',
+        sameVisualGroupId: image.same_visual_group_id || '',
         assignmentConfidence: image.assignment_confidence,
       };
     })
@@ -549,7 +633,16 @@ function pageText(question: Question) {
 }
 
 function buildPayload(status?: 'draft' | 'published') {
+  const images = cloneImages((form.images || []) as Question['images']).map((image, index) => {
+    if (typeof image === 'string') return image;
+    return {
+      ...image,
+      ai_desc: imageDescs.value[index] || image.ai_desc || '',
+      image_order: index + 1,
+    };
+  });
   const payload = {
+    type: form.type,
     content: cleanQuestionText(form.content),
     option_a: form.option_a,
     option_b: form.option_b,
@@ -558,10 +651,15 @@ function buildPayload(status?: 'draft' | 'published') {
     answer: form.answer,
     analysis: form.analysis,
     ai_image_desc: imageDescs.value.join('\n'),
+    images,
     status: status || form.status,
     needs_review: status === 'published' ? false : form.needs_review,
   };
   return payload;
+}
+
+function cloneImages(images: Question['images'] = []) {
+  return images.map((image) => (typeof image === 'string' ? image : { ...image }));
 }
 
 function cleanQuestionText(value: unknown) {
@@ -582,7 +680,8 @@ async function handleSave() {
     await updateQuestion(selected.value.id, buildPayload());
     ElMessage.success('已保存');
     dirty.value = false;
-    await refreshAll();
+    await refreshSelected();
+    await fetchStats();
   } finally {
     saving.value = false;
   }
@@ -595,9 +694,188 @@ async function handlePublish() {
     await updateQuestion(selected.value.id, buildPayload('published'));
     ElMessage.success('已发布');
     dirty.value = false;
-    await refreshAll();
+    await refreshSelected();
+    await fetchStats();
   } finally {
     publishing.value = false;
+  }
+}
+
+async function refreshSelected() {
+  if (!selected.value) return;
+  const detail = await getQuestion(selected.value.id);
+  const index = questions.value.findIndex((question) => question.id === detail.id);
+  if (index >= 0) questions.value[index] = detail;
+  fillForm(detail);
+}
+
+async function handleDeleteImage(index: number) {
+  if (!selected.value) return;
+  await ElMessageBox.confirm('确认删除该图片？保存后移动端预览会同步刷新。', '删除图片', {
+    type: 'warning',
+  });
+  const images = cloneImages((form.images || []) as Question['images']);
+  const image = images[index];
+  const imageKey = typeof image === 'string' ? image : image?.url || image?.ref || image?.base64 || '';
+  images.splice(index, 1);
+  imageBusy.value = true;
+  try {
+    if (imageKey && imageKey.length < 500) {
+      await deleteQuestionImage(selected.value.id, imageKey);
+    } else {
+      await updateQuestion(selected.value.id, { images });
+    }
+    ElMessage.success('图片已删除');
+    await refreshSelected();
+  } finally {
+    imageBusy.value = false;
+  }
+}
+
+async function handleReorderImage(index: number, offset: -1 | 1) {
+  if (!selected.value) return;
+  const images = cloneImages((form.images || []) as Question['images']);
+  const targetIndex = index + offset;
+  if (targetIndex < 0 || targetIndex >= images.length) return;
+  [images[index], images[targetIndex]] = [images[targetIndex], images[index]];
+  const imageUrls = images.map((image) => (typeof image === 'string' ? image : image.url || image.ref || image.base64 || ''));
+  imageBusy.value = true;
+  try {
+    await reorderQuestionImages(selected.value.id, imageUrls);
+    ElMessage.success('图片顺序已更新');
+    await refreshSelected();
+  } finally {
+    imageBusy.value = false;
+  }
+}
+
+async function handleMoveImage(index: number, direction: 'previous' | 'next') {
+  if (!selected.value) return;
+  const image = ((form.images || []) as NonNullable<Question['images']>)[index];
+  const imageUrl = typeof image === 'string' ? image : image?.url || image?.ref || image?.base64 || '';
+  if (!imageUrl) {
+    ElMessage.warning('该图片缺少可移动标识');
+    return;
+  }
+  imageBusy.value = true;
+  try {
+    await moveQuestionImage(selected.value.id, { image_url: imageUrl, direction });
+    ElMessage.success(direction === 'previous' ? '已移动到上一题' : '已移动到下一题');
+    await refreshAll();
+  } finally {
+    imageBusy.value = false;
+  }
+}
+
+async function handleMergeImage(index: number) {
+  if (!selected.value) return;
+  const images = (form.images || []) as NonNullable<Question['images']>;
+  const current = images[index];
+  const next = images[index + 1];
+  const imageUrl = typeof current === 'string' ? current : current?.url || current?.ref || current?.base64 || '';
+  const nextImageUrl = typeof next === 'string' ? next : next?.url || next?.ref || next?.base64 || '';
+  if (!imageUrl || !nextImageUrl) {
+    ElMessage.warning('相邻图片缺少可合并标识');
+    return;
+  }
+  imageBusy.value = true;
+  try {
+    await mergeQuestionImages(selected.value.id, {
+      image_url: imageUrl,
+      next_image_url: nextImageUrl,
+    });
+    ElMessage.success('已标记为同一表格组');
+    await refreshSelected();
+  } finally {
+    imageBusy.value = false;
+  }
+}
+
+async function handleAddBlacklistText() {
+  const selectedText = String(window.getSelection?.()?.toString() || '').trim();
+  const text = (blacklistText.value || selectedText).trim();
+  if (!text) {
+    ElMessage.warning('请先输入或选中页眉页脚文本');
+    return;
+  }
+  blacklistLoading.value = true;
+  try {
+    await addHeaderFooterBlacklist({ text });
+    blacklistText.value = '';
+    ElMessage.success('已加入页眉页脚黑名单，后续解析会过滤该文本');
+  } finally {
+    blacklistLoading.value = false;
+  }
+}
+
+function handleImagePositionChange(index: number, value: string) {
+  const images = (form.images || []) as NonNullable<Question['images']>;
+  const image = images[index];
+  if (!image || typeof image === 'string') return;
+  image.insert_position = value;
+  dirty.value = true;
+}
+
+function imageRoleLabel(role: string) {
+  return {
+    material: '材料图',
+    question_visual: '题目图',
+    option_image: '选项图',
+    unknown: '未知',
+  }[role] || role;
+}
+
+function insertPositionLabel(position: string) {
+  return {
+    above_stem: '题干上方',
+    below_stem: '题干下方',
+    above_options: '选项上方',
+    below_options: '选项下方',
+  }[position] || position;
+}
+
+async function handleAiRepair() {
+  if (!selected.value) return;
+  aiRepairLoading.value = true;
+  try {
+    const proposal = await repairQuestionWithAi(selected.value.id, {
+      warnings: form.parse_warnings || [],
+      include_neighbors: true,
+    });
+    const confidence = Math.round((proposal.confidence || 0) * 100);
+    const warningText = proposal.warnings?.length ? `\n警告：${proposal.warnings.join('、')}` : '';
+    const removedText = proposal.remove_texts?.length ? `\n建议移除：${proposal.remove_texts.join('、')}` : '';
+    await ElMessageBox.confirm(
+      `AI 已生成修复建议，置信度 ${confidence}%。${warningText}${removedText}\n\n应用后只写入当前编辑框，请人工确认后再保存。`,
+      '应用 AI 修复建议？',
+      {
+        type: proposal.confidence >= 0.75 ? 'info' : 'warning',
+        confirmButtonText: '应用到编辑框',
+        cancelButtonText: '不应用',
+      },
+    );
+    if (proposal.content) {
+      form.content = cleanQuestionText(proposal.content);
+    }
+    for (const key of optionKeys) {
+      const value = proposal.options?.[key as 'A' | 'B' | 'C' | 'D'];
+      if (value) form[`option_${key.toLowerCase()}`] = value;
+    }
+    form.visual_refs = proposal.visual_refs || form.visual_refs || [];
+    form.parse_warnings = [...new Set([...(form.parse_warnings || []), ...(proposal.warnings || [])])];
+    if ((proposal.confidence || 0) < 0.85 || proposal.warnings?.length) {
+      form.needs_review = true;
+    }
+    dirty.value = true;
+    ElMessage.success('AI 修复建议已写入编辑框，请确认后保存');
+  } catch (error) {
+    if (String((error as Error)?.message || error).includes('cancel')) {
+      ElMessage.info('未应用 AI 修复建议');
+      return;
+    }
+    throw error;
+  } finally {
+    aiRepairLoading.value = false;
   }
 }
 
@@ -1008,6 +1286,23 @@ onMounted(async () => {
   color: #64748b;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.image-position-select {
+  grid-column: 2 / 4;
+  width: 160px;
+}
+
+.image-item :deep(.el-textarea) {
+  grid-column: 2 / 4;
+}
+
+.image-actions {
+  grid-column: 2 / 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-start;
 }
 
 .review-tip {

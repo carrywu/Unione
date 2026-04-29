@@ -19,6 +19,7 @@ TEACHING_TEXT_RE = re.compile(
     r"核心提示|方法技巧|易错点|答案解析|参考答案)"
 )
 VISUAL_REQUIRED_RE = re.compile(r"(根据.*?(资料|图|表)|上图|上表|下图|下表|图中|表中)")
+HEADER_FOOTER_RE = re.compile(r"^(?:\d{1,4}|.*(?:资料分析题库|夸夸刷|第[一二三四五六七八九十百千万\d]+章).*)$")
 
 
 def segment_question_cores(elements: list[LayoutElement], markdown: str) -> list[QuestionCoreBlock]:
@@ -41,9 +42,13 @@ def segment_question_cores(elements: list[LayoutElement], markdown: str) -> list
             if not text:
                 continue
             raw_parts.append(element.markdown or text)
+            if _is_noise_text(text):
+                continue
             option_match = OPTION_RE.match(text)
             if option_match:
                 options[option_match.group(1)] = _clean_option(option_match.group(2))
+                continue
+            if options:
                 continue
             if element.type in ("caption", "image", "table"):
                 continue
@@ -210,6 +215,13 @@ def _strip_orphan_corner_brackets(text: str) -> str:
 
 def _clean_option(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _is_noise_text(text: str) -> bool:
+    compact = re.sub(r"\s+", "", str(text or ""))
+    if not compact:
+        return True
+    return bool(HEADER_FOOTER_RE.match(compact))
 
 
 def _element_order(elements: list[LayoutElement], ids: list[str]) -> list[int]:

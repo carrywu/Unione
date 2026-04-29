@@ -26,9 +26,13 @@ export interface Question {
     caption?: string;
     page?: number;
     role?: string;
+    image_role?: 'material' | 'question_visual' | 'option_image' | 'unknown' | string;
+    image_order?: number;
+    insert_position?: 'above_stem' | 'below_stem' | 'above_options' | 'below_options' | string;
     bbox?: number[];
     source?: string;
     assignment_confidence?: number;
+    same_visual_group_id?: string;
   } | string>;
   ai_image_desc?: string;
   status: 'draft' | 'published';
@@ -99,6 +103,53 @@ export function getQuestion(id: string) {
 
 export function updateQuestion(id: string, data: Partial<Question>) {
   return http.put<Question, Question>(`/admin/questions/${id}`, data);
+}
+
+export function patchQuestion(id: string, data: Partial<Question>) {
+  return http.patch<Question, Question>(`/admin/questions/${id}`, data);
+}
+
+export function addQuestionImage(id: string, data: Record<string, unknown>) {
+  return http.post<Question, Question>(`/admin/questions/${id}/images`, data);
+}
+
+export function reorderQuestionImages(id: string, imageUrls: string[]) {
+  return http.patch<Question, Question>(`/admin/questions/${id}/images/reorder`, {
+    image_urls: imageUrls,
+  });
+}
+
+export function mergeQuestionImages(
+  id: string,
+  data: { image_url: string; next_image_url?: string; same_visual_group_id?: string },
+) {
+  return http.post<Question, Question>(`/admin/questions/${id}/images/merge`, data);
+}
+
+export function deleteQuestionImage(id: string, imageKey: string) {
+  return http.delete<Question, Question>(`/admin/questions/${id}/images/${encodeURIComponent(imageKey)}`);
+}
+
+export function moveQuestionImage(
+  id: string,
+  data: { image_url: string; direction?: 'previous' | 'next'; target_question_id?: string },
+) {
+  return http.post<Question, Question>(`/admin/questions/${id}/move-image`, data);
+}
+
+export interface AiRepairProposal {
+  content: string;
+  options: Partial<Record<'A' | 'B' | 'C' | 'D', string>>;
+  visual_refs: unknown[];
+  material_text: string;
+  remove_texts: string[];
+  warnings: string[];
+  confidence: number;
+  persisted: boolean;
+}
+
+export function repairQuestionWithAi(id: string, data: Record<string, unknown> = {}) {
+  return http.post<AiRepairProposal, AiRepairProposal>(`/admin/questions/${id}/ai-repair`, data);
 }
 
 export function reviewQuestionReadability(id: string) {

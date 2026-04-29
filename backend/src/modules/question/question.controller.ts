@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Patch,
   Param,
   Post,
   Put,
@@ -17,6 +18,15 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { BatchPublishDto } from './dto/batch-publish.dto';
 import { BatchDeleteQuestionDto } from './dto/batch-delete-question.dto';
 import { CreateQuestionDto } from './dto/create-question.dto';
+import {
+  AddQuestionImageDto,
+  AiRepairQuestionDto,
+  MergeQuestionDto,
+  MergeQuestionImagesDto,
+  MoveQuestionImageDto,
+  ReorderQuestionImagesDto,
+  SplitQuestionDto,
+} from './dto/question-review.dto';
 import { QueryQuestionDto } from './dto/query-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QuestionService } from './question.service';
@@ -95,6 +105,69 @@ export class AdminQuestionController {
   @ApiOperation({ summary: '修改题目' })
   update(@Param('id') id: string, @Body() dto: UpdateQuestionDto) {
     return this.questionService.update(id, dto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: '修改题目' })
+  patch(@Param('id') id: string, @Body() dto: UpdateQuestionDto) {
+    return this.questionService.update(id, dto);
+  }
+
+  @Post(':id/images')
+  @ApiOperation({ summary: '新增题目图片' })
+  addImage(@Param('id') id: string, @Body() dto: AddQuestionImageDto) {
+    return this.questionService.addQuestionImage(id, dto);
+  }
+
+  @Patch(':id/images/reorder')
+  @ApiOperation({ summary: '题目图片排序' })
+  reorderImages(
+    @Param('id') id: string,
+    @Body() dto: ReorderQuestionImagesDto,
+  ) {
+    return this.questionService.reorderQuestionImages(id, dto.image_urls);
+  }
+
+  @Post(':id/images/merge')
+  @ApiOperation({ summary: '标记相邻题目图片为同一视觉组' })
+  mergeImages(
+    @Param('id') id: string,
+    @Body() dto: MergeQuestionImagesDto,
+  ) {
+    return this.questionService.mergeQuestionImages(id, dto);
+  }
+
+  @Delete(':id/images/:imageKey')
+  @ApiOperation({ summary: '删除题目图片' })
+  deleteImage(
+    @Param('id') id: string,
+    @Param('imageKey') imageKey: string,
+  ) {
+    return this.questionService.deleteQuestionImage(id, imageKey);
+  }
+
+  @Post(':id/move-image')
+  @ApiOperation({ summary: '移动题目图片到相邻题' })
+  moveImage(@Param('id') id: string, @Body() dto: MoveQuestionImageDto) {
+    return this.questionService.moveQuestionImage(id, dto);
+  }
+
+  @Post(':id/ai-repair')
+  @ApiOperation({ summary: 'AI 修复当前题候选结果' })
+  repairWithAi(@Param('id') id: string, @Body() dto: AiRepairQuestionDto) {
+    return this.questionService.repairQuestionWithAi(id, dto);
+  }
+
+  @Post(':id/split')
+  @ApiOperation({ summary: '拆分当前题' })
+  split(@Param('id') id: string, @Body() dto: SplitQuestionDto) {
+    return this.questionService.splitQuestion(id, dto);
+  }
+
+  @Post(':id/merge')
+  @ApiOperation({ summary: '合并当前题到相邻题' })
+  merge(@Param('id') id: string, @Body() dto: MergeQuestionDto) {
+    return this.questionService.mergeQuestion(id, dto);
   }
 
   @Delete(':id')
