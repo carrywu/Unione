@@ -189,6 +189,7 @@ function harness() {
 
 async function run() {
   await testPublishSkipsLowConfidenceAndWarningQuestions();
+  await testReadabilityReviewSendsSourceBboxSeparatelyFromImages();
   await testQuestionImageOperationsOnlyTouchCurrentQuestion();
   await testMergeAdjacentQuestionImagesMarksSharedGroup();
   await testAiRepairReturnsProposalWithoutPersisting();
@@ -205,6 +206,48 @@ async function testPublishSkipsLowConfidenceAndWarningQuestions() {
   assert.equal(h.questions[1].status, QuestionStatus.Draft);
   assert.equal(h.questions[1].needs_review, true);
   assert.deepEqual(h.questions[1].parse_warnings, ['visual_assignment_low_confidence']);
+}
+
+async function testReadabilityReviewSendsSourceBboxSeparatelyFromImages() {
+  const h = harness();
+  Object.assign(h.questions[0], {
+    page_num: 1,
+    page_range: [1],
+    source_page_start: 1,
+    source_page_end: 1,
+    source_bbox: [65, 378, 476, 494],
+    source_anchor_text: '【例 1】',
+    image_refs: ['p1-img1'],
+    visual_refs: [{ id: 'p1-img1', page: 1, bbox: [108, 197, 434, 351] }],
+  });
+  let requestBody: any = null;
+  const originalPost = axios.post;
+  (axios as any).post = async (_url: string, body: any) => {
+    requestBody = body;
+    return {
+      data: {
+        readable: true,
+        needs_review: false,
+        score: 0.91,
+        reasons: [],
+        prompts: [],
+        focus_areas: [],
+        source: 'test',
+      },
+    };
+  };
+  try {
+    await h.questionService.reviewReadability('q1');
+  } finally {
+    (axios as any).post = originalPost;
+  }
+
+  assert.deepEqual(requestBody.source.source_bbox, [65, 378, 476, 494]);
+  assert.equal(requestBody.source.source_page_start, 1);
+  assert.deepEqual(requestBody.question.image_refs, ['p1-img1']);
+  assert.deepEqual(requestBody.question.visual_refs, [{ id: 'p1-img1', page: 1, bbox: [108, 197, 434, 351] }]);
+  assert.deepEqual(requestBody.question.images, h.questions[0].images);
+  assert.equal(requestBody.question.source_bbox, undefined);
 }
 
 async function testQuestionImageOperationsOnlyTouchCurrentQuestion() {

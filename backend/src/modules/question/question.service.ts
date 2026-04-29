@@ -532,6 +532,7 @@ export class QuestionService {
         `${pdfServiceUrl}/review-question-readability`,
         {
           question: this.buildReadabilityPayload(question),
+          source: this.questionSourcePayload(question),
           ai_config: await this.getAiConfig(),
         },
         { timeout: 120000 },
@@ -562,6 +563,8 @@ export class QuestionService {
       analysis: question.analysis || '',
       material: question.material?.content || '',
       images: question.images || [],
+      image_refs: question.image_refs || [],
+      visual_refs: question.visual_refs || [],
       parse_warnings: question.parse_warnings || [],
     };
   }

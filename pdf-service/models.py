@@ -72,6 +72,7 @@ class Question(BaseModel):
     source_anchor_text: Optional[str] = None
     source_confidence: Optional[float] = None
     image_refs: List[str] = []
+    visual_refs: List[Dict[str, Any]] = []
     source: Optional[str] = None
     raw_text: Optional[str] = None
     parse_confidence: Optional[float] = None

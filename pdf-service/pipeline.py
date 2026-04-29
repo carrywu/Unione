@@ -243,6 +243,7 @@ def _to_parse_result(
                 source_anchor_text=raw_question.get("source_anchor_text"),
                 source_confidence=raw_question.get("source_confidence"),
                 image_refs=raw_question.get("image_refs") or [],
+                visual_refs=raw_question.get("visual_refs") or [],
                 source=raw_question.get("source"),
                 raw_text=raw_question.get("raw_text"),
                 parse_confidence=raw_question.get("parse_confidence"),

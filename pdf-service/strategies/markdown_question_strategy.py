@@ -76,6 +76,11 @@ class MarkdownQuestionStrategy:
                 for visual_id in exercise.visual_ids
                 if visual_id in visual_by_id
             ]
+            visual_refs = [
+                self._visual_ref_payload(visual_by_id[visual_id])
+                for visual_id in exercise.visual_ids
+                if visual_id in visual_by_id
+            ]
             warnings = list(exercise.warnings)
             for visual in visual_images:
                 if visual.get("assignment_confidence", 1) < 0.65:
@@ -100,6 +105,7 @@ class MarkdownQuestionStrategy:
                     "source_anchor_text": exercise.source_anchor_text,
                     "source_confidence": exercise.parse_confidence,
                     "image_refs": exercise.visual_ids,
+                    "visual_refs": visual_refs,
                     "source": core.source,
                     "parse_source": "markdown_question_strategy",
                     "raw_text": exercise.raw_markdown[:12000],
@@ -148,6 +154,18 @@ class MarkdownQuestionStrategy:
             "caption": visual.caption,
             "page": visual.page,
             "role": role,
+            "bbox": visual.bbox,
+            "assignment_confidence": visual.assignment_confidence,
+        }
+
+    def _visual_ref_payload(self, visual) -> dict[str, Any]:
+        return {
+            "id": visual.id,
+            "page": visual.page,
+            "kind": visual.kind,
+            "bbox": visual.bbox,
+            "caption": visual.caption,
+            "image_path": visual.image_path,
             "assignment_confidence": visual.assignment_confidence,
         }
 

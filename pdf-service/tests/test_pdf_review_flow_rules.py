@@ -7,7 +7,7 @@ from unittest.mock import patch
 from debug_tools.export_visual_debug import build_layout, load_case, prepare_case_pdf, resolve_pdf_path
 from debug_tools.visual_assertions import run_visual_assertions
 from models import PageContent, TextBlock
-from layout_models import LayoutElement, QuestionCoreBlock, VisualBlock
+from layout_models import ExerciseBlock, LayoutElement, QuestionCoreBlock, VisualBlock
 from block_segmenter import segment_question_cores
 from parser_kernel.adapter import parse_extractor_with_kernel
 from question_splitter import split_questions
@@ -251,6 +251,69 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
 
         self.assertEqual(assignments["questions"]["q2"], ["v-social"])
         self.assertIn("visual_duplicate_fallback_ignored", visuals[1].warnings)
+
+    def test_markdown_strategy_exports_visual_layer_refs_separate_from_source_bbox(self):
+        core = QuestionCoreBlock(
+            id="q1",
+            index=1,
+            source=None,
+            page_start=1,
+            page_end=1,
+            marker_text="【例 1】",
+            stem_text="根据上图可以推出的是",
+            options={"A": "甲", "B": "乙", "C": "丙", "D": "丁"},
+            element_ids=["e1", "e2"],
+            bbox_range=[[65, 378, 476, 494]],
+            raw_markdown="",
+            source_element_ids=["e1", "e2"],
+            source_bbox_range=[[65, 378, 476, 494]],
+        )
+        exercise = ExerciseBlock(
+            id="ex-q1",
+            question_core=core,
+            material_id=None,
+            visual_ids=["p1-img1"],
+            page_range=(1, 1),
+            source_bbox=[65, 378, 476, 494],
+            source_anchor_text="【例 1】",
+            raw_markdown="",
+            parse_confidence=0.9,
+        )
+        visuals = [
+            VisualBlock(
+                id="p1-img1",
+                page=1,
+                kind="chart",
+                bbox=[108, 197, 434, 351],
+                image_path="images/p1-img1.png",
+                caption="2016~2022 年中国可穿戴设备产量",
+                assigned_to="q1",
+                assigned_type="question",
+                assignment_confidence=0.87,
+            )
+        ]
+
+        questions = MarkdownQuestionStrategy()._question_payloads([exercise], [], visuals, "/tmp")
+
+        question = questions[0]
+        self.assertEqual(question["source_bbox"], [65, 378, 476, 494])
+        self.assertEqual(question["image_refs"], ["p1-img1"])
+        self.assertEqual(
+            question["visual_refs"],
+            [
+                {
+                    "id": "p1-img1",
+                    "page": 1,
+                    "kind": "chart",
+                    "bbox": [108, 197, 434, 351],
+                    "caption": "2016~2022 年中国可穿戴设备产量",
+                    "image_path": "images/p1-img1.png",
+                    "assignment_confidence": 0.87,
+                }
+            ],
+        )
+        self.assertEqual(question["images"][0]["ref"], "p1-img1")
+        self.assertEqual(question["images"][0]["bbox"], [108, 197, 434, 351])
 
     def test_question_core_ignores_header_and_post_option_visual_titles(self):
         elements = [
