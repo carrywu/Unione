@@ -53,6 +53,7 @@ class QuestionImage(BaseModel):
     expanded_bbox: Optional[List[float]] = None
     absorbed_texts: List[Dict[str, Any]] = []
     same_visual_group_id: Optional[str] = None
+    child_visual_ids: List[str] = []
     assignment_confidence: Optional[float] = None
     ai_desc: Optional[str] = None
 

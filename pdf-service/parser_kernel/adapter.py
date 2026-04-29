@@ -719,6 +719,7 @@ def _region_to_image(region: Region, assignment_confidence: float = 0.7) -> dict
         "raw_bbox": region.bbox,
         "expanded_bbox": region.bbox,
         "absorbed_texts": [],
+        "child_visual_ids": [],
         "same_visual_group_id": region.same_visual_group_id,
         "assignment_confidence": region.assignment_confidence or assignment_confidence,
     }
@@ -733,6 +734,7 @@ def _region_to_visual_ref(region: Region) -> dict[str, Any]:
         "raw_bbox": region.bbox,
         "expanded_bbox": region.bbox,
         "absorbed_texts": [],
+        "child_visual_ids": [],
         "role": region.type,
         "kind": region.type,
         "caption": region.caption,

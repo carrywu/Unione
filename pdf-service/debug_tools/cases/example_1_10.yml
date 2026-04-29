@@ -29,7 +29,8 @@ questions:
     must_not_overlap_visuals: [p3-img1, p3-img2]
   q6:
     index: 6
-    expected_visuals: [p3-img1, p3-img2]
+    expected_visuals: [p3-img1]
+    expected_child_visuals: [p3-img1, p3-img2]
     expected_absorbed_texts: [2023 年全国规模以上文化及相关产业企业相关指标情况]
     must_not_overlap_questions: [q5]
   q7:

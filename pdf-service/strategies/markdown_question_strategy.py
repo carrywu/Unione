@@ -158,6 +158,8 @@ class MarkdownQuestionStrategy:
             "raw_bbox": visual.raw_bbox or visual.bbox,
             "expanded_bbox": visual.expanded_bbox or visual.bbox,
             "absorbed_texts": visual.absorbed_texts,
+            "same_visual_group_id": visual.same_visual_group_id,
+            "child_visual_ids": visual.child_visual_ids,
             "assignment_confidence": visual.assignment_confidence,
         }
 
@@ -172,6 +174,8 @@ class MarkdownQuestionStrategy:
             "absorbed_texts": visual.absorbed_texts,
             "caption": visual.caption,
             "image_path": visual.image_path,
+            "same_visual_group_id": visual.same_visual_group_id,
+            "child_visual_ids": visual.child_visual_ids,
             "assignment_confidence": visual.assignment_confidence,
         }
 

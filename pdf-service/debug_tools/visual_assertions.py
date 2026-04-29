@@ -48,6 +48,35 @@ def run_visual_assertions(layout: dict[str, Any], case: dict[str, Any]) -> dict[
                 )
             )
 
+        expected_child_visuals = list(expected.get("expected_child_visuals") or [])
+        if expected_child_visuals:
+            child_ids: list[str] = []
+            group_ids: set[str] = set()
+            for visual_id in actual_visuals:
+                visual = visuals.get(visual_id) or {}
+                child_ids.extend(str(item) for item in visual.get("child_visual_ids") or [])
+                group_id = visual.get("same_visual_group_id") or visual.get("visual_group_id")
+                if group_id:
+                    group_ids.add(str(group_id))
+            if child_ids != expected_child_visuals:
+                failures.append(
+                    _failure(
+                        "visual_child_ids_mismatch",
+                        q_key,
+                        f"expected child visuals {expected_child_visuals}, got {child_ids}",
+                        _visual_boxes(visuals, set(actual_visuals)),
+                    )
+                )
+            if not group_ids:
+                failures.append(
+                    _failure(
+                        "visual_group_id_missing",
+                        q_key,
+                        "merged visual must expose a visual group id",
+                        _visual_boxes(visuals, set(actual_visuals)),
+                    )
+                )
+
         expected_absorbed_texts = list(expected.get("expected_absorbed_texts") or [])
         if expected_absorbed_texts:
             absorbed_texts: list[dict[str, Any]] = []

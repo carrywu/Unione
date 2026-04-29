@@ -130,6 +130,7 @@ def extract_pdf_to_markdown(pdf_path: str, output_dir: str) -> dict[str, Any]:
                 order_index += 1
 
             _expand_visual_blocks(page, page_elements, visuals, output)
+            _merge_page_visual_fragments(page, page_elements, visuals, output)
             _attach_caption_and_context(page_elements, visuals)
 
         markdown = "\n\n".join(part for part in markdown_parts if part)
@@ -239,6 +240,122 @@ def _expand_visual_blocks(page: fitz.Page, page_elements: list[LayoutElement], v
             visual.caption = "\n".join(element.text or "" for element in absorbed).strip() or None
         _clip_page_to_path(page, fitz.Rect(expanded_bbox), output / visual.image_path)
         processed.append(visual)
+
+
+def _merge_page_visual_fragments(page: fitz.Page, page_elements: list[LayoutElement], visuals: list[VisualBlock], output: Path) -> None:
+    page_num = page.number + 1
+    text_elements = [element for element in page_elements if element.text]
+    page_visuals = sorted(
+        [visual for visual in visuals if visual.page == page_num],
+        key=lambda item: ((item.raw_bbox or item.bbox)[1], (item.raw_bbox or item.bbox)[0]),
+    )
+    if len(page_visuals) < 2:
+        return
+
+    merged: list[VisualBlock] = []
+    index = 0
+    group_index = 1
+    while index < len(page_visuals):
+        group = [page_visuals[index]]
+        index += 1
+        while index < len(page_visuals) and _can_merge_visual_fragments(group[-1], page_visuals[index], text_elements):
+            group.append(page_visuals[index])
+            index += 1
+        if len(group) == 1:
+            merged.append(group[0])
+            continue
+        merged.append(_merge_visual_group(page, group, output, group_index))
+        group_index += 1
+
+    visuals[:] = [visual for visual in visuals if visual.page != page_num] + merged
+
+
+def _can_merge_visual_fragments(previous: VisualBlock, current: VisualBlock, text_elements: list[LayoutElement]) -> bool:
+    previous_raw = previous.raw_bbox or previous.bbox
+    current_raw = current.raw_bbox or current.bbox
+    if previous.page != current.page:
+        return False
+    if _x_overlap_ratio(previous_raw, current_raw) <= 0.75:
+        return False
+    if abs(float(previous_raw[0]) - float(current_raw[0])) > 24.0 or abs(float(previous_raw[2]) - float(current_raw[2])) > 24.0:
+        return False
+    gap = _y_gap(previous_raw, current_raw)
+    if not _shared_absorbed_caption(previous, current):
+        return False
+    if gap > 60.0:
+        return False
+    return not _blocked_by_question_text(previous_raw[3], current_raw[1], text_elements)
+
+
+def _merge_visual_group(page: fitz.Page, group: list[VisualBlock], output: Path, group_index: int) -> VisualBlock:
+    base = group[0]
+    raw_boxes = [visual.raw_bbox or visual.bbox for visual in group]
+    expanded_boxes = [visual.expanded_bbox or visual.bbox for visual in group]
+    raw_bbox = _union_boxes(raw_boxes)
+    expanded_bbox = _clip_bbox_to_page(_union_boxes(expanded_boxes), page)
+    group_id = base.same_visual_group_id or f"vg_p{base.page}_{group_index}"
+    absorbed_texts = _unique_absorbed_texts(group)
+    child_ids = [
+        child_id
+        for visual in group
+        for child_id in (visual.child_visual_ids or [visual.id])
+    ]
+
+    base.raw_bbox = raw_bbox
+    base.expanded_bbox = expanded_bbox
+    base.bbox = expanded_bbox
+    base.same_visual_group_id = group_id
+    base.child_visual_ids = child_ids
+    base.absorbed_texts = absorbed_texts
+    base.caption = _merged_caption(group, absorbed_texts)
+    _clip_page_to_path(page, fitz.Rect(expanded_bbox), output / base.image_path)
+    return base
+
+
+def _union_boxes(boxes: list[list[float]]) -> list[float]:
+    return [
+        min(float(box[0]) for box in boxes),
+        min(float(box[1]) for box in boxes),
+        max(float(box[2]) for box in boxes),
+        max(float(box[3]) for box in boxes),
+    ]
+
+
+def _clip_bbox_to_page(bbox: list[float], page: fitz.Page) -> list[float]:
+    rect = fitz.Rect(bbox) & page.rect
+    return [rect.x0, rect.y0, rect.x1, rect.y1]
+
+
+def _unique_absorbed_texts(group: list[VisualBlock]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str]] = set()
+    result: list[dict[str, Any]] = []
+    for visual in group:
+        for item in visual.absorbed_texts:
+            key = (str(item.get("id") or ""), str(item.get("text") or ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(item)
+    return result
+
+
+def _merged_caption(group: list[VisualBlock], absorbed_texts: list[dict[str, Any]]) -> str | None:
+    parts: list[str] = []
+    for item in absorbed_texts:
+        text = str(item.get("text") or "").strip()
+        if text and text not in parts:
+            parts.append(text)
+    for visual in group:
+        text = str(visual.caption or "").strip()
+        if text and text not in parts:
+            parts.append(text)
+    return "\n".join(parts) or None
+
+
+def _shared_absorbed_caption(left: VisualBlock, right: VisualBlock) -> bool:
+    left_texts = {str(item.get("text") or "").strip() for item in left.absorbed_texts if str(item.get("text") or "").strip()}
+    right_texts = {str(item.get("text") or "").strip() for item in right.absorbed_texts if str(item.get("text") or "").strip()}
+    return bool(left_texts & right_texts)
 
 
 def _absorbed_visual_texts(raw_bbox: list[float], text_elements: list[LayoutElement]) -> list[LayoutElement]:

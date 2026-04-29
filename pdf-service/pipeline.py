@@ -491,6 +491,7 @@ def _normalize_images(images: list[Any]) -> list[QuestionImage]:
                     expanded_bbox=image.get("expanded_bbox"),
                     absorbed_texts=image.get("absorbed_texts") or [],
                     same_visual_group_id=image.get("same_visual_group_id"),
+                    child_visual_ids=image.get("child_visual_ids") or [],
                     assignment_confidence=image.get("assignment_confidence"),
                     ai_desc=image.get("ai_desc") or image.get("description"),
                 )

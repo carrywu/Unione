@@ -187,7 +187,8 @@ def render_report(
             ]
             lines.append(
                 f"  - {visual_id}: raw_bbox={visual.get('raw_bbox')} expanded_bbox={visual.get('expanded_bbox') or visual.get('bbox')} "
-                f"crop={visual.get('image_path')} absorbed_texts={absorbed}"
+                f"crop={visual.get('image_path')} group={visual.get('same_visual_group_id') or visual.get('visual_group_id')} "
+                f"children={visual.get('child_visual_ids') or []} absorbed_texts={absorbed}"
             )
         if not expected.get("expected_visuals"):
             lines.append("  - no visuals")

@@ -336,6 +336,8 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
                     "absorbed_texts": [],
                     "caption": "2016~2022 年中国可穿戴设备产量",
                     "image_path": "images/p1-img1.png",
+                    "same_visual_group_id": None,
+                    "child_visual_ids": [],
                     "assignment_confidence": 0.87,
                 }
             ],
@@ -361,6 +363,8 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
                             "bbox": [154, 358, 406, 370],
                         }
                     ],
+                    "same_visual_group_id": "vg_p1_1",
+                    "child_visual_ids": ["p1-img1", "p1-img2"],
                 }
             ]
         )
@@ -369,6 +373,8 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
         self.assertEqual(image["raw_bbox"], [108, 197, 434, 351])
         self.assertEqual(image["expanded_bbox"], [100, 190, 440, 374])
         self.assertEqual(image["absorbed_texts"][0]["type"], "caption")
+        self.assertEqual(image["same_visual_group_id"], "vg_p1_1")
+        self.assertEqual(image["child_visual_ids"], ["p1-img1", "p1-img2"])
 
     def test_question_core_ignores_header_and_post_option_visual_titles(self):
         elements = [
@@ -448,13 +454,15 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
         )
         self.assertEqual([image["ref"] for image in questions_by_index[4]["images"]], ["p2-img2"])
         self.assertEqual(questions_by_index[5]["images"], [])
-        self.assertEqual([image["ref"] for image in questions_by_index[6]["images"]], ["p3-img1", "p3-img2"])
+        self.assertEqual([image["ref"] for image in questions_by_index[6]["images"]], ["p3-img1"])
+        q6_image = image_by_ref(questions_by_index[6], "p3-img1")
+        self.assertEqual(q6_image.get("child_visual_ids"), ["p3-img1", "p3-img2"])
+        self.assertTrue(q6_image.get("same_visual_group_id"))
         self._assert_visual_absorbed_text(questions_by_index[1], "p1-img1", "2016~2022 年中国可穿戴设备产量", elements)
         self._assert_visual_absorbed_text(questions_by_index[2], "p1-img2", "2012~2016 年社会消费品零售总额", elements)
         self._assert_visual_absorbed_text(questions_by_index[3], "p2-img1", "2009~2018 年我国教育经费投入", elements)
         self._assert_visual_absorbed_text(questions_by_index[4], "p2-img2", "2016~2021 年我国工业大数据市场规模增长及预测", elements)
         self._assert_visual_absorbed_text(questions_by_index[6], "p3-img1", "2023 年全国规模以上文化及相关产业企业相关指标情况", elements)
-        self._assert_visual_absorbed_text(questions_by_index[6], "p3-img2", "2023 年全国规模以上文化及相关产业企业相关指标情况", elements)
         self._assert_visual_absorbed_text(questions_by_index[7], "p4-img1", "2015~2018 年D 省软件及信息服务业营业额", elements)
         self._assert_visual_absorbed_text(questions_by_index[7], "p4-img1", "注：“1 季”表示第一季度数值，后同。", elements)
 

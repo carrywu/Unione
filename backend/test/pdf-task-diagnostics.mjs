@@ -57,6 +57,8 @@ function visualRefs(question) {
       bbox: roundBbox(asBbox(item.bbox)),
       raw_bbox: roundBbox(asBbox(item.raw_bbox)),
       expanded_bbox: roundBbox(asBbox(item.expanded_bbox)),
+      same_visual_group_id: item.same_visual_group_id || item.visual_group_id || null,
+      child_visual_ids: asArray(item.child_visual_ids),
       absorbed_texts: asArray(item.absorbed_texts).map((text) => ({
         text: text.text || '',
         type: text.type || '',
@@ -77,6 +79,8 @@ function images(question) {
           bbox: roundBbox(asBbox(item.bbox)),
           raw_bbox: roundBbox(asBbox(item.raw_bbox)),
           expanded_bbox: roundBbox(asBbox(item.expanded_bbox)),
+          same_visual_group_id: item.same_visual_group_id || item.visual_group_id || null,
+          child_visual_ids: asArray(item.child_visual_ids),
           absorbed_texts: asArray(item.absorbed_texts).map((text) => ({
             text: text.text || '',
             type: text.type || '',
@@ -186,7 +190,10 @@ try {
   const q3 = byIndex.get(3);
   const q4 = byIndex.get(4);
   const q5 = byIndex.get(5);
+  const q6 = byIndex.get(6);
   const reviewPayloads = [q1, q2].filter(Boolean).map(reviewPayload);
+  const q6Page3Visuals = q6?.visual_refs.filter((visual) => visual.page === 3) || [];
+  const q6Title = '2023 年全国规模以上文化及相关产业企业相关指标情况';
   const assertions = [
     assertion(
       'q1.source_bbox_not_cover_q2_visual_bbox',
@@ -212,6 +219,20 @@ try {
       'no_image_question_images_empty',
       q5 && q5.visual_refs.length === 0 && q5.images.length === 0,
       { q5_visual_refs: q5?.visual_refs, q5_images: q5?.images },
+    ),
+    assertion(
+      'q6_contains_page3_table_material',
+      q6Page3Visuals.length === 1
+        && q6Page3Visuals[0].absorbed_texts.some((item) => item.text.includes(q6Title)),
+      { q6_visual_refs: q6?.visual_refs, q6_images: q6?.images },
+    ),
+    assertion(
+      'q6_same_page_table_fragments_merged',
+      q6Page3Visuals.length === 1
+        && q6Page3Visuals[0].same_visual_group_id
+        && JSON.stringify(q6Page3Visuals[0].child_visual_ids) === JSON.stringify(['p3-img1', 'p3-img2'])
+        && imageIds(q6 || { images: [] }).filter((id) => ['p3-img1', 'p3-img2'].includes(id)).length === 1,
+      { q6_page3_visuals: q6Page3Visuals, q6_image_ids: q6 ? imageIds(q6) : [] },
     ),
     assertion(
       'review_payload_source_and_visual_separated',

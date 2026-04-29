@@ -47,6 +47,8 @@ class VisualBlock:
     raw_bbox: BBox | None = None
     expanded_bbox: BBox | None = None
     absorbed_texts: list[dict[str, Any]] = field(default_factory=list)
+    same_visual_group_id: str | None = None
+    child_visual_ids: list[str] = field(default_factory=list)
     caption: str | None = None
     nearby_text_before: str | None = None
     nearby_text_after: str | None = None

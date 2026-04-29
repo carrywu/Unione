@@ -42,6 +42,7 @@ export interface Question {
     source?: string;
     assignment_confidence?: number;
     same_visual_group_id?: string;
+    child_visual_ids?: string[];
   } | string>;
   ai_image_desc?: string;
   status: 'draft' | 'published';
