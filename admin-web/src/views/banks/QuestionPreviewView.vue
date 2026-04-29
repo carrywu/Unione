@@ -450,7 +450,14 @@ const options = computed(() => [
 
 const questionImages = computed(() => normalizeImageList(question.value?.images || []));
 const materialImages = computed(() => normalizeImageList(question.value?.material?.images || []));
-const sourcePage = computed(() => question.value?.pdf_source?.page_num || question.value?.page_num || question.value?.page_range?.[0] || 1);
+const sourcePage = computed(() =>
+  question.value?.pdf_source?.source_page_start ||
+  question.value?.source_page_start ||
+  question.value?.pdf_source?.page_num ||
+  question.value?.page_num ||
+  question.value?.page_range?.[0] ||
+  1,
+);
 const pdfLocatorSrc = computed(() => {
   const taskId = question.value?.pdf_source?.task_id;
   return taskId ? pdfProxyUrl(taskId) : question.value?.pdf_source?.file_url || '';

@@ -67,6 +67,8 @@ class QuestionCoreBlock:
     element_ids: list[str]
     bbox_range: list[BBox]
     raw_markdown: str
+    source_element_ids: list[str] = field(default_factory=list)
+    source_bbox_range: list[BBox] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 

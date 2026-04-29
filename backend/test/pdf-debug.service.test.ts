@@ -25,7 +25,9 @@ const metadata = {
   summary_preview: { page_limit: 5 },
 };
 
-function service(update = async () => undefined) {
+function service(
+  update: (id: string, patch: any) => Promise<any> = async () => undefined,
+) {
   return new PdfService(
     {
       findOne: async () => task,

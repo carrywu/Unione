@@ -62,6 +62,14 @@ class ReadabilityReviewRequest(BaseModel):
     ai_config: dict[str, str] | None = None
 
 
+class RepairQuestionRequest(BaseModel):
+    question: dict
+    source: dict | None = None
+    neighbors: dict | None = None
+    warnings: list[str] | None = None
+    ai_config: dict[str, str] | None = None
+
+
 class DebugSmokeByUrlRequest(BaseModel):
     url: str
     task_id: str | None = None
@@ -188,9 +196,30 @@ async def review_question_readability(payload: ReadabilityReviewRequest):
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
 
 
+@app.post("/repair-question")
+async def repair_question(payload: RepairQuestionRequest):
+    try:
+        return await asyncio.to_thread(_repair_question_sync, payload)
+    except Exception as exc:
+        logger.error("单题 AI 修复失败: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc
+
+
 def _review_question_readability_sync(payload: ReadabilityReviewRequest):
     with ai_client.use_config(payload.ai_config):
         return ai_client.review_question_readability(payload.question)
+
+
+def _repair_question_sync(payload: RepairQuestionRequest):
+    with ai_client.use_config(payload.ai_config):
+        return ai_client.repair_question_structure(
+            {
+                "question": payload.question,
+                "source": payload.source or {},
+                "neighbors": payload.neighbors or {},
+                "warnings": payload.warnings or [],
+            }
+        )
 
 
 async def _download_pdf(url: str) -> str:

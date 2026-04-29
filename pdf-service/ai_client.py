@@ -130,6 +130,26 @@ READABILITY_REVIEW_PROMPT = """你是题库入库前的质量预审助手，只�
 题目 JSON：
 {question_json}"""
 
+REPAIR_QUESTION_PROMPT = """你是资料分析题库的单题解析修复助手。
+
+你只能基于输入内容提出候选修正，不要编造看不清或输入中不存在的信息。
+
+请去除页眉页脚、章节标题、目录残留，修正题干和 A/B/C/D 选项边界，并保留需要人工复核的 warnings。
+
+只返回严格 JSON：
+{
+  "content": "",
+  "options": {"A": "", "B": "", "C": "", "D": ""},
+  "visual_refs": [],
+  "material_text": "",
+  "remove_texts": [],
+  "warnings": [],
+  "confidence": 0.0
+}
+
+当前题与上下文 JSON：
+{repair_json}"""
+
 
 TEXT_PARSE_PROMPT = """你是行测题目解析助手。将以下原始文本解析为结构化JSON数组。
 
@@ -656,6 +676,122 @@ def review_question_readability(question: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         record_ai_call("readability_review", str(exc))
         return {**fallback, "source": "heuristic_ai_failed", "warnings": [str(exc)]}
+
+
+def repair_question_structure(payload: dict[str, Any]) -> dict[str, Any]:
+    fallback = _heuristic_repair_question(payload)
+    api_key = (
+        _config_value("text_api_key", "AI_TEXT_API_KEY")
+        or _config_value("deepseek_api_key", "DEEPSEEK_API_KEY")
+        or _config_value("dashscope_api_key", "DASHSCOPE_API_KEY")
+    )
+    if not api_key:
+        return {**fallback, "source": "heuristic_no_ai_config"}
+
+    try:
+        base_url = (
+            _config_value("text_base_url", "AI_TEXT_BASE_URL")
+            or _config_value("deepseek_base_url", "DEEPSEEK_BASE_URL")
+            or _config_value(
+                "dashscope_base_url",
+                "DASHSCOPE_BASE_URL",
+                "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            )
+        )
+        model = (
+            _config_value("text_model", "AI_TEXT_MODEL")
+            or _config_value("deepseek_model", "DEEPSEEK_MODEL")
+            or "qwen-plus"
+        )
+        prompt = REPAIR_QUESTION_PROMPT.replace(
+            "{repair_json}",
+            json.dumps(payload, ensure_ascii=False)[:16000],
+        )
+        client = OpenAI(api_key=api_key, base_url=base_url, timeout=90.0)
+        record_ai_call("question_repair")
+        response = client.chat.completions.create(
+            model=model,
+            temperature=0,
+            messages=[
+                {"role": "system", "content": "你只返回 JSON，不返回 markdown 或解释。"},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        result = json.loads(_extract_json(response.choices[0].message.content or "{}"))
+        return _normalize_repair_question_result(result, fallback)
+    except Exception as exc:
+        record_ai_call("question_repair", str(exc))
+        return {**fallback, "source": "heuristic_ai_failed", "warnings": fallback["warnings"] + [str(exc)]}
+
+
+def _heuristic_repair_question(payload: dict[str, Any]) -> dict[str, Any]:
+    question = payload.get("question") if isinstance(payload.get("question"), dict) else {}
+    blacklist = _repair_blacklist(payload)
+    content = str(question.get("content") or "")
+    remove_texts: list[str] = []
+    for text in blacklist:
+        if text and text in content:
+            content = content.replace(text, "")
+            remove_texts.append(text)
+    content = re.sub(r"资料分析题库[-—]夸夸刷", "", content).strip()
+    options = question.get("options") if isinstance(question.get("options"), dict) else {}
+    normalized_options = {
+        key: str(options.get(key) or options.get(key.lower()) or "").strip()
+        for key in ["A", "B", "C", "D"]
+    }
+    warnings = [str(item) for item in payload.get("warnings") or question.get("parse_warnings") or []]
+    if any(not value for value in normalized_options.values()):
+        warnings.append("options_missing")
+    if re.search(r"资料分析题库|夸夸刷|第七章", content):
+        warnings.append("header_footer_blacklist_hit")
+    return {
+        "content": content,
+        "options": normalized_options,
+        "visual_refs": question.get("image_refs") or [],
+        "material_text": str(question.get("material") or ""),
+        "remove_texts": remove_texts,
+        "warnings": sorted(set(warnings)),
+        "confidence": 0.55 if warnings else 0.78,
+    }
+
+
+def _repair_blacklist(payload: dict[str, Any]) -> list[str]:
+    config = _AI_CONFIG.get()
+    raw = config.get("header_footer_blacklist")
+    values: list[str] = []
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                values.extend(str(item) for item in parsed)
+        except json.JSONDecodeError:
+            values.append(str(raw))
+    values.extend(["资料分析题库-夸夸刷", "资料分析题库", "夸夸刷"])
+    return list(dict.fromkeys(item.strip() for item in values if item.strip()))
+
+
+def _normalize_repair_question_result(result: Any, fallback: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(result, dict):
+        return fallback
+    raw_options = result.get("options") if isinstance(result.get("options"), dict) else {}
+    confidence = result.get("confidence")
+    try:
+        numeric_confidence = max(0.0, min(1.0, float(confidence)))
+    except (TypeError, ValueError):
+        numeric_confidence = float(fallback["confidence"])
+    return {
+        "content": str(result.get("content") or fallback["content"]),
+        "options": {
+            key: str(raw_options.get(key) or raw_options.get(key.lower()) or "")
+            for key in ["A", "B", "C", "D"]
+        },
+        "visual_refs": result.get("visual_refs") if isinstance(result.get("visual_refs"), list) else [],
+        "material_text": str(result.get("material_text") or ""),
+        "remove_texts": [str(item) for item in result.get("remove_texts", []) if str(item).strip()],
+        "warnings": [str(item) for item in result.get("warnings", []) if str(item).strip()],
+        "confidence": numeric_confidence,
+        "source": "ai_text_model",
+    }
 
 
 def _heuristic_readability_review(question: dict[str, Any]) -> dict[str, Any]:

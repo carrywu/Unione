@@ -1,8 +1,11 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from debug_tools.export_visual_debug import build_layout, load_case, prepare_case_pdf, resolve_pdf_path
+from debug_tools.visual_assertions import run_visual_assertions
 from models import PageContent, TextBlock
 from layout_models import LayoutElement, QuestionCoreBlock, VisualBlock
 from block_segmenter import segment_question_cores
@@ -10,6 +13,7 @@ from parser_kernel.adapter import parse_extractor_with_kernel
 from question_splitter import split_questions
 from strategies.markdown_question_strategy import MarkdownQuestionStrategy
 from tests.test_scanned_question_book_kernel import FakeScannedQuestionExtractor
+from validator import validate_and_clean
 from visual_linker import assign_visuals
 
 
@@ -287,6 +291,51 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
             self.assertEqual([image["ref"] for image in by_index[index]["images"]], refs)
             self.assertNotIn("资料分析题库", by_index[index]["content"])
             self.assertNotIn("夸夸刷", by_index[index]["content"])
+
+    def test_admin_demo_examples_1_to_10_visual_assignment_and_source_bbox_regression(self):
+        case_path = Path(__file__).resolve().parents[1] / "debug_tools" / "cases" / "example_1_10.yml"
+        case = load_case(case_path)
+        try:
+            pdf_path = resolve_pdf_path(case_path, str(case["pdf"]))
+        except FileNotFoundError as exc:
+            self.skipTest(str(exc))
+
+        with TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "debug"
+            output_dir.mkdir()
+            working_pdf = prepare_case_pdf(pdf_path=pdf_path, pages=case.get("pages") or [], out_dir=output_dir)
+            parsed = MarkdownQuestionStrategy().parse(str(working_pdf), output_dir=str(output_dir))
+            layout = build_layout(
+                case=case,
+                parsed=parsed,
+                output_dir=output_dir,
+                source_pdf=pdf_path,
+                working_pdf=working_pdf,
+            )
+            assertions = run_visual_assertions(layout, case)
+
+        self.assertTrue(
+            assertions["passed"],
+            json.dumps(assertions["failures"], ensure_ascii=False, indent=2),
+        )
+
+    def test_validator_accepts_options_dict_without_options_missing_warning(self):
+        result = validate_and_clean(
+            [
+                {
+                    "index": 1,
+                    "type": "single",
+                    "content": "根据图表可以推出的是",
+                    "options": {"A": "甲", "B": "乙", "C": "丙", "D": "丁"},
+                    "parse_warnings": [],
+                }
+            ],
+            [],
+        )
+
+        question = result["questions"][0]
+        self.assertEqual(question["option_a"], "甲")
+        self.assertNotIn("options_missing", question.get("parse_warnings") or [])
 
 
 if __name__ == "__main__":

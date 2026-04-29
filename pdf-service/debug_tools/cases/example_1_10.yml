@@ -1,0 +1,45 @@
+name: example_1_10
+pdf: ../../../题本/2026资料分析题库-夸夸刷-必考题型专项拔高（下册）.pdf
+pages: [9, 10, 11, 12, 13, 14]
+
+questions:
+  q1:
+    index: 1
+    expected_visuals: [p1-img1]
+    must_not_overlap_visuals: [p1-img2]
+  q2:
+    index: 2
+    expected_visuals: [p1-img2]
+    must_not_overlap_questions: [q1]
+  q3:
+    index: 3
+    expected_visuals: [p2-img1]
+    must_not_overlap_visuals: [p2-img2]
+  q4:
+    index: 4
+    expected_visuals: [p2-img2]
+    must_not_overlap_visuals: [p2-img1]
+  q5:
+    index: 5
+    expected_visuals: []
+    must_not_overlap_visuals: [p3-img1, p3-img2]
+  q6:
+    index: 6
+    expected_visuals: [p3-img1, p3-img2]
+    must_not_overlap_questions: [q5]
+  q7:
+    index: 7
+    expected_visuals: [p4-img1]
+    must_not_overlap_questions: [q6]
+  q8:
+    index: 8
+    expected_visuals: [p5-img1]
+    must_not_overlap_visuals: [p5-img2, p5-img3]
+  q9:
+    index: 9
+    expected_visuals: [p5-img2, p5-img3]
+    must_not_overlap_questions: [q8]
+  q10:
+    index: 10
+    expected_visuals: []
+    must_not_overlap_questions: [q9]

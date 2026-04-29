@@ -12,10 +12,14 @@ import { Response } from 'express';
 import { Repository } from 'typeorm';
 import { BankStatus, QuestionBank } from '../bank/entities/question-bank.entity';
 import { Material } from '../question/entities/material.entity';
-import { SystemConfig } from '../system/entities/system-config.entity';
+import {
+  SystemConfig,
+  SystemConfigValueType,
+} from '../system/entities/system-config.entity';
 import { UploadService } from '../upload/upload.service';
 import {
   Question,
+  QuestionReviewStatus,
   QuestionStatus,
   QuestionType,
 } from '../question/entities/question.entity';
@@ -97,17 +101,22 @@ export class PdfService {
       throw new BadRequestException('只有已完成的解析任务才能发布结果');
     }
 
-    const publishedCount = await this.questionRepository.count({
+    const taskQuestions = await this.questionRepository.find({
       where: { parse_task_id: task.id },
     });
-
-    await this.questionRepository.update(
-      { parse_task_id: task.id },
-      {
-        status: QuestionStatus.Published,
-        needs_review: false,
-      },
+    const publishable = taskQuestions.filter((question) =>
+      this.isPublishableParsedQuestion(question),
     );
+    const reviewCount = taskQuestions.length - publishable.length;
+
+    if (publishable.length) {
+      for (const question of publishable) {
+        question.status = QuestionStatus.Published;
+        question.needs_review = false;
+        question.review_status = QuestionReviewStatus.Approved;
+        await this.questionRepository.save(question);
+      }
+    }
 
     const totalCount = await this.questionRepository.count({
       where: { bank_id: task.bank_id, status: QuestionStatus.Published },
@@ -129,7 +138,9 @@ export class PdfService {
     return {
       task_id: task.id,
       bank_id: task.bank_id,
-      published_count: publishedCount,
+      published_count: publishable.length,
+      review_count: reviewCount,
+      skipped_count: reviewCount,
       bank_status: bank.status,
       total_count: totalCount,
     };
@@ -198,6 +209,39 @@ export class PdfService {
       source: response.data?.source || (dto.mode === OcrRegionMode.Image ? 'manual_crop' : 'unknown'),
       warnings: Array.isArray(response.data?.warnings) ? response.data.warnings : [],
     };
+  }
+
+  cropRegion(dto: OcrRegionDto) {
+    return this.ocrRegion({ ...dto, mode: OcrRegionMode.Image });
+  }
+
+  async addHeaderFooterBlacklist(body: Record<string, unknown>) {
+    const incoming = Array.isArray(body.texts)
+      ? body.texts
+      : typeof body.text === 'string'
+        ? [body.text]
+        : [];
+    const texts = incoming
+      .map((text) => String(text || '').trim())
+      .filter(Boolean);
+    if (!texts.length) {
+      throw new BadRequestException('缺少要加入黑名单的文本');
+    }
+    const key = 'PDF_HEADER_FOOTER_BLACKLIST';
+    let config = await this.systemConfigRepository.findOne({ where: { key } });
+    const existing = this.parseJsonArray(config?.value);
+    const next = [...new Set([...existing, ...texts])];
+    if (!config) {
+      config = new SystemConfig();
+      config.key = key;
+      config.description = 'PDF 页眉页脚解析黑名单';
+      config.value_type = SystemConfigValueType.Json;
+      config.value = JSON.stringify(next);
+    } else {
+      config.value = JSON.stringify(next);
+    }
+    await this.systemConfigRepository.save(config);
+    return { key, texts: next };
   }
 
   listTasks(query: QueryParseTaskDto) {
@@ -715,6 +759,7 @@ export class PdfService {
         { key: 'DEEPSEEK_API_KEY' },
         { key: 'DEEPSEEK_BASE_URL' },
         { key: 'DEEPSEEK_MODEL' },
+        { key: 'PDF_HEADER_FOOTER_BLACKLIST' },
       ],
     });
     const values = new Map(configs.map((config) => [config.key, config.value]));
@@ -748,7 +793,20 @@ export class PdfService {
       deepseek_api_key: read('DEEPSEEK_API_KEY'),
       deepseek_base_url: read('DEEPSEEK_BASE_URL'),
       deepseek_model: read('DEEPSEEK_MODEL'),
+      header_footer_blacklist: read('PDF_HEADER_FOOTER_BLACKLIST'),
     });
+  }
+
+  private parseJsonArray(value?: string | null) {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed)
+        ? parsed.map((item) => String(item)).filter(Boolean)
+        : [];
+    } catch {
+      return [];
+    }
   }
 
   private async clearPreviousTaskResults(taskId: string) {
@@ -832,6 +890,9 @@ export class PdfService {
           raw.source_confidence ?? raw.sourceConfidence,
         ),
         image_refs: this.toStringArray(raw.image_refs ?? raw.imageRefs),
+        visual_refs: Array.isArray(raw.visual_refs ?? raw.visualRefs)
+          ? raw.visual_refs ?? raw.visualRefs
+          : null,
         source: raw.source || raw.parse_source || null,
         raw_text: raw.raw_text || raw.rawText || null,
         parse_confidence: this.toOptionalNumber(
@@ -842,6 +903,9 @@ export class PdfService {
         ),
         status: QuestionStatus.Draft,
         needs_review: Boolean(raw.needs_review || raw.parse_warnings?.length),
+        review_status: Boolean(raw.needs_review || raw.parse_warnings?.length)
+          ? QuestionReviewStatus.NeedsReview
+          : QuestionReviewStatus.Pending,
       });
       const existing = await this.questionRepository.findOne({
         where: { parse_task_id: taskId, index_num: entity.index_num },
@@ -861,6 +925,18 @@ export class PdfService {
       where: { bank_id: bankId },
     });
     await this.bankRepository.update(bankId, { total_count: total });
+  }
+
+  private isPublishableParsedQuestion(question: Question) {
+    const warnings = Array.isArray(question.parse_warnings)
+      ? question.parse_warnings
+      : [];
+    const confidence = Number(question.parse_confidence);
+    return (
+      !question.needs_review &&
+      warnings.length === 0 &&
+      (!Number.isFinite(confidence) || confidence >= 0.85)
+    );
   }
 
   private toNumber(value: unknown, fallback: number) {
@@ -927,9 +1003,24 @@ export class PdfService {
           );
         }
       }
+      item.image_role = item.image_role || this.imageRoleForParsedImage(item.role);
+      item.image_order = Number.isFinite(Number(item.image_order))
+        ? Number(item.image_order)
+        : normalized.length + 1;
+      item.insert_position = item.insert_position || 'below_stem';
       normalized.push(item);
     }
     return normalized;
+  }
+
+  private imageRoleForParsedImage(role: unknown) {
+    const value = String(role || '');
+    if (value === 'material') return 'material';
+    if (value.startsWith('option_')) return 'option_image';
+    if (['chart', 'table', 'image', 'visual', 'question_visual'].includes(value)) {
+      return 'question_visual';
+    }
+    return 'unknown';
   }
 
   private resolveFileName(url: string) {

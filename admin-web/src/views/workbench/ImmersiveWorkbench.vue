@@ -325,7 +325,14 @@ const saveStateText = computed(() => {
   return '有未保存修改';
 });
 
-const sourcePage = computed(() => selectedQuestion.value?.pdf_source?.page_num || selectedQuestion.value?.page_num || selectedQuestion.value?.page_range?.[0] || 1);
+const sourcePage = computed(() =>
+  selectedQuestion.value?.pdf_source?.source_page_start ||
+  selectedQuestion.value?.source_page_start ||
+  selectedQuestion.value?.pdf_source?.page_num ||
+  selectedQuestion.value?.page_num ||
+  selectedQuestion.value?.page_range?.[0] ||
+  1,
+);
 const pdfLocatorSrc = computed(() => {
   const taskId = selectedQuestion.value?.pdf_source?.task_id;
   return taskId ? pdfProxyUrl(taskId) : selectedQuestion.value?.pdf_source?.file_url || '';

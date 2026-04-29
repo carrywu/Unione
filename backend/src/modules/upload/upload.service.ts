@@ -2,7 +2,8 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as OSS from 'ali-oss';
 import { createHmac } from 'crypto';
-import { extname } from 'path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, extname, join } from 'node:path';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -24,6 +25,10 @@ export class UploadService {
     const key = `uploads/${year}/${month}/${randomUUID()}${ext}`;
 
     const provider = this.configService.get<string>('UPLOAD_PROVIDER', 'oss');
+    if (provider === 'local') {
+      this.logger.log(`Upload file to local filename=${file.originalname} key=${key}`);
+      return this.uploadToLocal(file, key);
+    }
     if (provider === 'qiniu') {
       this.logger.log(`Upload file to qiniu filename=${file.originalname} key=${key}`);
       return this.uploadToQiniu(file, key);
@@ -63,6 +68,10 @@ export class UploadService {
     } as Express.Multer.File;
 
     const provider = this.configService.get<string>('UPLOAD_PROVIDER', 'oss');
+    if (provider === 'local') {
+      this.logger.log(`Upload buffer to local filename=${options.filename} key=${key}`);
+      return this.uploadToLocal(file, key);
+    }
     if (provider === 'qiniu') {
       this.logger.log(`Upload buffer to qiniu filename=${options.filename} key=${key}`);
       return this.uploadToQiniu(file, key);
@@ -131,6 +140,17 @@ export class UploadService {
     };
   }
 
+  private async uploadToLocal(file: Express.Multer.File, key: string) {
+    const relativePath = this.toLocalRelativePath(key);
+    const absolutePath = join(process.cwd(), 'uploads', relativePath);
+    await mkdir(dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, file.buffer);
+    return {
+      url: `${this.resolveBackendBaseUrl()}/uploads/${relativePath}`,
+      filename: file.originalname,
+    };
+  }
+
   private createQiniuUploadToken(bucket: string, key: string) {
     const accessKey = this.configService.get<string>('QINIU_ACCESS_KEY');
     const secretKey = this.configService.get<string>('QINIU_SECRET_KEY');
@@ -175,6 +195,16 @@ export class UploadService {
 
   private base64ToUrlSafe(value: string) {
     return value.replace(/\+/g, '-').replace(/\//g, '_');
+  }
+
+  private toLocalRelativePath(key: string) {
+    return key.replace(/^uploads\//, '');
+  }
+
+  private resolveBackendBaseUrl() {
+    return this.configService
+      .get<string>('BACKEND_URL', 'http://127.0.0.1:3010')
+      .replace(/\/$/, '');
   }
 
   private getClient() {

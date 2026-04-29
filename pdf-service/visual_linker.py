@@ -97,7 +97,7 @@ def _score_material(visual: VisualBlock, material: SharedMaterialBlock, element_
 def _score_question(visual: VisualBlock, question: QuestionCoreBlock, element_by_id: dict[str, LayoutElement]) -> tuple[float, list[str]]:
     score = 0.0
     reasons: list[str] = []
-    question_orders = [element_by_id[element_id].order_index for element_id in question.element_ids if element_id in element_by_id]
+    question_orders = _question_source_orders(question, element_by_id)
     if not question_orders:
         return score, reasons
     visual_order = _visual_order(visual, element_by_id)
@@ -150,17 +150,29 @@ def _nearest_following_question(
     visual_order = _visual_order(visual, element_by_id)
     following: list[tuple[int, QuestionCoreBlock]] = []
     for question in questions:
-        question_orders = [element_by_id[element_id].order_index for element_id in question.element_ids if element_id in element_by_id]
+        question_orders = _question_source_orders(question, element_by_id)
         if not question_orders:
             continue
         q_min = min(question_orders)
         marker = element_by_id.get(question.element_ids[0])
         if q_min > visual_order and marker and marker.page == visual.page:
             following.append((q_min, question))
-    if not following:
+    if following:
+        q_min, question = min(following, key=lambda item: item[0])
+        return question if q_min - visual_order <= 4 else None
+
+    next_page_following: list[tuple[int, QuestionCoreBlock]] = []
+    for question in questions:
+        question_orders = _question_source_orders(question, element_by_id)
+        if not question_orders:
+            continue
+        marker = element_by_id.get(question.element_ids[0])
+        if marker and marker.page == visual.page + 1:
+            next_page_following.append((min(question_orders), question))
+    if not next_page_following or not _visual_is_after_last_source_on_page(visual, questions, element_by_id):
         return None
-    q_min, question = min(following, key=lambda item: item[0])
-    return question if q_min - visual_order <= 4 else None
+    _, question = min(next_page_following, key=lambda item: item[0])
+    return question
 
 
 def _is_duplicate_fallback_visual(visual: VisualBlock, visuals: list[VisualBlock]) -> bool:
@@ -221,6 +233,29 @@ def _visual_order(visual: VisualBlock, element_by_id: dict[str, LayoutElement]) 
             return element.order_index
     same_page = [element.order_index for element in element_by_id.values() if element.page == visual.page]
     return min(same_page) if same_page else 0
+
+
+def _question_source_orders(question: QuestionCoreBlock, element_by_id: dict[str, LayoutElement]) -> list[int]:
+    source_ids = getattr(question, "source_element_ids", None) or []
+    ids = source_ids or question.element_ids
+    return [element_by_id[element_id].order_index for element_id in ids if element_id in element_by_id]
+
+
+def _visual_is_after_last_source_on_page(
+    visual: VisualBlock,
+    questions: list[QuestionCoreBlock],
+    element_by_id: dict[str, LayoutElement],
+) -> bool:
+    source_bottoms: list[float] = []
+    for question in questions:
+        source_ids = getattr(question, "source_element_ids", None) or question.element_ids
+        for element_id in source_ids:
+            element = element_by_id.get(element_id)
+            if element and element.page == visual.page and element.bbox and len(element.bbox) == 4:
+                source_bottoms.append(float(element.bbox[3]))
+    if not source_bottoms:
+        return False
+    return float(visual.bbox[1]) > max(source_bottoms) + 4.0
 
 
 def _keyword_overlap(left: str, right: str) -> int:

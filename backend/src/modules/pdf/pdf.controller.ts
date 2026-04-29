@@ -30,6 +30,18 @@ export class PdfController {
     return this.pdfService.ocrRegion(dto);
   }
 
+  @Post('crop-region')
+  @ApiOperation({ summary: '框选区域截图' })
+  cropRegion(@Body() dto: OcrRegionDto) {
+    return this.pdfService.cropRegion(dto);
+  }
+
+  @Post('header-footer-blacklist')
+  @ApiOperation({ summary: '追加页眉页脚黑名单' })
+  headerFooterBlacklist(@Body() body: Record<string, unknown>) {
+    return this.pdfService.addHeaderFooterBlacklist(body);
+  }
+
   @Get('task/:taskId')
   @ApiOperation({ summary: '获取解析任务状态' })
   getTask(@Param('taskId') taskId: string) {

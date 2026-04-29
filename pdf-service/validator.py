@@ -17,6 +17,8 @@ JUDGE_KEYWORDS = [
 ]
 
 TOC_LINE_PATTERN = re.compile(r"^.{1,60}\.{4,}\s*\d+\s*$")
+HEADER_FOOTER_NOISE_RE = re.compile(r"(资料分析题库|夸夸刷|第七章)")
+QUESTION_ANCHOR_RE = re.compile(r"(?:【\s*)?例\s*\d+\s*】?")
 
 
 def validate_and_clean(
@@ -74,7 +76,10 @@ def _clean_question_with_meta(question: dict[str, Any]) -> tuple[dict[str, Any] 
     if content.startswith("第") and len(content) < 15 and "章" in content:
         return None, _rejected_candidate(question, "chapter_heading", original_content)
 
-    for key in ["option_a", "option_b", "option_c", "option_d"]:
+    options = question.get("options") if isinstance(question.get("options"), dict) else {}
+    for letter, key in [("A", "option_a"), ("B", "option_b"), ("C", "option_c"), ("D", "option_d")]:
+        if not question.get(key) and options:
+            question[key] = options.get(letter) or options.get(letter.lower())
         value = (question.get(key) or "").strip()
         value = re.sub(r"^[ABCD][．.、。]\s*", "", value).strip()
         question[key] = value or None
@@ -97,6 +102,30 @@ def _clean_question_with_meta(question: dict[str, Any]) -> tuple[dict[str, Any] 
         or material_suspected
         or answer_missing_in_answer_stage
     )
+    parse_warnings = list(question.get("parse_warnings") or [])
+    if HEADER_FOOTER_NOISE_RE.search(content):
+        parse_warnings.append("header_footer_blacklist_hit")
+        question["needs_review"] = True
+    if len(QUESTION_ANCHOR_RE.findall(content)) > 1:
+        parse_warnings.append("question_boundary_conflict")
+        question["needs_review"] = True
+    if missing_options:
+        parse_warnings.append("options_missing")
+    low_confidence_images = [
+        image
+        for image in question.get("images") or []
+        if isinstance(image, dict)
+        and _safe_float(image.get("assignment_confidence")) is not None
+        and (_safe_float(image.get("assignment_confidence")) or 0) < 0.65
+    ]
+    if low_confidence_images:
+        parse_warnings.append("visual_assignment_low_confidence")
+        question["needs_review"] = True
+    if len(question.get("images") or []) > 4:
+        parse_warnings.append("abnormal_image_count")
+        question["needs_review"] = True
+    if parse_warnings:
+        question["parse_warnings"] = sorted(set(parse_warnings))
 
     if is_judge and not has_options:
         question["type"] = "judge"
@@ -115,6 +144,13 @@ def _strip_orphan_corner_brackets(text: str) -> str:
     text = re.sub(r"^\s*】+", "", text).strip()
     text = re.sub(r"【+\s*$", "", text).strip()
     return text
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _rejected_candidate(question: dict[str, Any], reason: str, original_content: str) -> dict[str, Any]:

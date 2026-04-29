@@ -9,6 +9,10 @@ class Region(BaseModel):
     type: str
     bbox: List[float]
     base64: str
+    caption: Optional[str] = None
+    page: Optional[int] = None
+    same_visual_group_id: Optional[str] = None
+    assignment_confidence: Optional[float] = None
 
 
 class TextBlock(BaseModel):
@@ -41,6 +45,11 @@ class QuestionImage(BaseModel):
     caption: Optional[str] = None
     page: Optional[int] = None
     role: Optional[str] = None
+    image_role: Optional[str] = None
+    image_order: Optional[int] = None
+    insert_position: Optional[str] = None
+    bbox: Optional[List[float]] = None
+    same_visual_group_id: Optional[str] = None
     assignment_confidence: Optional[float] = None
     ai_desc: Optional[str] = None
 

@@ -37,6 +37,7 @@ def segment_question_cores(elements: list[LayoutElement], markdown: str) -> list
         options: dict[str, str] = {}
         stem_parts: list[str] = []
         raw_parts: list[str] = []
+        source_elements: list[LayoutElement] = []
         for element in block_elements:
             text = element.text or element.markdown or ""
             if not text:
@@ -47,12 +48,14 @@ def segment_question_cores(elements: list[LayoutElement], markdown: str) -> list
             option_match = OPTION_RE.match(text)
             if option_match:
                 options[option_match.group(1)] = _clean_option(option_match.group(2))
+                source_elements.append(element)
                 continue
             if options:
                 continue
             if element.type in ("caption", "image", "table"):
                 continue
             stem_parts.append(text)
+            source_elements.append(element)
 
         index = _question_index(marker.text or "")
         if index is None:
@@ -71,19 +74,22 @@ def segment_question_cores(elements: list[LayoutElement], markdown: str) -> list
             warnings.append("teaching_text_mixed")
         source_match = SOURCE_RE.search(stem)
         source = source_match.group(1) if source_match else None
+        page_elements = source_elements or block_elements
         cores.append(
             QuestionCoreBlock(
                 id=f"q{index}-{len(cores) + 1}",
                 index=index,
                 source=source,
-                page_start=min(item.page for item in block_elements),
-                page_end=max(item.page for item in block_elements),
+                page_start=min(item.page for item in page_elements),
+                page_end=max(item.page for item in page_elements),
                 marker_text=marker.text or "",
                 stem_text=stem,
                 options=options,
                 element_ids=[item.id for item in block_elements],
                 bbox_range=[item.bbox for item in block_elements if item.page == marker.page],
                 raw_markdown="\n\n".join(raw_parts),
+                source_element_ids=[item.id for item in source_elements],
+                source_bbox_range=[item.bbox for item in source_elements if item.page == marker.page],
                 warnings=warnings,
             )
         )
@@ -269,7 +275,10 @@ def _question_anchor_count(text: str) -> int:
 
 
 def _source_bbox(core: QuestionCoreBlock) -> list[float] | None:
-    boxes = [bbox for bbox in core.bbox_range if bbox and len(bbox) == 4]
+    source_boxes = getattr(core, "source_bbox_range", None) or []
+    boxes = [bbox for bbox in source_boxes if bbox and len(bbox) == 4]
+    if not boxes:
+        boxes = [bbox for bbox in core.bbox_range if bbox and len(bbox) == 4]
     if not boxes:
         return None
     return [

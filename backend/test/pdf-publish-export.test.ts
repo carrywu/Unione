@@ -69,6 +69,8 @@ type QuestionRow = {
   page_num?: number | null;
   source_page_start?: number | null;
   source_page_end?: number | null;
+  parse_confidence?: number | null;
+  parse_warnings?: string[];
   created_at: Date;
   deleted_at?: Date;
 };
@@ -316,10 +318,12 @@ function createHarness() {
         analysis: '解析二',
         images: [{ url: 'https://example.test/q2.png' }],
         status: QuestionStatus.Draft,
-        needs_review: true,
+        needs_review: false,
         page_num: 3,
         source_page_start: 3,
         source_page_end: 3,
+        parse_confidence: 0.92,
+        parse_warnings: [],
         created_at: now,
       },
       {
@@ -338,10 +342,12 @@ function createHarness() {
         analysis: '解析一',
         images: [],
         status: QuestionStatus.Draft,
-        needs_review: true,
+        needs_review: false,
         page_num: 2,
         source_page_start: 2,
         source_page_end: 2,
+        parse_confidence: 0.91,
+        parse_warnings: [],
         created_at: now,
       },
       {
@@ -449,6 +455,8 @@ async function testPublishResultMakesBankVisibleToH5() {
     task_id: 'task-1',
     bank_id: 'bank-1',
     published_count: 2,
+    review_count: 0,
+    skipped_count: 0,
     bank_status: BankStatus.Published,
     total_count: 3,
   });

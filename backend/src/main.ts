@@ -1,6 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { json, urlencoded } from 'express';
+import { json, static as expressStatic, urlencoded } from 'express';
+import { join } from 'node:path';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -11,6 +12,7 @@ async function bootstrap() {
 
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
+  app.use('/uploads', expressStatic(join(process.cwd(), 'uploads')));
 
   app.enableCors({
     origin: true,

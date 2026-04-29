@@ -150,7 +150,7 @@ def parse_extractor_with_kernel(
         question_images.extend(
             _region_to_image(region, assignment_confidence=0.8)
             for region in visual_links.get("questions", {}).get(raw.index, [])
-            if region.base64 not in {image["base64"] for image in question_images}
+            if not _has_matching_image_region(question_images, region)
         )
         question_warnings = list(getattr(raw, "warnings", []) or [])
         question_warnings.extend(link_warnings.get(raw.index, []))
@@ -497,7 +497,18 @@ def _pages_from_visual_fallback(
                         question_regions.append(option_region)
                 y += 12.0
 
-        for visual in visual_result.get("visuals", []) or []:
+        question_bboxes = [
+            question.get("bbox")
+            for question in visual_result.get("questions", []) or []
+            if question.get("bbox")
+        ]
+        visual_items = _merge_adjacent_visuals(
+            visual_result.get("visuals", []) or [],
+            question_bboxes,
+            page_height=_visual_page_height(extractor, page_index),
+            page_num=page_index + 1,
+        )
+        for visual in visual_items:
             bbox = visual.get("bbox")
             if not bbox:
                 continue
@@ -508,6 +519,8 @@ def _pages_from_visual_fallback(
                 bbox,
                 visual.get("kind") or "image",
                 warnings=page_warnings,
+                caption=visual.get("caption"),
+                same_visual_group_id=visual.get("same_visual_group_id"),
             )
             if visual_region:
                 regions.append(visual_region)
@@ -519,6 +532,9 @@ def _pages_from_visual_fallback(
                         "y0": float(bbox[1]),
                         "y1": float(bbox[3]),
                         "explicit_question_link": isinstance(visual.get("question_index"), int),
+                        "region": visual_region,
+                        "caption": visual.get("caption"),
+                        "same_visual_group_id": visual.get("same_visual_group_id"),
                     }
                 )
                 material_temp_id = str(visual.get("material_temp_id") or "")
@@ -628,6 +644,8 @@ def _region_from_bbox(
     *,
     warnings: list[str] | None = None,
     fallback_to_full_page: bool = False,
+    caption: str | None = None,
+    same_visual_group_id: str | None = None,
 ) -> Region | None:
     warning_sink = warnings if warnings is not None else []
     rect, normalized_bbox = _bbox_to_page_rect(extractor, page_index, bbox, warning_sink)
@@ -647,6 +665,9 @@ def _region_from_bbox(
         type=region_type,
         bbox=normalized_bbox,
         base64=base64,
+        caption=caption,
+        page=page_index + 1,
+        same_visual_group_id=same_visual_group_id,
     )
 
 
@@ -670,8 +691,28 @@ def _region_to_image(region: Region, assignment_confidence: float = 0.7) -> dict
         "base64": region.base64,
         "ref": region.type,
         "role": region.type,
-        "assignment_confidence": assignment_confidence,
+        "image_role": _image_role_for_region(region.type),
+        "caption": region.caption,
+        "page": region.page,
+        "bbox": region.bbox,
+        "same_visual_group_id": region.same_visual_group_id,
+        "assignment_confidence": region.assignment_confidence or assignment_confidence,
     }
+
+
+def _has_matching_image_region(images: list[dict[str, Any]], region: Region) -> bool:
+    for image in images:
+        if image.get("role") == region.type and image.get("bbox") == region.bbox:
+            return True
+    return False
+
+
+def _image_role_for_region(region_type: str) -> str:
+    if region_type in {"chart", "table", "image", "visual", "material"}:
+        return "material" if region_type == "material" else "question_visual"
+    if region_type.startswith("option_"):
+        return "option_image"
+    return "unknown"
 
 
 def _material_block_text(content: str) -> str:
@@ -1007,8 +1048,100 @@ def _build_shared_material_groups(
         page_groups.append(group)
         for question_index in question_indexes:
             question_group_ids.setdefault(question_index, group_id)
+            if seed.get("seed_type") == "visual" and seed.get("region") is not None:
+                region = seed["region"]
+                if hasattr(region, "assignment_confidence"):
+                    region.assignment_confidence = confidence
+                visual_links.setdefault("questions", {}).setdefault(question_index, []).append(region)
 
     return page_groups
+
+
+def _merge_adjacent_visuals(
+    visuals: list[dict[str, Any]],
+    question_bboxes: list[Any],
+    *,
+    page_height: float,
+    page_num: int,
+) -> list[dict[str, Any]]:
+    normalized = [dict(visual) for visual in visuals if _coerce_visual_bbox(visual.get("bbox"))]
+    normalized.sort(key=lambda item: (_coerce_visual_bbox(item["bbox"])[1], _coerce_visual_bbox(item["bbox"])[0]))
+    merged: list[dict[str, Any]] = []
+    used: set[int] = set()
+    group_index = 1
+    for index, visual in enumerate(normalized):
+        if index in used:
+            continue
+        current_group = [visual]
+        used.add(index)
+        current_bbox = _coerce_visual_bbox(visual.get("bbox"))
+        for next_index in range(index + 1, len(normalized)):
+            if next_index in used:
+                continue
+            candidate = normalized[next_index]
+            candidate_bbox = _coerce_visual_bbox(candidate.get("bbox"))
+            if not current_bbox or not candidate_bbox:
+                continue
+            if not _can_merge_visuals(current_bbox, candidate_bbox, question_bboxes, page_height):
+                continue
+            current_group.append(candidate)
+            used.add(next_index)
+            current_bbox = _union_visual_bboxes([current_bbox, candidate_bbox])
+        if len(current_group) == 1:
+            merged.append(current_group[0])
+            continue
+        group_id = f"vg_p{page_num}_{group_index}"
+        group_index += 1
+        captions = [str(item.get("caption") or "").strip() for item in current_group if str(item.get("caption") or "").strip()]
+        merged_visual = {
+            **current_group[0],
+            "bbox": _union_visual_bboxes([_coerce_visual_bbox(item.get("bbox")) for item in current_group]),
+            "caption": captions[0] if captions else current_group[0].get("caption"),
+            "same_visual_group_id": group_id,
+        }
+        merged.append(merged_visual)
+    return merged
+
+
+def _can_merge_visuals(
+    first: list[float],
+    second: list[float],
+    question_bboxes: list[Any],
+    page_height: float,
+) -> bool:
+    if _x_overlap_ratio(first, second) <= 0.6:
+        return False
+    y_gap = max(0.0, second[1] - first[3])
+    if y_gap > page_height * 0.08:
+        return False
+    return not _has_question_between(first[3], second[1], question_bboxes)
+
+
+def _x_overlap_ratio(first: list[float], second: list[float]) -> float:
+    overlap = max(0.0, min(first[2], second[2]) - max(first[0], second[0]))
+    narrower = max(1.0, min(first[2] - first[0], second[2] - second[0]))
+    return overlap / narrower
+
+
+def _has_question_between(top_y: float, bottom_y: float, question_bboxes: list[Any]) -> bool:
+    for bbox_value in question_bboxes:
+        bbox = _coerce_visual_bbox(bbox_value)
+        if not bbox:
+            continue
+        if top_y <= bbox[1] <= bottom_y:
+            return True
+    return False
+
+
+def _visual_page_height(extractor: Any, page_index: int) -> float:
+    image_size = _cached_visual_render_size(extractor, page_index)
+    try:
+        height = float((image_size or {}).get("height") or 0)
+    except (TypeError, ValueError, AttributeError):
+        height = 0.0
+    if height > 0:
+        return height
+    return float(_page_rect(extractor, page_index).height)
 
 
 def _coerce_visual_bbox(value: Any) -> list[float] | None:

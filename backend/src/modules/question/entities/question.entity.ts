@@ -23,6 +23,12 @@ export enum QuestionStatus {
   Published = 'published',
 }
 
+export enum QuestionReviewStatus {
+  Pending = 'pending',
+  Approved = 'approved',
+  NeedsReview = 'needs_review',
+}
+
 @Index(['bank_id', 'status'])
 @Index(['bank_id', 'needs_review'])
 @Index(['bank_id', 'type'])
@@ -118,8 +124,19 @@ export class Question {
   @Column({ name: 'image_refs', type: 'json', nullable: true })
   image_refs?: string[];
 
+  @Column({ name: 'visual_refs', type: 'json', nullable: true })
+  visual_refs?: unknown[];
+
   @Column({ name: 'parse_warnings', type: 'json', nullable: true })
   parse_warnings?: string[];
+
+  @Column({
+    name: 'review_status',
+    type: 'enum',
+    enum: QuestionReviewStatus,
+    default: QuestionReviewStatus.Pending,
+  })
+  review_status: QuestionReviewStatus;
 
   @Column({
     type: 'enum',

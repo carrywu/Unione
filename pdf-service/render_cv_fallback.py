@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,8 @@ import fitz
 from PIL import Image
 
 from layout_models import VisualBlock
+
+QUESTION_TEXT_RE = re.compile(r"(?:【\s*)?例\s*\d+|第\s*\d+\s*题|[A-D][.．、]|哪一年|年份是|超过|同比增量")
 
 
 def detect_rendered_visual_blocks(
@@ -98,7 +101,12 @@ def _detect_rendered_dark_regions(
         rect = fitz.Rect(rect_px.x0 / scale, rect_px.y0 / scale, rect_px.x1 / scale, rect_px.y1 / scale)
         if rect.width < 100 or rect.height < 50:
             continue
-        if _overlaps_any(rect, existing_bboxes) or _text_coverage(page, rect) > 0.65:
+        if (
+            _overlaps_any(rect, existing_bboxes)
+            or _text_coverage(page, rect) > 0.25
+            or _word_count(page, rect) > 18
+            or _contains_question_text(page, rect)
+        ):
             continue
         visual_id = f"p{page_num}-cv{len(visuals) + 1}"
         rel_path = f"images/{visual_id}.png"
@@ -160,10 +168,19 @@ def _text_coverage(page: fitz.Page, rect: fitz.Rect) -> float:
     return text_area / max(rect.width * rect.height, 1.0)
 
 
+def _word_count(page: fitz.Page, rect: fitz.Rect) -> int:
+    return len(page.get_text("words", clip=rect))
+
+
+def _contains_question_text(page: fitz.Page, rect: fitz.Rect) -> bool:
+    text = page.get_text("text", clip=rect)
+    return bool(QUESTION_TEXT_RE.search(text or ""))
+
+
 def _overlaps_any(rect: fitz.Rect, bboxes: list[list[float]]) -> bool:
     for bbox in bboxes:
         other = fitz.Rect(bbox)
-        if rect.intersects(other) and (rect & other).get_area() / max(rect.get_area(), 1.0) > 0.45:
+        if rect.intersects(other) and (rect & other).get_area() / max(rect.get_area(), 1.0) > 0.25:
             return True
     return False
 

@@ -25,11 +25,11 @@ def annotate_semantics(elements: list[PageElement]) -> list[PageElement]:
             role = "directory_heading"
         elif TEACHING_RE.search(text):
             role = "teaching_text"
+        elif QUESTION_ANCHOR_RE.match(text):
+            role = "question_anchor"
         elif MATERIAL_PROMPT_RE.search(text):
             role = "material_prompt"
         elif OPTION_RE.match(text):
             role = "option"
-        elif QUESTION_ANCHOR_RE.match(text):
-            role = "question_anchor"
         annotated.append(PageElement(**{**element.__dict__, "semantic_role": role}))
     return annotated

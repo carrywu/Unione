@@ -482,6 +482,11 @@ def _normalize_images(images: list[Any]) -> list[QuestionImage]:
                     caption=image.get("caption"),
                     page=_safe_int(image.get("page")),
                     role=image.get("role"),
+                    image_role=image.get("image_role"),
+                    image_order=_safe_int(image.get("image_order")),
+                    insert_position=image.get("insert_position"),
+                    bbox=image.get("bbox"),
+                    same_visual_group_id=image.get("same_visual_group_id"),
                     assignment_confidence=image.get("assignment_confidence"),
                     ai_desc=image.get("ai_desc") or image.get("description"),
                 )

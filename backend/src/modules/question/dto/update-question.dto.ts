@@ -1,6 +1,10 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
-import { QuestionStatus, QuestionType } from '../entities/question.entity';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
+import {
+  QuestionReviewStatus,
+  QuestionStatus,
+  QuestionType,
+} from '../entities/question.entity';
 
 export class UpdateQuestionDto {
   @ApiPropertyOptional()
@@ -64,6 +68,10 @@ export class UpdateQuestionDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  visual_refs?: unknown[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   ai_image_desc?: string;
 
@@ -76,4 +84,14 @@ export class UpdateQuestionDto {
   @IsOptional()
   @IsBoolean()
   needs_review?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  parse_warnings?: string[];
+
+  @ApiPropertyOptional({ enum: QuestionReviewStatus })
+  @IsOptional()
+  @IsEnum(QuestionReviewStatus)
+  review_status?: QuestionReviewStatus;
 }
