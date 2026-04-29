@@ -108,6 +108,8 @@ def parse_extractor_with_kernel(
             "questions": {},
             "question_material_ids": {},
             "material_texts": {},
+            "material_groups": {},
+            "question_material_group_ids": {},
             "question_link_warnings": {},
             "warnings": [],
         },
@@ -117,6 +119,8 @@ def parse_extractor_with_kernel(
     materials: list[dict[str, Any]] = []
     questions: list[dict[str, Any]] = []
     link_warnings = visual_links.get("question_link_warnings", {})
+    material_group_ids_by_question = visual_links.get("question_material_group_ids", {})
+    material_groups_by_id = visual_links.get("material_groups", {})
 
     for raw in raw_questions:
         content, options = _split_options(raw.text)
@@ -150,6 +154,10 @@ def parse_extractor_with_kernel(
         )
         question_warnings = list(getattr(raw, "warnings", []) or [])
         question_warnings.extend(link_warnings.get(raw.index, []))
+        material_group_id = material_group_ids_by_question.get(raw.index)
+        material_group = material_groups_by_id.get(material_group_id) if material_group_id else None
+        if material_group:
+            question_warnings.extend(material_group.get("warnings") or [])
         if not content:
             question_warnings.append("question_content_empty")
         if not question_images:
@@ -171,6 +179,11 @@ def parse_extractor_with_kernel(
                 "needs_review": True,
                 "material_text": effective_material_text,
                 "material_temp_id": material_temp_id,
+                "material_group_id": material_group_id,
+                "material_group_question_indexes": (material_group or {}).get("question_indexes") or [],
+                "material_group_confidence": (material_group or {}).get("confidence"),
+                "material_group_reason": (material_group or {}).get("link_reason"),
+                "shared_material": bool(material_group and len(material_group.get("question_indexes") or []) > 1),
                 "images": question_images,
                 "page_num": raw.page_num,
                 "page_range": [raw.page_num, raw.page_num],
@@ -352,6 +365,9 @@ def _pages_from_visual_fallback(
         "material_texts": {},
         "question_positions": {},
         "material_positions": {},
+        "visual_positions": [],
+        "material_groups": {},
+        "question_material_group_ids": {},
         "question_link_warnings": {},
         "warnings": [],
     }
@@ -417,6 +433,9 @@ def _pages_from_visual_fallback(
                     visual_links["material_texts"][material_key] = content
                     visual_links["material_positions"][material_key] = {
                         "page_num": page_index + 1,
+                        "material_key": material_key,
+                        "kind": "material",
+                        "bbox": _coerce_visual_bbox(bbox),
                         "y0": float(bbox[1]),
                         "y1": float(bbox[3]),
                     }
@@ -492,6 +511,16 @@ def _pages_from_visual_fallback(
             )
             if visual_region:
                 regions.append(visual_region)
+                visual_links.setdefault("visual_positions", []).append(
+                    {
+                        "page_num": page_index + 1,
+                        "kind": visual.get("kind") or "visual",
+                        "bbox": _coerce_visual_bbox(bbox),
+                        "y0": float(bbox[1]),
+                        "y1": float(bbox[3]),
+                        "explicit_question_link": isinstance(visual.get("question_index"), int),
+                    }
+                )
                 material_temp_id = str(visual.get("material_temp_id") or "")
                 question_index = visual.get("question_index")
                 if material_temp_id:
@@ -502,6 +531,7 @@ def _pages_from_visual_fallback(
                     visual_links["questions"].setdefault(question_index, []).append(visual_region)
 
         _apply_backward_material_links(visual_links, page_num=page_index + 1)
+        page_material_groups = _build_shared_material_groups(extractor, visual_links, page_index=page_index)
 
         if not blocks:
             text = extractor.get_page_text(page_index)
@@ -521,6 +551,7 @@ def _pages_from_visual_fallback(
 
         visual_debug["normalized_blocks"] = blocks
         visual_debug["regions"] = [{"type": region.type, "bbox": region.bbox} for region in regions]
+        visual_debug["material_groups"] = page_material_groups
         visual_debug["page_warnings"] = sorted(set((visual_result.get("warnings") or []) + page_warnings))
         visual_debug["schema_validation"] = visual_result.get("schema_validation") or {}
         visual_pages.append(visual_debug)
@@ -838,6 +869,181 @@ def _needs_page_fallback_region(page_warnings: list[str], visual_result: dict[st
     warning_set = set(page_warnings)
     warning_set.update(str(item) for item in visual_result.get("warnings") or [])
     return bool(warning_set & {"vision_page_timeout", "visual_model_failed"})
+
+
+def _build_shared_material_groups(
+    extractor: Any,
+    visual_links: dict[str, Any],
+    *,
+    page_index: int,
+) -> list[dict[str, Any]]:
+    page_num = page_index + 1
+    question_positions = visual_links.get("question_positions", {})
+    material_positions = visual_links.get("material_positions", {})
+    visual_positions = visual_links.get("visual_positions", [])
+    material_groups = visual_links.setdefault("material_groups", {})
+    question_group_ids = visual_links.setdefault("question_material_group_ids", {})
+    visual_link_warnings = visual_links.setdefault("warnings", [])
+
+    page_questions = [
+        {"index": index, **position}
+        for index, position in question_positions.items()
+        if position.get("page_num") == page_num
+    ]
+    if not page_questions:
+        return []
+    page_questions.sort(key=lambda item: (item["y0"], item["index"]))
+
+    seeds: list[dict[str, Any]] = []
+    for material_key, position in material_positions.items():
+        if position.get("page_num") != page_num:
+            continue
+        seeds.append({**position, "seed_type": "material", "material_key": material_key})
+    for index, position in enumerate(visual_positions, start=1):
+        if position.get("page_num") != page_num:
+            continue
+        if position.get("explicit_question_link"):
+            continue
+        kind = str(position.get("kind") or "visual").lower()
+        if kind not in {"chart", "table", "image", "visual"}:
+            continue
+        seeds.append({**position, "seed_type": "visual", "visual_index": index})
+    seeds = [seed for seed in seeds if _coerce_visual_bbox(seed.get("bbox"))]
+    seeds.sort(key=lambda item: (float(item["y0"]), float(item["y1"])))
+    if not seeds:
+        return []
+
+    max_gap = _material_group_max_gap(extractor, page_index)
+    page_groups: list[dict[str, Any]] = []
+    grouped_material_keys: set[str] = set()
+
+    for material_key, position in material_positions.items():
+        if position.get("page_num") != page_num:
+            continue
+        seed_bbox = _coerce_visual_bbox(position.get("bbox"))
+        if not seed_bbox:
+            continue
+        candidates = [
+            question
+            for question in page_questions
+            if visual_links.get("question_material_ids", {}).get(question["index"]) == material_key
+        ]
+        if not candidates:
+            continue
+        candidates.sort(key=lambda item: (item["y0"], item["index"]))
+        question_indexes = [int(question["index"]) for question in candidates]
+        group_id = f"mg_p{page_num}_{len(page_groups) + 1}"
+        confidence = 0.9 if len(question_indexes) > 1 else 0.72
+        warnings = [] if len(question_indexes) > 1 else ["material_group_low_confidence"]
+        group = {
+            "group_id": group_id,
+            "page_num": page_num,
+            "bbox": _union_visual_bboxes([seed_bbox] + [_coerce_visual_bbox(q.get("bbox")) for q in candidates]),
+            "visual_bbox_list": [],
+            "material_bbox_list": [seed_bbox],
+            "question_indexes": question_indexes,
+            "question_ids": [f"page_{page_num:03d}_q{index:03d}" for index in question_indexes],
+            "start_y": min(float(position["y0"]), min(float(question["y0"]) for question in candidates)),
+            "end_y": max(float(position["y1"]), max(float(question["y1"]) for question in candidates)),
+            "confidence": confidence,
+            "link_reason": "explicit_material_group",
+            "warnings": warnings,
+        }
+        material_groups[group_id] = group
+        page_groups.append(group)
+        grouped_material_keys.add(str(material_key))
+        for question_index in question_indexes:
+            question_group_ids[question_index] = group_id
+
+    for seed_index, seed in enumerate(seeds):
+        material_key = str(seed.get("material_key") or "")
+        if material_key and material_key in grouped_material_keys:
+            continue
+        seed_bbox = _coerce_visual_bbox(seed.get("bbox"))
+        if not seed_bbox:
+            continue
+        next_seed_y = float(seeds[seed_index + 1]["y0"]) if seed_index + 1 < len(seeds) else None
+        candidates = [
+            question
+            for question in page_questions
+            if float(question["y0"]) >= float(seed["y1"])
+            and (next_seed_y is None or float(question["y0"]) < next_seed_y)
+        ]
+        if not candidates:
+            continue
+        first_gap = float(candidates[0]["y0"]) - float(seed["y1"])
+        if first_gap > max_gap:
+            visual_link_warnings.append(
+                {
+                    "page_num": page_num,
+                    "seed_bbox": seed_bbox,
+                    "first_question_index": candidates[0]["index"],
+                    "warning": "material_group_range_uncertain",
+                }
+            )
+            continue
+
+        question_indexes = [int(question["index"]) for question in candidates]
+        group_id = f"mg_p{page_num}_{len(page_groups) + 1}"
+        material_bbox_list = [seed_bbox] if seed.get("seed_type") == "material" else []
+        visual_bbox_list = [seed_bbox] if seed.get("seed_type") == "visual" else []
+        confidence = 0.86 if len(question_indexes) > 1 else 0.72
+        warnings = [] if len(question_indexes) > 1 else ["material_group_low_confidence"]
+        group = {
+            "group_id": group_id,
+            "page_num": page_num,
+            "bbox": _union_visual_bboxes([seed_bbox] + [_coerce_visual_bbox(q.get("bbox")) for q in candidates]),
+            "visual_bbox_list": visual_bbox_list,
+            "material_bbox_list": material_bbox_list,
+            "question_indexes": question_indexes,
+            "question_ids": [f"page_{page_num:03d}_q{index:03d}" for index in question_indexes],
+            "start_y": float(seed["y0"]),
+            "end_y": max(float(question["y1"]) for question in candidates),
+            "confidence": confidence,
+            "link_reason": f"downward_{seed.get('seed_type')}_group",
+            "warnings": warnings,
+        }
+        material_groups[group_id] = group
+        page_groups.append(group)
+        for question_index in question_indexes:
+            question_group_ids.setdefault(question_index, group_id)
+
+    return page_groups
+
+
+def _coerce_visual_bbox(value: Any) -> list[float] | None:
+    if not isinstance(value, list | tuple) or len(value) != 4:
+        return None
+    try:
+        bbox = [float(item) for item in value]
+    except (TypeError, ValueError):
+        return None
+    if bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
+        return None
+    return bbox
+
+
+def _material_group_max_gap(extractor: Any, page_index: int) -> float:
+    image_size = _cached_visual_render_size(extractor, page_index)
+    try:
+        height = float((image_size or {}).get("height") or 0)
+    except (TypeError, ValueError, AttributeError):
+        height = 0.0
+    if height <= 0:
+        height = float(_page_rect(extractor, page_index).height)
+    return min(max(height * 0.35, 120.0), 360.0)
+
+
+def _union_visual_bboxes(bboxes: list[list[float] | None]) -> list[float] | None:
+    valid = [bbox for bbox in bboxes if bbox]
+    if not valid:
+        return None
+    return [
+        min(bbox[0] for bbox in valid),
+        min(bbox[1] for bbox in valid),
+        max(bbox[2] for bbox in valid),
+        max(bbox[3] for bbox in valid),
+    ]
 
 
 def _apply_backward_material_links(visual_links: dict[str, Any], *, page_num: int) -> None:

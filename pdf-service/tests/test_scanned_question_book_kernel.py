@@ -505,8 +505,256 @@ class ScannedQuestionBookKernelTest(unittest.TestCase):
             )
             by_index = {item["index"]: item for item in result["questions"]}
             self.assertEqual(by_index[5]["material_temp_id"], by_index[6]["material_temp_id"])
+            self.assertEqual(by_index[5]["material_group_id"], by_index[6]["material_group_id"])
+            self.assertEqual(by_index[5]["material_group_question_indexes"], [5, 6])
+            self.assertTrue(by_index[5]["shared_material"])
             self.assertIn("material_range_uncertain", by_index[5]["parse_warnings"])
             self.assertTrue(by_index[5]["needs_review"])
+
+    def test_shared_material_group_links_chart_to_following_questions(self):
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": 3,
+                        "content": "根据图表可以推出的是哪一项",
+                        "bbox": [0, 320, 1000, 520],
+                        "stem_bbox": [0, 320, 1000, 370],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    },
+                    {
+                        "index": 4,
+                        "content": "根据图表计算增长率约为多少",
+                        "bbox": [0, 560, 1000, 760],
+                        "stem_bbox": [0, 560, 1000, 610],
+                        "option_a": "10%",
+                        "option_b": "20%",
+                        "option_c": "30%",
+                        "option_d": "40%",
+                    },
+                ],
+                "visuals": [
+                    {
+                        "kind": "chart",
+                        "bbox": [100, 80, 900, 280],
+                        "caption": "产量变化图",
+                    }
+                ],
+            },
+        ):
+            result = parse_extractor_with_kernel(FakeScannedQuestionExtractor(), debug_dir=tmpdir)
+
+            by_index = {item["index"]: item for item in result["questions"]}
+            self.assertEqual(by_index[3]["material_group_id"], by_index[4]["material_group_id"])
+            self.assertEqual(by_index[3]["material_group_question_indexes"], [3, 4])
+            self.assertTrue(by_index[3]["shared_material"])
+            self.assertEqual(by_index[3]["material_group_reason"], "downward_visual_group")
+
+            visual_pages = json.loads(Path(tmpdir, "debug", "visual_pages.json").read_text(encoding="utf-8"))
+            material_groups = visual_pages[0]["material_groups"]
+            self.assertEqual(len(material_groups), 1)
+            self.assertEqual(material_groups[0]["question_indexes"], [3, 4])
+            self.assertEqual(material_groups[0]["visual_bbox_list"], [[100.0, 80.0, 900.0, 280.0]])
+
+    def test_shared_material_group_stops_at_next_chart(self):
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": 1,
+                        "content": "第一张图对应的问题",
+                        "bbox": [0, 220, 1000, 360],
+                        "stem_bbox": [0, 220, 1000, 260],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    },
+                    {
+                        "index": 2,
+                        "content": "第二张图对应的问题",
+                        "bbox": [0, 620, 1000, 780],
+                        "stem_bbox": [0, 620, 1000, 660],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    },
+                ],
+                "visuals": [
+                    {"kind": "chart", "bbox": [100, 40, 900, 180], "caption": "图一"},
+                    {"kind": "chart", "bbox": [100, 420, 900, 580], "caption": "图二"},
+                ],
+            },
+        ):
+            result = parse_extractor_with_kernel(FakeScannedQuestionExtractor(), debug_dir=tmpdir)
+
+            by_index = {item["index"]: item for item in result["questions"]}
+            self.assertNotEqual(by_index[1]["material_group_id"], by_index[2]["material_group_id"])
+            self.assertEqual(by_index[1]["material_group_question_indexes"], [1])
+            self.assertEqual(by_index[2]["material_group_question_indexes"], [2])
+
+    def test_shared_material_group_far_question_warns_without_binding(self):
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": 9,
+                        "content": "距离图表很远的问题不应强行绑定",
+                        "bbox": [0, 1050, 1000, 1240],
+                        "stem_bbox": [0, 1050, 1000, 1100],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    }
+                ],
+                "visuals": [
+                    {
+                        "kind": "chart",
+                        "bbox": [100, 40, 900, 180],
+                        "caption": "较远图表",
+                    }
+                ],
+            },
+        ):
+            result = parse_extractor_with_kernel(FakeScannedQuestionExtractor(), debug_dir=tmpdir)
+
+            question = result["questions"][0]
+            self.assertIsNone(question.get("material_group_id"))
+            self.assertFalse(question.get("shared_material"))
+            warnings = json.loads(Path(tmpdir, "debug", "warnings.json").read_text(encoding="utf-8"))
+            visual_link_warnings = warnings.get("visual_link_warnings") or []
+            self.assertTrue(
+                any(item.get("warning") == "material_group_range_uncertain" for item in visual_link_warnings)
+            )
+
+    def test_shared_material_group_gap_uses_rendered_image_height(self):
+        class ShortPdfTallRenderExtractor(FakeScannedQuestionExtractor):
+            class _FakePage:
+                class _Rect:
+                    x0 = 0.0
+                    y0 = 0.0
+                    x1 = 1000.0
+                    y1 = 500.0
+
+                rect = _Rect()
+
+            doc = [_FakePage()]
+
+            def get_page_screenshot_size(self, page_num: int, dpi: int = 150, max_side: int | None = None):
+                return {"width": 1000, "height": 1600}
+
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": 1,
+                        "content": "图后第一题应正常归组",
+                        "bbox": [0, 600, 1000, 740],
+                        "stem_bbox": [0, 600, 1000, 640],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    },
+                    {
+                        "index": 2,
+                        "content": "图后第二题应共享同一组",
+                        "bbox": [0, 780, 1000, 920],
+                        "stem_bbox": [0, 780, 1000, 820],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    },
+                ],
+                "visuals": [
+                    {
+                        "kind": "chart",
+                        "bbox": [100, 120, 900, 300],
+                        "caption": "高分辨率渲染图",
+                    }
+                ],
+            },
+        ):
+            result = parse_extractor_with_kernel(ShortPdfTallRenderExtractor(), debug_dir=tmpdir)
+
+            by_index = {item["index"]: item for item in result["questions"]}
+            self.assertEqual(by_index[1]["material_group_id"], by_index[2]["material_group_id"])
+            self.assertTrue(by_index[1]["shared_material"])
+            warnings = json.loads(Path(tmpdir, "debug", "warnings.json").read_text(encoding="utf-8"))
+            visual_link_warnings = warnings.get("visual_link_warnings") or []
+            self.assertFalse(
+                any(item.get("warning") == "material_group_range_uncertain" for item in visual_link_warnings)
+            )
+
+    def test_question_linked_visual_is_not_used_as_shared_material_seed(self):
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": 1,
+                        "content": "第一题有自己的配图",
+                        "bbox": [0, 320, 1000, 500],
+                        "stem_bbox": [0, 320, 1000, 370],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    },
+                    {
+                        "index": 2,
+                        "content": "第二题不应继承第一题配图",
+                        "bbox": [0, 540, 1000, 720],
+                        "stem_bbox": [0, 540, 1000, 590],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    },
+                ],
+                "visuals": [
+                    {
+                        "kind": "chart",
+                        "bbox": [100, 80, 900, 280],
+                        "caption": "只属于第一题的图",
+                        "question_index": 1,
+                    }
+                ],
+            },
+        ):
+            result = parse_extractor_with_kernel(FakeScannedQuestionExtractor(), debug_dir=tmpdir)
+
+            by_index = {item["index"]: item for item in result["questions"]}
+            self.assertIsNone(by_index[1].get("material_group_id"))
+            self.assertIsNone(by_index[2].get("material_group_id"))
+            self.assertFalse(by_index[1].get("shared_material"))
+            self.assertFalse(by_index[2].get("shared_material"))
+            self.assertTrue(by_index[1]["images"])
 
 
 if __name__ == "__main__":

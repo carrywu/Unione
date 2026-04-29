@@ -165,6 +165,11 @@ class VisualApiSmokeToolTest(unittest.TestCase):
                         "source_bbox": [10.0, 80.0, 160.0, 130.0],
                         "source_confidence": 0.68,
                         "material_temp_id": "m_1",
+                        "material_group_id": "mg_1",
+                        "material_group_question_indexes": [1, 2],
+                        "material_group_confidence": 0.82,
+                        "material_group_reason": "downward_material_group",
+                        "shared_material": True,
                         "parse_warnings": ["backward_material_link_low_confidence"],
                     },
                     {"index": 2, "content": "abc", "page_num": 1},
@@ -220,6 +225,11 @@ class VisualApiSmokeToolTest(unittest.TestCase):
             self.assertIn("visual_bbox_list", question_lineage)
             self.assertEqual(question_lineage["next_question_boundary"], 150.0)
             self.assertEqual(question_lineage["crop_context_mode"], "question_with_material")
+            self.assertEqual(question_lineage["material_group_id"], "mg_1")
+            self.assertEqual(question_lineage["material_group_question_indexes"], [1, 2])
+            self.assertEqual(question_lineage["material_group_confidence"], 0.82)
+            self.assertEqual(question_lineage["material_group_reason"], "downward_material_group")
+            self.assertTrue(question_lineage["shared_material"])
             self.assertLessEqual(question_lineage["final_bbox"][1], 12)
             self.assertLess(question_lineage["final_bbox"][3], 150)
             self.assertIn("next_question_boundary", question_lineage["clamp_reason"])
@@ -239,6 +249,10 @@ class VisualApiSmokeToolTest(unittest.TestCase):
             self.assertTrue(review_record["accepted"])
             self.assertEqual(review_record["crop_context_mode"], "question_with_material")
             self.assertEqual(review_record["linked_material_id"], "m_1")
+            self.assertEqual(review_record["material_group_id"], "mg_1")
+            self.assertEqual(review_record["material_group_question_indexes"], [1, 2])
+            self.assertEqual(review_record["material_group_confidence"], 0.82)
+            self.assertTrue(review_record["shared_material"])
             self.assertEqual(review_record["linked_visual_count"], 1)
             self.assertEqual(review_record["next_question_boundary"], 150.0)
             self.assertFalse(Path(review_record["crop_path"]).is_absolute())
