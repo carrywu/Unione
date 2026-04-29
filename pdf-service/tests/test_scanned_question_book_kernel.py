@@ -15,7 +15,7 @@ class FakeScannedQuestionExtractor:
     def get_page_text(self, page_num: int) -> str:
         return ""
 
-    def get_page_screenshot(self, page_num: int, dpi: int = 150) -> str:
+    def get_page_screenshot(self, page_num: int, dpi: int = 150, max_side: int | None = None) -> str:
         return "fake-page-b64"
 
     def get_region_screenshot(self, page_num: int, rect, padding: int = 10) -> str:
@@ -34,6 +34,167 @@ class FakeScannedQuestionExtractor:
 
 
 class ScannedQuestionBookKernelTest(unittest.TestCase):
+    def test_scanned_question_book_uses_lower_cost_vision_capture_and_records_sizes(self):
+        class RecordingExtractor(FakeScannedQuestionExtractor):
+            calls: list[dict[str, int | None]] = []
+
+            def get_page_screenshot(self, page_num: int, dpi: int = 150, max_side: int | None = None) -> str:
+                self.calls.append({"dpi": dpi, "max_side": max_side})
+                return "x" * 128
+
+            def get_page_screenshot_size(self, page_num: int, dpi: int = 150, max_side: int | None = None):
+                return {"width": 900, "height": 1200}
+
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [],
+                "visuals": [],
+            },
+        ):
+            extractor = RecordingExtractor()
+            parse_extractor_with_kernel(extractor, debug_dir=tmpdir)
+
+            self.assertEqual(extractor.calls[0]["dpi"], 110)
+            self.assertEqual(extractor.calls[0]["max_side"], 1600)
+            visual_pages = json.loads(Path(tmpdir, "debug", "visual_pages.json").read_text(encoding="utf-8"))
+            self.assertEqual(visual_pages[0]["image_size"], {"width": 900, "height": 1200})
+            self.assertEqual(visual_pages[0]["base64_size"], 128)
+
+    def test_scanned_question_book_retries_once_and_classifies_schema_error(self):
+        attempts = 0
+
+        def fake_visual_call(page_b64: str):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                return {
+                    "page_type": "unknown",
+                    "warnings": ["visual_schema_invalid"],
+                    "materials": [],
+                    "questions": [],
+                    "visuals": [],
+                    "schema_validation": {"invalid_root": True},
+                    "raw_model_result": "not-json",
+                }
+            return {
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": 1,
+                        "content": "重试后识别成功",
+                        "bbox": [0, 300, 1000, 600],
+                        "stem_bbox": [0, 300, 1000, 360],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    }
+                ],
+                "visuals": [],
+            }
+
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            side_effect=fake_visual_call,
+        ):
+            result = parse_extractor_with_kernel(FakeScannedQuestionExtractor(), debug_dir=tmpdir)
+            self.assertEqual(len(result["questions"]), 1)
+            self.assertEqual(attempts, 2)
+            visual_pages = json.loads(Path(tmpdir, "debug", "visual_pages.json").read_text(encoding="utf-8"))
+            self.assertEqual(visual_pages[0]["request_status"], "ok")
+            self.assertEqual(visual_pages[0]["attempts"], 2)
+            self.assertIn("visual_schema_invalid", visual_pages[0]["attempt_errors"][0]["warnings"])
+
+    def test_scanned_question_book_writes_failed_pages_and_can_rerun_only_failures_with_cache(self):
+        class ThreePageExtractor(FakeScannedQuestionExtractor):
+            total_pages = 3
+            doc = [
+                FakeScannedQuestionExtractor._FakePage(),
+                FakeScannedQuestionExtractor._FakePage(),
+                FakeScannedQuestionExtractor._FakePage(),
+            ]
+
+            def get_page_screenshot(self, page_num: int, dpi: int = 150, max_side: int | None = None) -> str:
+                return f"page-{page_num + 1}-b64"
+
+        calls: list[str] = []
+
+        def first_run(page_b64: str):
+            calls.append(page_b64)
+            if page_b64 == "page-2-b64":
+                raise TimeoutError()
+            page_num = int(page_b64.removeprefix("page-").removesuffix("-b64"))
+            return {
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": page_num,
+                        "content": f"第{page_num}页题干",
+                        "bbox": [0, 300, 1000, 600],
+                        "stem_bbox": [0, 300, 1000, 360],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    }
+                ],
+                "visuals": [],
+            }
+
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            side_effect=first_run,
+        ):
+            first_result = parse_extractor_with_kernel(ThreePageExtractor(), debug_dir=tmpdir)
+            self.assertEqual({question["index"] for question in first_result["questions"]}, {1, 3})
+            failed_pages = json.loads(Path(tmpdir, "debug", "failed_pages.json").read_text(encoding="utf-8"))
+            self.assertEqual(failed_pages["failed_pages"], [2])
+            self.assertTrue(Path(tmpdir, "debug", "visual_page_cache", "page_1.json").exists())
+            self.assertTrue(Path(tmpdir, "debug", "visual_page_cache", "page_3.json").exists())
+
+            calls.clear()
+
+            def rerun(page_b64: str):
+                calls.append(page_b64)
+                return {
+                    "page_type": "question",
+                    "warnings": [],
+                    "materials": [],
+                    "questions": [
+                        {
+                            "index": 2,
+                            "content": "第二页续跑成功",
+                            "bbox": [0, 300, 1000, 600],
+                            "stem_bbox": [0, 300, 1000, 360],
+                            "option_a": "甲",
+                            "option_b": "乙",
+                            "option_c": "丙",
+                            "option_d": "丁",
+                        }
+                    ],
+                    "visuals": [],
+                }
+
+            with patch("parser_kernel.adapter.ai_client.parse_page_visual", side_effect=rerun):
+                rerun_result = parse_extractor_with_kernel(
+                    ThreePageExtractor(),
+                    debug_dir=tmpdir,
+                    retry_failed_pages_only=True,
+                )
+
+            self.assertEqual(calls, ["page-2-b64"])
+            self.assertEqual([question["index"] for question in rerun_result["questions"]], [2])
+            failed_pages = json.loads(Path(tmpdir, "debug", "failed_pages.json").read_text(encoding="utf-8"))
+            self.assertEqual(failed_pages["failed_pages"], [])
+
     def test_scanned_question_book_timeout_degrades_per_page_without_crashing_book(self):
         class TwoPageExtractor(FakeScannedQuestionExtractor):
             total_pages = 2
