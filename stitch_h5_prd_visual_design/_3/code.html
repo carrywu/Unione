@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fenbi Study - Me</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-highest": "#d3e4fe",
+                        "secondary-container": "#fd933d",
+                        "primary-container": "#2563eb",
+                        "on-error": "#ffffff",
+                        "outline-variant": "#c3c6d7",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "primary": "#004ac6",
+                        "on-primary": "#ffffff",
+                        "inverse-on-surface": "#eaf1ff",
+                        "surface-container-low": "#eff4ff",
+                        "on-tertiary-fixed": "#002113",
+                        "surface-dim": "#cbdbf5",
+                        "on-secondary-container": "#693300",
+                        "surface-variant": "#d3e4fe",
+                        "inverse-primary": "#b4c5ff",
+                        "error": "#ba1a1a",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-surface-variant": "#434655",
+                        "on-primary-fixed": "#00174b",
+                        "background": "#f8f9ff",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "primary-fixed": "#dbe1ff",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "on-tertiary-container": "#bdffdb",
+                        "on-secondary-fixed-variant": "#713700",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "tertiary": "#006242",
+                        "on-surface": "#0b1c30",
+                        "error-container": "#ffdad6",
+                        "on-secondary": "#ffffff",
+                        "on-background": "#0b1c30",
+                        "tertiary-container": "#007d55",
+                        "secondary": "#944a00",
+                        "on-secondary-fixed": "#301400",
+                        "surface-container-high": "#dce9ff",
+                        "outline": "#737686",
+                        "inverse-surface": "#213145",
+                        "surface": "#f8f9ff",
+                        "surface-bright": "#f8f9ff",
+                        "surface-container": "#e5eeff",
+                        "on-primary-container": "#eeefff",
+                        "on-error-container": "#93000a",
+                        "surface-tint": "#0053db",
+                        "secondary-fixed-dim": "#ffb783",
+                        "secondary-fixed": "#ffdcc5"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "xs": "4px",
+                        "unit": "4px",
+                        "card-gutter": "12px",
+                        "xl": "32px",
+                        "md": "16px",
+                        "container-padding": "16px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Lexend", "sans-serif"],
+                        "body-md": ["Lexend", "sans-serif"],
+                        "body-lg": ["Lexend", "sans-serif"],
+                        "label-sm": ["Lexend", "sans-serif"],
+                        "headline-md": ["Lexend", "sans-serif"],
+                        "label-lg": ["Lexend", "sans-serif"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }],
+                        "label-lg": ["14px", { "lineHeight": "20px", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen relative pb-20">
+<!-- Top Area with Blue Gradient -->
+<div class="bg-gradient-to-b from-primary-fixed to-background pt-10 pb-6 px-4 rounded-b-[2rem]">
+<!-- Header Actions -->
+<div class="flex justify-between items-center mb-6">
+<button class="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-lowest/50 text-on-surface">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-lowest/50 text-on-surface">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+</div>
+<!-- User Profile -->
+<div class="flex items-center gap-4 mb-8">
+<div class="w-16 h-16 rounded-full overflow-hidden border-2 border-surface-container-lowest shadow-sm shrink-0">
+<img alt="User Avatar" class="w-full h-full object-cover" data-alt="close up portrait of a young professional wearing casual clothing, neutral background, soft natural lighting, realistic photography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC1OVvwPXcax7RfpWh8wQWBzo7WbfPcjY7FiwPxMrAFnLFiaF5rGCPEvmZxtftGDt7BuiAB-GMUaZnyxMY9S4QPnoazSpgo9Wylaxhz1og9wkXBORz0BYUc4Qxj2K-Q7vd3VcfMvYZ1iSw5ekWqvhGe6VAh5JElc_FTrA87fdA6UN9kNIHOVkr8wskcft5kIcSxlGKqHgdNRBG2joODCe_5PE_njwnl4WVX6k2pMpkAOr1c2YQ2uQFHtQtjiwliJ5ajYLn3s4fZL1Xz"/>
+</div>
+<div class="flex-1">
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-1">备考锦鲤</h1>
+<div class="flex items-center gap-2 text-primary font-label-sm text-label-sm">
+<span class="bg-primary-container/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">diamond</span> VIP 会员
+                    </span>
+<span class="text-on-surface-variant opacity-70">Lv.5 勤奋学霸</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+</div>
+<!-- Stats Grid -->
+<div class="grid grid-cols-3 gap-4">
+<div class="flex flex-col items-center">
+<span class="font-headline-md text-headline-md text-on-surface">128</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">学习天数</span>
+</div>
+<div class="flex flex-col items-center border-x border-outline-variant/30">
+<span class="font-headline-md text-headline-md text-on-surface">4,592</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">做题总数</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="font-headline-md text-headline-md text-on-surface">342h</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">累计时长</span>
+</div>
+</div>
+</div>
+<!-- Main Content Container -->
+<main class="px-4 -mt-4 relative z-10 space-y-4">
+<!-- Core Functions Bento Card -->
+<div class="bg-surface-container-lowest rounded-xl p-4 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.05)]">
+<div class="grid grid-cols-3 gap-2">
+<!-- 错题本 (Highlighted) -->
+<div class="col-span-1 bg-error-container/30 rounded-lg p-3 flex flex-col items-center justify-center gap-2 relative overflow-hidden group hover:bg-error-container/40 transition-colors">
+<div class="absolute -right-2 -top-2 w-12 h-12 bg-error/5 rounded-full"></div>
+<span class="material-symbols-outlined text-[28px] text-error" style="font-variation-settings: 'FILL' 1;">book</span>
+<span class="font-label-lg text-label-lg text-on-surface font-semibold">错题本</span>
+<span class="font-label-sm text-label-sm text-error bg-error/10 px-2 rounded-full mt-1">新 12</span>
+</div>
+<!-- 收藏 & 笔记本 Column -->
+<div class="col-span-2 grid grid-rows-2 gap-2">
+<div class="bg-surface-container/50 rounded-lg p-3 flex items-center gap-3 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+<div class="flex-1">
+<div class="font-label-lg text-label-lg text-on-surface">收藏</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">45 题 / 12 课</div>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+<div class="bg-surface-container/50 rounded-lg p-3 flex items-center gap-3 hover:bg-surface-container transition-colors">
+<div class="w-10 h-10 rounded-full bg-tertiary-container/20 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">edit_document</span>
+</div>
+<div class="flex-1">
+<div class="font-label-lg text-label-lg text-on-surface">笔记本</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">共 8 篇笔记</div>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+</div>
+</div>
+</div>
+<!-- List Items Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-[0_4px_24px_-8px_rgba(0,0,0,0.05)] overflow-hidden">
+<div class="flex flex-col">
+<button class="flex items-center gap-3 p-4 hover:bg-surface-container/50 transition-colors w-full text-left">
+<span class="material-symbols-outlined text-primary text-[22px]">play_lesson</span>
+<span class="font-body-lg text-body-lg text-on-surface flex-1">我的课程</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mr-2">2门进行中</span>
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</button>
+<div class="h-[1px] bg-outline-variant/30 ml-12"></div>
+<button class="flex items-center gap-3 p-4 hover:bg-surface-container/50 transition-colors w-full text-left">
+<span class="material-symbols-outlined text-secondary text-[22px]">receipt_long</span>
+<span class="font-body-lg text-body-lg text-on-surface flex-1">我的订单</span>
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-[0_4px_24px_-8px_rgba(0,0,0,0.05)] overflow-hidden mb-6">
+<div class="flex flex-col">
+<button class="flex items-center gap-3 p-4 hover:bg-surface-container/50 transition-colors w-full text-left">
+<span class="material-symbols-outlined text-outline text-[22px]">help</span>
+<span class="font-body-lg text-body-lg text-on-surface flex-1">帮助与反馈</span>
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</button>
+<div class="h-[1px] bg-outline-variant/30 ml-12"></div>
+<button class="flex items-center gap-3 p-4 hover:bg-surface-container/50 transition-colors w-full text-left">
+<span class="material-symbols-outlined text-outline text-[22px]">settings</span>
+<span class="font-body-lg text-body-lg text-on-surface flex-1">设置</span>
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</button>
+<div class="h-[1px] bg-outline-variant/30 ml-12"></div>
+<button class="flex items-center gap-3 p-4 hover:bg-surface-container/50 transition-colors w-full text-left">
+<span class="material-symbols-outlined text-outline text-[22px]">info</span>
+<span class="font-body-lg text-body-lg text-on-surface flex-1">关于粉笔</span>
+<span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+</button>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md fixed bottom-0 w-full z-50 border-t border-slate-100 dark:border-slate-800 shadow-[0_-2px_10px_rgba(0,0,0,0.03)] transition-all duration-200 ease-in-out md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center h-20 px-2 pb-safe">
+<button class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1.5 active:scale-95 transition-transform duration-150 hover:text-blue-500 dark:hover:text-blue-300">
+<span class="material-symbols-outlined mb-1">edit_note</span>
+<span class="font-lexend text-[11px] font-medium">Exercise</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1.5 active:scale-95 transition-transform duration-150 hover:text-blue-500 dark:hover:text-blue-300">
+<span class="material-symbols-outlined mb-1">inventory_2</span>
+<span class="font-lexend text-[11px] font-medium">Bank</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1.5 active:scale-95 transition-transform duration-150 hover:text-blue-500 dark:hover:text-blue-300">
+<span class="material-symbols-outlined mb-1">analytics</span>
+<span class="font-lexend text-[11px] font-medium">Study</span>
+</button>
+<button class="flex flex-col items-center justify-center text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20 rounded-2xl px-4 py-1.5 active:scale-95 transition-transform duration-150 hover:text-blue-500 dark:hover:text-blue-300">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-lexend text-[11px] font-medium">Me</span>
+</button>
+</nav>
+</body></html>

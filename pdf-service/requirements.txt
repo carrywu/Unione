@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+httpx
+PyMuPDF
+pdfplumber
+Pillow
+dashscope
+openai
+aiofiles
+psutil

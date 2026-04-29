@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>H5 Quiz App - Profile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline": "#737686",
+                        "on-secondary-fixed": "#2e1500",
+                        "error": "#ba1a1a",
+                        "surface-container": "#edeef0",
+                        "on-tertiary-container": "#ffccbc",
+                        "primary-fixed": "#dbe1ff",
+                        "surface-container-high": "#e7e8ea",
+                        "primary": "#003da6",
+                        "background": "#f8f9fb",
+                        "on-primary": "#ffffff",
+                        "outline-variant": "#c3c6d7",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed": "#ffdcc1",
+                        "surface-container-highest": "#e1e2e4",
+                        "on-surface": "#191c1e",
+                        "tertiary": "#822600",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "on-error-container": "#93000a",
+                        "surface-container-low": "#f3f4f6",
+                        "on-surface-variant": "#434654",
+                        "surface-bright": "#f8f9fb",
+                        "tertiary-fixed": "#ffdbd0",
+                        "inverse-primary": "#b4c5ff",
+                        "on-primary-container": "#cbd6ff",
+                        "tertiary-container": "#aa3500",
+                        "secondary": "#8e4e00",
+                        "surface": "#f8f9fb",
+                        "tertiary-fixed-dim": "#ffb59c",
+                        "on-tertiary-fixed-variant": "#832700",
+                        "on-error": "#ffffff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "secondary-fixed-dim": "#ffb778",
+                        "on-secondary-fixed-variant": "#6c3a00",
+                        "on-primary-fixed": "#00174b",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed": "#390c00",
+                        "inverse-surface": "#2e3132",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-tint": "#0353da",
+                        "surface-dim": "#d9dadc",
+                        "secondary-container": "#fd9000",
+                        "primary-container": "#0052d9",
+                        "on-secondary-container": "#613400",
+                        "surface-variant": "#e1e2e4",
+                        "on-background": "#191c1e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "xs": "4px",
+                        "md": "16px",
+                        "base": "8px",
+                        "container-padding": "16px",
+                        "sm": "12px",
+                        "card-gap": "12px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "question-text": ["Lexend"],
+                        "label-sm": ["Lexend"],
+                        "body-md": ["Lexend"],
+                        "caption": ["Lexend"],
+                        "option-text": ["Lexend"],
+                        "display-lg": ["Lexend"]
+                    },
+                    "fontSize": {
+                        "question-text": ["18px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "500" }],
+                        "label-sm": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "500" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "caption": ["12px", { "lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "option-text": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "display-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background font-body-md text-on-surface min-h-screen pb-24 max-w-2xl mx-auto shadow-xl relative">
+<!-- TopAppBar from JSON -->
+<header class="bg-white dark:bg-slate-900 flex justify-between items-center w-full px-4 h-14 shadow-[0_2px_8px_rgba(0,0,0,0.02)] docked full-width top-0 z-50 sticky">
+<button class="material-symbols-outlined text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors p-2 rounded-full">
+            arrow_back
+        </button>
+<h1 class="font-lexend text-base font-semibold text-blue-600 dark:text-blue-400 text-lg font-bold">
+            Study Portal
+        </h1>
+<div class="h-8 w-8 rounded-full overflow-hidden bg-surface-container-high border border-outline-variant">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="professional portrait photograph of a young university student in neutral lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBtz1ZLZGt2E4-W5japWosk6ZVuQf5Vc3F48jPt_p9OWDhS1W6v4FiqB4zolVnduRV36ZyEdNKLJO2z_JMUmUgJLggLV_aO_xdGXKfATeJJRhwEf_0-D1Btc-R3KebIWF82ZOJdPVWPPQqkSF5quOsvKzAVpTi0ickPi_L2T6WE82twxLG-wXnHUXGVNEz2bOxfsU6rH9kj4IgMuawM99R6_7Ws2aay5eWogqO62zY1agbmnop_fw7I0GvQYmjex6dX2JGeDfXpefUz"/>
+</div>
+</header>
+<main class="p-container-padding flex flex-col gap-lg mt-sm">
+<!-- Profile Header -->
+<section class="bg-surface-container-lowest rounded-xl p-md flex items-center gap-md shadow-[0_4px_12px_rgba(0,0,0,0.02)] border border-surface-variant">
+<div class="w-20 h-20 rounded-full overflow-hidden bg-primary-container shrink-0 border-2 border-surface">
+<img alt="Avatar" class="w-full h-full object-cover" data-alt="close up portrait of a young confident student, bright academic setting, smiling softly" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCW1_rcz1BXJfzZEqwt5BSVmfGF9UJNRzWenSHStRueONnoK9omrnPqZ-brnBaznXAu7BFxf67L1zFvs6y6Ulsb3sElmuMWVsAJuWAyDqDVY_yiwXZMdbF1sB0z4kc2u1vJMsYMBXrBtqTwrdQl1Fyoq2OkArf6Lvz6gypfTlbrMxgYOiHSpLjUK7pOu_QnvghN6MgmhxyzaDBAVFVzzUjqeKGpC92nkRj26Mx78vZlVYuTCq-Ox_ryn09iCci3SPQysBP1sR1MFhr"/>
+</div>
+<div class="flex-1">
+<h2 class="font-question-text text-question-text text-on-surface">Alex Johnson</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-xs">Level 4 Scholar</p>
+</div>
+</section>
+<!-- Stats Bento Grid -->
+<section class="grid grid-cols-2 gap-card-gap">
+<!-- Accuracy Rate (Highlight Card) -->
+<div class="col-span-2 bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_12px_rgba(0,0,0,0.02)] border border-surface-variant flex items-center justify-between relative overflow-hidden">
+<div class="absolute right-0 top-0 w-32 h-32 bg-primary-container/20 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+<div class="relative z-10">
+<p class="font-label-sm text-label-sm text-on-surface-variant mb-xs">Overall Accuracy Rate</p>
+<p class="font-display-lg text-display-lg text-primary">87.5%</p>
+</div>
+<div class="relative z-10 w-14 h-14 rounded-full border-4 border-primary/20 border-t-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<!-- Total Answered -->
+<div class="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_12px_rgba(0,0,0,0.02)] border border-surface-variant flex flex-col justify-between">
+<span class="material-symbols-outlined text-secondary mb-sm" style="font-variation-settings: 'FILL' 1;">assignment</span>
+<div>
+<p class="font-display-lg text-display-lg text-on-surface text-[28px] leading-[36px]">1,240</p>
+<p class="font-caption text-caption text-on-surface-variant mt-xs">Total Answered</p>
+</div>
+</div>
+<!-- Wrong Count -->
+<div class="bg-surface-container-lowest rounded-xl p-md shadow-[0_4px_12px_rgba(0,0,0,0.02)] border border-surface-variant flex flex-col justify-between">
+<span class="material-symbols-outlined text-error mb-sm" style="font-variation-settings: 'FILL' 1;">error</span>
+<div>
+<p class="font-display-lg text-display-lg text-on-surface text-[28px] leading-[36px]">155</p>
+<p class="font-caption text-caption text-on-surface-variant mt-xs">Wrong Count</p>
+</div>
+</div>
+</section>
+<!-- Menu List -->
+<section class="bg-surface-container-lowest rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.02)] border border-surface-variant overflow-hidden flex flex-col mt-sm">
+<button class="flex items-center p-md gap-md hover:bg-surface-container-low transition-colors w-full text-left group">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center group-hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">settings</span>
+</div>
+<span class="font-option-text text-option-text text-on-surface flex-1">Settings</span>
+<span class="material-symbols-outlined text-outline-variant text-[20px]">chevron_right</span>
+</button>
+<div class="h-[1px] bg-surface-variant ml-[68px]"></div>
+<button class="flex items-center p-md gap-md hover:bg-surface-container-low transition-colors w-full text-left group">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center group-hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">feedback</span>
+</div>
+<span class="font-option-text text-option-text text-on-surface flex-1">Feedback</span>
+<span class="material-symbols-outlined text-outline-variant text-[20px]">chevron_right</span>
+</button>
+<div class="h-[1px] bg-surface-variant ml-[68px]"></div>
+<button class="flex items-center p-md gap-md hover:bg-error-container/30 transition-colors w-full text-left group">
+<div class="w-10 h-10 rounded-full bg-error-container/50 flex items-center justify-center group-hover:bg-error-container transition-colors">
+<span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">logout</span>
+</div>
+<span class="font-option-text text-option-text text-error flex-1">Logout</span>
+</button>
+</section>
+</main>
+<!-- BottomNavBar from JSON -->
+<nav class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md fixed bottom-0 left-0 w-full z-50 shadow-[0_-4px_24px_rgba(0,0,0,0.04)] md:hidden">
+<div class="max-w-2xl mx-auto flex justify-around items-center pt-2 pb-6 px-2">
+<!-- Home (Inactive) -->
+<button class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1.5 hover:text-blue-500 dark:hover:text-blue-300 transition-all active:scale-95 duration-100 w-16">
+<span class="material-symbols-outlined mb-1">home</span>
+<span class="font-lexend text-[10px] font-medium">Home</span>
+</button>
+<!-- Bank (Inactive) -->
+<button class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1.5 hover:text-blue-500 dark:hover:text-blue-300 transition-all active:scale-95 duration-100 w-16">
+<span class="material-symbols-outlined mb-1">menu_book</span>
+<span class="font-lexend text-[10px] font-medium">Bank</span>
+</button>
+<!-- Review (Inactive) -->
+<button class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1.5 hover:text-blue-500 dark:hover:text-blue-300 transition-all active:scale-95 duration-100 w-16">
+<span class="material-symbols-outlined mb-1">rate_review</span>
+<span class="font-lexend text-[10px] font-medium">Review</span>
+</button>
+<!-- Profile (Active) -->
+<button class="flex flex-col items-center justify-center bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded-2xl px-4 py-1.5 w-16">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-lexend text-[10px] font-medium font-bold">Profile</span>
+</button>
+</div>
+</nav>
+</body></html>

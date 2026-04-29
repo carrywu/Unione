@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>练习报告</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed-dim": "#b4c5ff",
+                        "surface-variant": "#d3e4fe",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "on-background": "#0b1c30",
+                        "primary": "#004ac6",
+                        "surface-bright": "#f8f9ff",
+                        "on-secondary-fixed-variant": "#713700",
+                        "tertiary-container": "#007d55",
+                        "surface-container-high": "#dce9ff",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "tertiary": "#006242",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "outline": "#737686",
+                        "on-primary": "#ffffff",
+                        "surface-container": "#e5eeff",
+                        "secondary": "#944a00",
+                        "background": "#f8f9ff",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-secondary-fixed": "#301400",
+                        "inverse-surface": "#213145",
+                        "surface-container-highest": "#d3e4fe",
+                        "surface-container-low": "#eff4ff",
+                        "on-secondary-container": "#693300",
+                        "primary-fixed": "#dbe1ff",
+                        "secondary-fixed-dim": "#ffb783",
+                        "inverse-primary": "#b4c5ff",
+                        "error": "#ba1a1a",
+                        "on-surface": "#0b1c30",
+                        "on-tertiary-fixed": "#002113",
+                        "on-error": "#ffffff",
+                        "outline-variant": "#c3c6d7",
+                        "on-error-container": "#93000a",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-surface-variant": "#434655",
+                        "on-tertiary-container": "#bdffdb",
+                        "error-container": "#ffdad6",
+                        "secondary-container": "#fd933d",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#2563eb",
+                        "surface-tint": "#0053db",
+                        "surface-dim": "#cbdbf5",
+                        "surface": "#f8f9ff",
+                        "secondary-fixed": "#ffdcc5",
+                        "on-primary-container": "#eeefff",
+                        "on-primary-fixed": "#00174b",
+                        "on-secondary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "4px",
+                        "container-padding": "16px",
+                        "md": "16px",
+                        "sm": "8px",
+                        "lg": "24px",
+                        "card-gutter": "12px",
+                        "unit": "4px",
+                        "xl": "32px"
+                    },
+                    "fontFamily": {
+                        "label-lg": ["Lexend"],
+                        "label-sm": ["Lexend"],
+                        "headline-md": ["Lexend"],
+                        "headline-lg": ["Lexend"],
+                        "body-md": ["Lexend"],
+                        "body-lg": ["Lexend"]
+                    },
+                    "fontSize": {
+                        "label-lg": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Lexend', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .circular-chart { display: block; margin: 0 auto; max-width: 120px; max-height: 120px; }
+        .circle-bg { fill: none; stroke: #e5eeff; stroke-width: 3.8; }
+        .circle { fill: none; stroke-width: 3.8; stroke-linecap: round; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface pb-32">
+<!-- TopAppBar Component -->
+<header class="bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 font-lexend text-lg font-bold text-slate-900 dark:text-slate-100 docked full-width top-0 border-b border-slate-100 dark:border-slate-800 shadow-sm active:opacity-70 transition-opacity flex items-center px-4 h-14 w-full justify-between sticky top-0 z-40">
+<button class="w-10 h-10 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<div class="text-lg font-bold text-slate-900 dark:text-white">练习报告</div>
+<div class="w-10 h-10"></div> <!-- Placeholder for balance -->
+</header>
+<main class="p-container-padding space-y-lg">
+<!-- Summary Card -->
+<section class="bg-surface-container-lowest rounded-xl p-md">
+<div class="flex flex-col items-center justify-center py-sm">
+<div class="relative w-32 h-32 flex items-center justify-center">
+<svg class="circular-chart" viewbox="0 0 36 36">
+<path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"></path>
+<path class="circle stroke-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" stroke-dasharray="0, 100"></path>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-body-md text-on-surface-variant">答对</span>
+<span class="font-headline-lg text-primary">0<span class="font-body-md text-on-surface-variant">/20</span></span>
+</div>
+</div>
+</div>
+<div class="mt-md space-y-xs bg-surface-container-low rounded-lg p-card-gutter">
+<div class="flex justify-between items-center">
+<span class="font-body-md text-on-surface-variant">练习类型:</span>
+<span class="font-label-lg text-on-surface">专项智能练习</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-md text-on-surface-variant">难度:</span>
+<div class="flex items-center space-x-unit text-secondary-container">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star_half</span>
+<span class="font-label-lg text-on-surface ml-1">4.3</span>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-md text-on-surface-variant">交卷时间:</span>
+<span class="font-body-md text-on-surface">2026.04.27 10:00</span>
+</div>
+</div>
+</section>
+<!-- Exam Status -->
+<section class="bg-surface-container-lowest rounded-xl p-md">
+<h2 class="font-headline-md text-on-surface mb-card-gutter flex items-center">
+<div class="w-1 h-4 bg-primary rounded-full mr-sm"></div>
+                考试情况
+            </h2>
+<div class="grid grid-cols-2 md:grid-cols-5 gap-sm">
+<div class="bg-surface-bright border border-surface-container flex flex-col items-center justify-center p-sm rounded-lg col-span-2 md:col-span-1">
+<span class="font-body-md text-on-surface-variant mb-unit">一共</span>
+<span class="font-headline-md text-on-surface">20 <span class="font-label-sm font-normal">题</span></span>
+</div>
+<div class="bg-surface-bright border border-surface-container flex flex-col items-center justify-center p-sm rounded-lg">
+<span class="font-body-md text-on-surface-variant mb-unit">答对</span>
+<span class="font-headline-md text-tertiary">0 <span class="font-label-sm font-normal">题</span></span>
+</div>
+<div class="bg-surface-bright border border-surface-container flex flex-col items-center justify-center p-sm rounded-lg">
+<span class="font-body-md text-on-surface-variant mb-unit">答错</span>
+<span class="font-headline-md text-error">1 <span class="font-label-sm font-normal">题</span></span>
+</div>
+<div class="bg-surface-bright border border-surface-container flex flex-col items-center justify-center p-sm rounded-lg">
+<span class="font-body-md text-on-surface-variant mb-unit">未答</span>
+<span class="font-headline-md text-outline">19 <span class="font-label-sm font-normal">题</span></span>
+</div>
+<div class="bg-surface-bright border border-surface-container flex flex-col items-center justify-center p-sm rounded-lg">
+<span class="font-body-md text-on-surface-variant mb-unit">总用时</span>
+<span class="font-headline-md text-on-surface">5 <span class="font-label-sm font-normal">秒</span></span>
+</div>
+</div>
+</section>
+<!-- Data Analysis & Answer Key -->
+<section class="bg-surface-container-lowest rounded-xl p-md">
+<div class="flex justify-between items-center mb-card-gutter">
+<h2 class="font-headline-md text-on-surface flex items-center">
+<div class="w-1 h-4 bg-primary rounded-full mr-sm"></div>
+                    资料分析
+                </h2>
+<span class="font-body-md text-on-surface-variant">共 20 题</span>
+</div>
+<div class="grid grid-cols-5 gap-card-gutter justify-items-center">
+<!-- Wrong Answer -->
+<div class="relative w-10 h-10 rounded-full border border-error bg-error-container text-error flex items-center justify-center font-label-lg">
+                    1
+                    <div class="absolute -top-1 -right-1 bg-white rounded-full">
+<span class="material-symbols-outlined text-[12px] text-error" style="font-variation-settings: 'FILL' 1;">push_pin</span>
+</div>
+</div>
+<!-- Unanswered 2-20 -->
+<script>
+                    for(let i=2; i<=20; i++) {
+                        document.write(`
+                            <div class="w-10 h-10 rounded-full border border-outline-variant bg-surface-bright text-outline flex items-center justify-center font-body-md">
+                                ${i}
+                            </div>
+                        `);
+                    }
+                </script>
+</div>
+</section>
+<!-- AI Study Suggestions -->
+<section class="bg-surface-container-lowest rounded-xl p-md relative overflow-hidden border border-surface-container">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary-fixed-dim opacity-10 rounded-bl-full"></div>
+<h2 class="font-headline-md text-on-surface mb-card-gutter flex items-center">
+<span class="material-symbols-outlined text-secondary-container mr-sm" style="font-variation-settings: 'FILL' 1;">psychology</span>
+                AI 学习建议
+            </h2>
+<div class="flex items-start space-x-md">
+<div class="w-12 h-12 rounded-full bg-primary-fixed flex-shrink-0 flex items-center justify-center">
+<img alt="AI Avatar" class="w-10 h-10 rounded-full object-cover" data-alt="close up 3d rendering of friendly minimalist robot face with soft blue lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4FW9abY2ri1qbI7rzWeOmf23I4pErDvtQXxcNqymTjztJphBGWRbvYsp9Mg29Z6zFyyaO1FbW0qkRpbGUb_GsIrJNR4UgfnEhpvikg2l5zWC1F7R6HCxVZCm11GpblXG0fq3_LdOUec-qLkXwLl41QSHgeCOtKtPVnqXOHyaSAtA8jjvJm-9y6KNNN_fMOo2a79cN2-mCHAsNrJeHU2b7uJhF-gDiUu5TWemmkmvl8v9o0zt5EodZmhsq9401W_cXbgcY1BOSiEjb"/>
+</div>
+<div class="bg-surface-container-low rounded-lg rounded-tl-none p-card-gutter flex-1">
+<p class="font-body-md text-on-surface leading-relaxed">
+                        根据你的做题数据，<span class="font-label-lg text-primary">资料分析</span>有<span class="font-label-lg text-secondary">12</span>个价值考点建议优先学习。
+                    </p>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar Component as generic fixed bottom actions based on user prompt -->
+<div class="fixed bottom-0 left-0 w-full z-50 flex justify-between items-center px-4 py-3 pb-safe bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] space-x-sm">
+<button class="flex-1 font-label-lg font-semibold py-3 px-4 rounded-full border border-primary text-primary bg-white flex items-center justify-center space-x-unit hover:bg-slate-50 transition-all active:scale-95">
+<span class="material-symbols-outlined text-[20px]">menu_book</span>
+<span>全部解析</span>
+</button>
+<button class="flex-1 font-label-lg font-semibold py-3 px-4 rounded-full bg-primary text-on-primary flex items-center justify-center space-x-unit hover:bg-primary/90 transition-all active:scale-95">
+<span class="material-symbols-outlined text-[20px]">assignment_late</span>
+<span>错题解析</span>
+</button>
+</div>
+</body></html>

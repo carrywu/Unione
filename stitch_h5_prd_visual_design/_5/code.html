@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>全部解析页 - Full Analysis View</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "secondary-fixed": "#ffdcc5",
+                      "surface-container-highest": "#d3e4fe",
+                      "on-surface": "#0b1c30",
+                      "on-error-container": "#93000a",
+                      "surface-container-low": "#eff4ff",
+                      "on-surface-variant": "#434655",
+                      "tertiary": "#006242",
+                      "on-primary-fixed-variant": "#003ea8",
+                      "surface-bright": "#f8f9ff",
+                      "surface-container": "#e5eeff",
+                      "on-tertiary-container": "#bdffdb",
+                      "outline": "#737686",
+                      "on-secondary-fixed": "#301400",
+                      "error": "#ba1a1a",
+                      "primary-fixed": "#dbe1ff",
+                      "surface-container-high": "#dce9ff",
+                      "outline-variant": "#c3c6d7",
+                      "error-container": "#ffdad6",
+                      "primary": "#004ac6",
+                      "background": "#f8f9ff",
+                      "on-primary": "#ffffff",
+                      "on-tertiary-fixed": "#002113",
+                      "surface-container-lowest": "#ffffff",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#b4c5ff",
+                      "on-tertiary": "#ffffff",
+                      "surface-tint": "#0053db",
+                      "inverse-surface": "#213145",
+                      "secondary-container": "#fd933d",
+                      "surface-dim": "#cbdbf5",
+                      "surface-variant": "#d3e4fe",
+                      "on-background": "#0b1c30",
+                      "primary-container": "#2563eb",
+                      "on-secondary-container": "#693300",
+                      "inverse-primary": "#b4c5ff",
+                      "on-primary-container": "#eeefff",
+                      "tertiary-fixed": "#6ffbbe",
+                      "secondary": "#944a00",
+                      "tertiary-container": "#007d55",
+                      "surface": "#f8f9ff",
+                      "tertiary-fixed-dim": "#4edea3",
+                      "on-tertiary-fixed-variant": "#005236",
+                      "on-secondary-fixed-variant": "#713700",
+                      "on-primary-fixed": "#00174b",
+                      "on-error": "#ffffff",
+                      "inverse-on-surface": "#eaf1ff",
+                      "secondary-fixed-dim": "#ffb783"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "xs": "4px",
+                      "md": "16px",
+                      "xl": "32px",
+                      "unit": "4px",
+                      "sm": "8px",
+                      "card-gutter": "12px",
+                      "lg": "24px",
+                      "container-padding": "16px"
+              },
+              "fontFamily": {
+                      "label-sm": [
+                              "Lexend"
+                      ],
+                      "headline-md": [
+                              "Lexend"
+                      ],
+                      "headline-lg": [
+                              "Lexend"
+                      ],
+                      "body-md": [
+                              "Lexend"
+                      ],
+                      "label-lg": [
+                              "Lexend"
+                      ],
+                      "body-lg": [
+                              "Lexend"
+                      ]
+              },
+              "fontSize": {
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-md": [
+                              "18px",
+                              {
+                                      "lineHeight": "26px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-lg": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background min-h-screen text-on-background pb-[80px]">
+<!-- TopAppBar -->
+<header class="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 fixed full-width top-0 w-full z-40 transition-colors duration-200">
+<div class="flex justify-between items-center w-full px-4 h-14">
+<button aria-label="Go back" class="text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-full p-2 flex items-center justify-center transition-colors duration-200 active:opacity-70">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-lexend text-lg font-semibold text-blue-600 dark:text-blue-400">全部解析</h1>
+<button aria-label="Share" class="text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-full p-2 flex items-center justify-center transition-colors duration-200 active:opacity-70">
+<span class="material-symbols-outlined" data-icon="share">share</span>
+</button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="pt-[72px] px-container-padding space-y-lg max-w-md mx-auto">
+<!-- Question Card 1: Correct -->
+<article class="bg-surface-container-lowest rounded-xl p-card-gutter flex flex-col gap-sm">
+<!-- Header Row -->
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-xs">
+<span class="font-headline-md text-headline-md text-on-surface">Q1.</span>
+<span class="bg-tertiary-container/10 text-tertiary-container px-2 py-1 rounded font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                        正确
+                    </span>
+</div>
+<!-- Difficulty -->
+<div aria-label="Difficulty: 3 out of 5 stars" class="flex text-secondary-container">
+<span class="material-symbols-outlined text-[16px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px] text-outline-variant" data-icon="star">star</span>
+<span class="material-symbols-outlined text-[16px] text-outline-variant" data-icon="star">star</span>
+</div>
+</div>
+<!-- Answer Comparison -->
+<div class="bg-surface-bright rounded-lg p-sm border border-outline-variant flex justify-between items-center mt-xs">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">你的答案</span>
+<span class="font-headline-md text-headline-md text-tertiary">B</span>
+</div>
+<div class="w-px h-8 bg-outline-variant"></div>
+<div class="flex flex-col text-right">
+<span class="font-label-sm text-label-sm text-on-surface-variant">正确答案</span>
+<span class="font-headline-md text-headline-md text-primary">B</span>
+</div>
+</div>
+<!-- Detailed Explanation Area -->
+<div class="mt-sm">
+<h4 class="font-label-lg text-label-lg text-on-surface mb-xs flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px] text-primary" data-icon="lightbulb">lightbulb</span>
+                    解析
+                </h4>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                    本题考查的是基期比重的计算。根据材料可知，2022年全国规模以上工业企业实现利润总额84038.5亿元，比上年下降4.0%。其中，制造业实现利润总额64150.2亿元，下降13.4%。基期比重 = (部分量 / 整体量) * [ (1 + 整体增长率) / (1 + 部分增长率) ]。代入数据计算可得结果约为77.4%。
+                </p>
+</div>
+<!-- Knowledge Tags -->
+<div class="flex flex-wrap gap-xs mt-sm pt-sm border-t border-surface-variant">
+<span class="bg-surface-variant text-on-surface px-2 py-1 rounded font-label-sm text-label-sm">资料分析</span>
+<span class="bg-surface-variant text-on-surface px-2 py-1 rounded font-label-sm text-label-sm">基期比重</span>
+</div>
+</article>
+<!-- Question Card 2: Incorrect -->
+<article class="bg-surface-container-lowest rounded-xl p-card-gutter flex flex-col gap-sm shadow-[0_8px_30px_rgba(0,74,198,0.06)] relative overflow-hidden">
+<!-- Subtle error accent line -->
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-error"></div>
+<!-- Header Row -->
+<div class="flex justify-between items-start pl-2">
+<div class="flex items-center gap-xs">
+<span class="font-headline-md text-headline-md text-on-surface">Q2.</span>
+<span class="bg-error-container text-on-error-container px-2 py-1 rounded font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="cancel" style="font-variation-settings: 'FILL' 1;">cancel</span>
+                        错误
+                    </span>
+</div>
+<!-- Difficulty -->
+<div aria-label="Difficulty: 4 out of 5 stars" class="flex text-secondary-container">
+<span class="material-symbols-outlined text-[16px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px] text-outline-variant" data-icon="star">star</span>
+</div>
+</div>
+<!-- Answer Comparison -->
+<div class="bg-error-container/20 rounded-lg p-sm border border-error-container flex justify-between items-center mt-xs pl-4">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">你的答案</span>
+<span class="font-headline-md text-headline-md text-error">C</span>
+</div>
+<div class="w-px h-8 bg-outline-variant/50"></div>
+<div class="flex flex-col text-right">
+<span class="font-label-sm text-label-sm text-on-surface-variant">正确答案</span>
+<span class="font-headline-md text-headline-md text-primary">A</span>
+</div>
+</div>
+<!-- Detailed Explanation Area -->
+<div class="mt-sm pl-2">
+<h4 class="font-label-lg text-label-lg text-on-surface mb-xs flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px] text-primary" data-icon="lightbulb">lightbulb</span>
+                    解析
+                </h4>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                    本题属于选词填空。空缺处所在句子意为“面对复杂多变的国际形势，我们必须保持（  ）的头脑”。“清醒”指头脑清楚，符合语境；“理智”侧重于不冲动；“冷静”侧重于不慌乱。结合上下文，强调的是在复杂局势中看清方向，故选A更为准确。错选C可能是因为忽略了“复杂多变”对认知层面的要求。
+                </p>
+</div>
+<!-- Knowledge Tags -->
+<div class="flex flex-wrap gap-xs mt-sm pt-sm border-t border-surface-variant pl-2">
+<span class="bg-surface-variant text-on-surface px-2 py-1 rounded font-label-sm text-label-sm">言语理解</span>
+<span class="bg-surface-variant text-on-surface px-2 py-1 rounded font-label-sm text-label-sm">实词辨析</span>
+<span class="bg-surface-variant text-on-surface px-2 py-1 rounded font-label-sm text-label-sm">语境分析</span>
+</div>
+</article>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-2 bg-white/80 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 z-50 shadow-[0_-4px_20px_rgba(37,99,235,0.05)] md:hidden">
+<a class="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 hover:text-blue-500 scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="edit_note">edit_note</span>
+<span class="font-lexend text-[10px] font-medium">Exercise</span>
+</a>
+<a class="flex flex-col items-center justify-center text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-xl px-3 py-1 hover:text-blue-500 scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="list_alt">list_alt</span>
+<span class="font-lexend text-[10px] font-medium">Analysis</span>
+</a>
+<a class="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 hover:text-blue-500 scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="insights">insights</span>
+<span class="font-lexend text-[10px] font-medium">Ability</span>
+</a>
+<a class="flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 hover:text-blue-500 scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="error_outline">error_outline</span>
+<span class="font-lexend text-[10px] font-medium">Mistakes</span>
+</a>
+</nav>
+</body></html>

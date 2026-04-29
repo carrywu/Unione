@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Question Bank Details</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "outline": "#737686",
+                "on-secondary-fixed": "#2e1500",
+                "error": "#ba1a1a",
+                "surface-container": "#edeef0",
+                "on-tertiary-container": "#ffccbc",
+                "primary-fixed": "#dbe1ff",
+                "surface-container-high": "#e7e8ea",
+                "primary": "#003da6",
+                "background": "#f8f9fb",
+                "on-primary": "#ffffff",
+                "outline-variant": "#c3c6d7",
+                "error-container": "#ffdad6",
+                "secondary-fixed": "#ffdcc1",
+                "surface-container-highest": "#e1e2e4",
+                "on-surface": "#191c1e",
+                "tertiary": "#822600",
+                "on-primary-fixed-variant": "#003ea8",
+                "on-error-container": "#93000a",
+                "surface-container-low": "#f3f4f6",
+                "on-surface-variant": "#434654",
+                "surface-bright": "#f8f9fb",
+                "tertiary-fixed": "#ffdbd0",
+                "inverse-primary": "#b4c5ff",
+                "on-primary-container": "#cbd6ff",
+                "tertiary-container": "#aa3500",
+                "secondary": "#8e4e00",
+                "surface": "#f8f9fb",
+                "tertiary-fixed-dim": "#ffb59c",
+                "on-tertiary-fixed-variant": "#832700",
+                "on-error": "#ffffff",
+                "inverse-on-surface": "#f0f1f3",
+                "secondary-fixed-dim": "#ffb778",
+                "on-secondary-fixed-variant": "#6c3a00",
+                "on-primary-fixed": "#00174b",
+                "surface-container-lowest": "#ffffff",
+                "on-secondary": "#ffffff",
+                "on-tertiary-fixed": "#390c00",
+                "inverse-surface": "#2e3132",
+                "primary-fixed-dim": "#b4c5ff",
+                "on-tertiary": "#ffffff",
+                "surface-tint": "#0353da",
+                "surface-dim": "#d9dadc",
+                "secondary-container": "#fd9000",
+                "primary-container": "#0052d9",
+                "on-secondary-container": "#613400",
+                "surface-variant": "#e1e2e4",
+                "on-background": "#191c1e"
+        },
+        "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "xl": "32px",
+                "xs": "4px",
+                "md": "16px",
+                "base": "8px",
+                "container-padding": "16px",
+                "sm": "12px",
+                "card-gap": "12px",
+                "lg": "24px"
+        },
+        "fontFamily": {
+                "question-text": [
+                        "Lexend"
+                ],
+                "label-sm": [
+                        "Lexend"
+                ],
+                "body-md": [
+                        "Lexend"
+                ],
+                "caption": [
+                        "Lexend"
+                ],
+                "option-text": [
+                        "Lexend"
+                ],
+                "display-lg": [
+                        "Lexend"
+                ]
+        },
+        "fontSize": {
+                "question-text": [
+                        "18px",
+                        {
+                                "lineHeight": "28px",
+                                "letterSpacing": "0em",
+                                "fontWeight": "500"
+                        }
+                ],
+                "label-sm": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "letterSpacing": "0.01em",
+                                "fontWeight": "500"
+                        }
+                ],
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "letterSpacing": "0em",
+                                "fontWeight": "400"
+                        }
+                ],
+                "caption": [
+                        "12px",
+                        {
+                                "lineHeight": "16px",
+                                "letterSpacing": "0em",
+                                "fontWeight": "400"
+                        }
+                ],
+                "option-text": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "letterSpacing": "0em",
+                                "fontWeight": "400"
+                        }
+                ],
+                "display-lg": [
+                        "32px",
+                        {
+                                "lineHeight": "40px",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "600"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+<style>
+  body {
+    background-color: theme('colors.background');
+    color: theme('colors.on-background');
+  }
+</style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="min-h-screen pb-[80px]">
+<!-- TopAppBar -->
+<header class="bg-white dark:bg-slate-900 font-lexend text-base font-semibold docked full-width top-0 z-50 sticky shadow-sm dark:shadow-none border-b border-slate-100 dark:border-slate-800 flex justify-between items-center w-full px-4 h-14">
+<div class="flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors active:opacity-70 transition-opacity p-2 rounded-full cursor-pointer">
+<span class="material-symbols-outlined text-blue-600 dark:text-blue-400" data-icon="arrow_back">arrow_back</span>
+</div>
+<div class="text-lg font-bold text-blue-600 dark:text-blue-400">Study Portal</div>
+<div class="flex items-center hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors active:opacity-70 transition-opacity p-2 rounded-full cursor-pointer">
+<div class="w-8 h-8 rounded-full bg-surface-variant overflow-hidden flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="person">person</span>
+</div>
+</div>
+</header>
+<main class="max-w-3xl mx-auto px-container-padding py-lg flex flex-col gap-lg">
+<!-- Hero Banner Area -->
+<section class="bg-surface-container-lowest rounded-lg border border-surface-variant shadow-[0_4px_12px_rgba(0,0,0,0.02)] overflow-hidden">
+<div class="h-48 w-full relative bg-primary-container/10">
+<img alt="Abstract architectural view representing logic and structure" class="w-full h-full object-cover opacity-80 mix-blend-multiply" data-alt="Abstract architectural view of a modern library ceiling with geometric lines and soft natural light, conveying logic, structure, and academic focus" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDlPVPh1f5yGu5-OnEpZbHO-7fep1PKA2ZN3dRKLbJcAfByANFHl6sM2_eNuka6KELBqw-gUzy1XIzKwliomsVIIu7lVZjnT-GqMiBbbDgO-GEh-W2pXVPPWwuLRHidT-6Y5rH6PzsM5fcioikZn9S7xo81ZdDlXDsGWllzzBPqypYyByScumf9vSk2MxhagVSWQVWHW28KSVm8VkRQwQccavu6jSNzJzcVZq9BdghesooE0bzGBU180jyH-D5oIIzP66TVR_Mjgmo"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-surface-container-lowest/50 to-transparent"></div>
+<div class="absolute bottom-0 left-0 w-full p-container-padding">
+<div class="inline-flex items-center gap-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-label-sm text-label-sm mb-sm border border-primary/20 backdrop-blur-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="school">school</span>
+          Advanced Mathematics
+        </div>
+<h1 class="font-display-lg text-display-lg text-on-surface mb-xs">Calculus Fundamentals III</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Master integration techniques and infinite series.</p>
+</div>
+</div>
+</section>
+<!-- Key Metrics Bento -->
+<section class="grid grid-cols-2 md:grid-cols-4 gap-card-gap">
+<div class="bg-surface-container-lowest p-md rounded-lg border border-surface-variant shadow-[0_4px_12px_rgba(0,0,0,0.02)] flex flex-col gap-xs">
+<div class="w-8 h-8 rounded-full bg-primary-container/20 flex items-center justify-center text-primary mb-xs">
+<span class="material-symbols-outlined" data-icon="format_list_numbered">format_list_numbered</span>
+</div>
+<span class="font-caption text-caption text-on-surface-variant">Total Questions</span>
+<span class="font-question-text text-question-text text-on-surface">150</span>
+</div>
+<div class="bg-surface-container-lowest p-md rounded-lg border border-surface-variant shadow-[0_4px_12px_rgba(0,0,0,0.02)] flex flex-col gap-xs">
+<div class="w-8 h-8 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary mb-xs">
+<span class="material-symbols-outlined" data-icon="timer">timer</span>
+</div>
+<span class="font-caption text-caption text-on-surface-variant">Estimated Time</span>
+<span class="font-question-text text-question-text text-on-surface">3.5 hrs</span>
+</div>
+<div class="bg-surface-container-lowest p-md rounded-lg border border-surface-variant shadow-[0_4px_12px_rgba(0,0,0,0.02)] flex flex-col gap-xs">
+<div class="w-8 h-8 rounded-full bg-tertiary-container/20 flex items-center justify-center text-tertiary mb-xs">
+<span class="material-symbols-outlined" data-icon="trending_up">trending_up</span>
+</div>
+<span class="font-caption text-caption text-on-surface-variant">Difficulty</span>
+<span class="font-question-text text-question-text text-on-surface">Advanced</span>
+</div>
+<div class="bg-surface-container-lowest p-md rounded-lg border border-surface-variant shadow-[0_4px_12px_rgba(0,0,0,0.02)] flex flex-col gap-xs">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center text-on-surface mb-xs">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+</div>
+<span class="font-caption text-caption text-on-surface-variant">Enrolled</span>
+<span class="font-question-text text-question-text text-on-surface">2,401</span>
+</div>
+</section>
+<!-- Detailed Description -->
+<section class="bg-surface-container-lowest p-container-padding rounded-lg border border-surface-variant shadow-[0_4px_12px_rgba(0,0,0,0.02)] flex flex-col gap-md">
+<h2 class="font-question-text text-question-text text-on-surface border-b border-surface-variant pb-xs">About this Bank</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">
+      This comprehensive question bank is designed for final-year students preparing for the national engineering licensure exam. It covers advanced topics including multiple integrals, line integrals, and an introduction to differential equations. 
+    </p>
+<p class="font-body-md text-body-md text-on-surface-variant">
+      Each question includes detailed, step-by-step solutions to ensure complete comprehension of the underlying principles. Consistent practice with these sets is highly correlated with improved exam performance.
+    </p>
+<div class="mt-sm bg-surface p-sm rounded-md border border-surface-variant">
+<h3 class="font-label-sm text-label-sm text-on-surface mb-xs flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px] text-secondary" data-icon="lightbulb">lightbulb</span>
+        Study Tip
+      </h3>
+<p class="font-caption text-caption text-on-surface-variant">We recommend completing these sets in 30-minute intervals to maintain high focus levels.</p>
+</div>
+</section>
+</main>
+<!-- Bottom Action Area -->
+<div class="fixed bottom-0 left-0 w-full bg-surface-container-lowest border-t border-surface-variant shadow-[0_-8px_16px_rgba(0,0,0,0.04)] p-container-padding z-40 pb-safe pb-[24px]">
+<div class="max-w-3xl mx-auto flex gap-md">
+<button class="w-12 h-12 flex items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container-lowest/80 transition-colors">
+<span class="material-symbols-outlined" data-icon="bookmark_border">bookmark_border</span>
+</button>
+<button class="flex-1 bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-semibold py-3 px-6 rounded-lg shadow-sm hover:shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-sm">
+      Start Practice
+      <span class="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</body></html>

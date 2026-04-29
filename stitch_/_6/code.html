@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Login - Study Portal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline": "#737686",
+                        "on-secondary-fixed": "#2e1500",
+                        "error": "#ba1a1a",
+                        "surface-container": "#edeef0",
+                        "on-tertiary-container": "#ffccbc",
+                        "primary-fixed": "#dbe1ff",
+                        "surface-container-high": "#e7e8ea",
+                        "primary": "#003da6",
+                        "background": "#f8f9fb",
+                        "on-primary": "#ffffff",
+                        "outline-variant": "#c3c6d7",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed": "#ffdcc1",
+                        "surface-container-highest": "#e1e2e4",
+                        "on-surface": "#191c1e",
+                        "tertiary": "#822600",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "on-error-container": "#93000a",
+                        "surface-container-low": "#f3f4f6",
+                        "on-surface-variant": "#434654",
+                        "surface-bright": "#f8f9fb",
+                        "tertiary-fixed": "#ffdbd0",
+                        "inverse-primary": "#b4c5ff",
+                        "on-primary-container": "#cbd6ff",
+                        "tertiary-container": "#aa3500",
+                        "secondary": "#8e4e00",
+                        "surface": "#f8f9fb",
+                        "tertiary-fixed-dim": "#ffb59c",
+                        "on-tertiary-fixed-variant": "#832700",
+                        "on-error": "#ffffff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "secondary-fixed-dim": "#ffb778",
+                        "on-secondary-fixed-variant": "#6c3a00",
+                        "on-primary-fixed": "#00174b",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed": "#390c00",
+                        "inverse-surface": "#2e3132",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-tint": "#0353da",
+                        "surface-dim": "#d9dadc",
+                        "secondary-container": "#fd9000",
+                        "primary-container": "#0052d9",
+                        "on-secondary-container": "#613400",
+                        "surface-variant": "#e1e2e4",
+                        "on-background": "#191c1e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "xs": "4px",
+                        "md": "16px",
+                        "base": "8px",
+                        "container-padding": "16px",
+                        "sm": "12px",
+                        "card-gap": "12px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "question-text": ["Lexend"],
+                        "label-sm": ["Lexend"],
+                        "body-md": ["Lexend"],
+                        "caption": ["Lexend"],
+                        "option-text": ["Lexend"],
+                        "display-lg": ["Lexend"]
+                    },
+                    "fontSize": {
+                        "question-text": ["18px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "500" }],
+                        "label-sm": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "500" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "caption": ["12px", { "lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "option-text": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "display-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background min-h-screen flex items-center justify-center p-md font-body-md text-on-surface antialiased selection:bg-primary-fixed selection:text-on-primary-fixed">
+<main class="w-full max-w-[420px] bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-[0_4px_24px_rgba(0,0,0,0.02)] p-xl flex flex-col">
+<!-- Header Section -->
+<header class="flex flex-col items-center text-center mb-xl">
+<div class="w-16 h-16 bg-primary-fixed rounded-2xl flex items-center justify-center mb-md text-primary">
+<span class="material-symbols-outlined text-[32px]" style="font-variation-settings: 'FILL' 1;">school</span>
+</div>
+<h1 class="font-display-lg text-display-lg text-on-surface mb-xs">Study Portal</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Sign in to continue your preparation</p>
+</header>
+<!-- Form Section -->
+<form class="flex flex-col gap-lg">
+<!-- Phone Input -->
+<div class="flex flex-col gap-xs">
+<label class="font-label-sm text-label-sm text-on-surface-variant ml-xs" for="phone">Phone Number</label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-sm text-outline pointer-events-none">phone_iphone</span>
+<input class="w-full pl-[44px] pr-sm py-[14px] bg-surface-bright border border-outline-variant rounded-lg font-body-md text-body-md text-on-surface placeholder:text-outline/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-200" id="phone" placeholder="Enter your phone number" type="tel"/>
+</div>
+</div>
+<!-- Password Input -->
+<div class="flex flex-col gap-xs">
+<label class="font-label-sm text-label-sm text-on-surface-variant ml-xs" for="password">Password</label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-sm text-outline pointer-events-none">lock</span>
+<input class="w-full pl-[44px] pr-[44px] py-[14px] bg-surface-bright border border-outline-variant rounded-lg font-body-md text-body-md text-on-surface placeholder:text-outline/60 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-200" id="password" placeholder="Enter your password" type="password"/>
+<button aria-label="Toggle password visibility" class="absolute right-sm text-outline hover:text-on-surface transition-colors flex items-center justify-center p-xs rounded-full hover:bg-surface-container" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility_off</span>
+</button>
+</div>
+</div>
+<!-- Forgot Password Link -->
+<div class="flex justify-end -mt-sm">
+<a class="font-label-sm text-label-sm text-primary hover:text-on-primary-fixed-variant transition-colors" href="#">Forgot Password?</a>
+</div>
+<!-- Submit Button -->
+<button class="w-full bg-primary text-on-primary py-[16px] rounded-lg font-label-sm text-label-sm flex items-center justify-center gap-base shadow-sm hover:bg-on-primary-fixed-variant active:scale-[0.98] transition-all duration-200 mt-xs" type="submit">
+                Log In
+                <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</form>
+<!-- Footer Section -->
+<footer class="mt-xl text-center flex items-center justify-center gap-xs">
+<span class="font-body-md text-body-md text-on-surface-variant">Don't have an account?</span>
+<a class="font-label-sm text-label-sm text-primary hover:underline underline-offset-4 decoration-primary/30" href="#">Register</a>
+</footer>
+</main>
+</body></html>

@@ -1,0 +1,31 @@
+{
+  "name": "quiz-app-h5-web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test:routes": "node ../scripts/frontend-route-smoke.mjs --app=h5",
+    "test:static": "node ../scripts/frontend-static-audit.mjs"
+  },
+  "dependencies": {
+    "@vueuse/core": "^13.0.0",
+    "axios": "^1.0.0",
+    "pinia": "^2.1.7",
+    "vant": "^4.9.0",
+    "vue": "^3.4.0",
+    "vue-router": "^4.3.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node20": "^20.1.4",
+    "@types/node": "^20.0.0",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "@vue/tsconfig": "^0.7.0",
+    "typescript": "^5.4.0",
+    "unplugin-vue-components": "^0.27.0",
+    "vite": "^5.0.0",
+    "vue-tsc": "^2.0.0"
+  }
+}

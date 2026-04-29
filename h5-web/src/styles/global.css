@@ -1,0 +1,289 @@
+/* ===== Public Exam Study Design System ===== */
+
+:root {
+  /* --- Surface hierarchy --- */
+  --color-surface: #f7f8fc;
+  --color-surface-dim: #d8dde9;
+  --color-surface-bright: #fbfcff;
+  --color-surface-container-lowest: #fbfcff;
+  --color-surface-container-low: #f1f4fb;
+  --color-surface-container: #e8edf7;
+  --color-surface-container-high: #dde5f2;
+  --color-surface-container-highest: #cfdae9;
+
+  /* --- On-surface text --- */
+  --color-on-surface: #121826;
+  --color-on-surface-variant: #4e5566;
+  --color-on-background: #121826;
+
+  /* --- Primary (Academic Blue) --- */
+  --color-primary: #1f4ea8;
+  --color-on-primary: #f8faff;
+  --color-primary-container: #2d5bd1;
+  --color-on-primary-container: #eef3ff;
+  --color-primary-fixed: #dfe7ff;
+  --color-primary-fixed-dim: #b9c9ff;
+  --color-on-primary-fixed: #0b2456;
+  --color-on-primary-fixed-variant: #1f4ea8;
+
+  /* --- Secondary (Soft Orange accent) --- */
+  --color-secondary: #9d4f19;
+  --color-on-secondary: #fff8f1;
+  --color-secondary-container: #f18a39;
+  --color-on-secondary-container: #5d2b08;
+  --color-secondary-fixed: #ffe1cb;
+  --color-secondary-fixed-dim: #ffc093;
+  --color-on-secondary-fixed: #321406;
+  --color-on-secondary-fixed-variant: #74350e;
+
+  /* --- Tertiary (Green success) --- */
+  --color-tertiary: #176a4b;
+  --color-on-tertiary: #f6fff9;
+  --color-tertiary-container: #238260;
+  --color-on-tertiary-container: #d8f8e7;
+  --color-tertiary-fixed: #d8f8e7;
+  --color-tertiary-fixed-dim: #aee7ca;
+  --color-on-tertiary-fixed: #062217;
+  --color-on-tertiary-fixed-variant: #176a4b;
+
+  /* --- Error --- */
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  /* --- Outline --- */
+  --color-outline: #737686;
+  --color-outline-variant: #c3c6d7;
+
+  /* --- Inverse --- */
+  --color-inverse-surface: #213145;
+  --color-inverse-on-surface: #eaf1ff;
+  --color-inverse-primary: #b4c5ff;
+  --color-surface-tint: #0053db;
+
+  /* --- Page background --- */
+  --color-bg: #f7f8fc;
+
+  /* --- Shadows (ambient, tinted) --- */
+  --shadow-card: 0 1px 2px rgba(18, 24, 38, 0.04), 0 10px 28px rgba(31, 78, 168, 0.05);
+  --shadow-card-hover: 0 16px 36px rgba(31, 78, 168, 0.08);
+  --shadow-nav: 0 -2px 10px rgba(0, 0, 0, 0.03);
+  --shadow-header: 0 2px 8px rgba(0, 0, 0, 0.03);
+
+  /* --- Radii --- */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* --- Spacing (8px rhythm) --- */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-container: 16px;
+  --space-card-gutter: 12px;
+
+  /* --- Typography --- */
+  --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+
+  /* --- Motion --- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-press: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+}
+
+/* ---- Reset & Base ---- */
+html,
+body,
+#app {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  max-width: 750px;
+  margin: 0 auto;
+  background: var(--color-bg);
+  color: var(--color-on-surface);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+[role='button']:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.55);
+  outline-offset: 3px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.tap-surface {
+  transition:
+    transform var(--duration-fast) var(--ease-press),
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.tap-surface:active {
+  transform: scale(0.98);
+}
+
+.icon-tile {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.icon-tile-primary {
+  background: var(--color-primary-fixed);
+  color: var(--color-on-primary-fixed-variant);
+}
+
+.icon-tile-secondary {
+  background: var(--color-secondary-fixed);
+  color: var(--color-on-secondary-fixed-variant);
+}
+
+.icon-tile-success {
+  background: var(--color-tertiary-fixed);
+  color: var(--color-on-tertiary-fixed-variant);
+}
+
+.icon-tile-muted {
+  background: var(--color-surface-container);
+  color: var(--color-primary-container);
+}
+
+/* ---- Utility classes ---- */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.container-pad {
+  padding-left: var(--space-container);
+  padding-right: var(--space-container);
+}
+
+/* Card base */
+.card {
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid rgba(115, 118, 134, 0.14);
+  box-shadow: var(--shadow-card);
+}
+
+/* Section heading with accent bar */
+.section-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.section-heading::before {
+  display: none;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 26px;
+  color: var(--color-on-surface);
+}
+
+/* Pill badge */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.pill-primary {
+  background: var(--color-primary-fixed);
+  color: var(--color-on-primary-fixed-variant);
+}
+
+.pill-secondary {
+  background: var(--color-secondary-fixed);
+  color: var(--color-on-secondary-fixed-variant);
+}
+
+.pill-error {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.pill-success {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+
+/* Bottom safe panel */
+.safe-panel {
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+
+/* Animation tokens */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Stagger children */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }

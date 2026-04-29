@@ -1,0 +1,85 @@
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+}
+
+:root {
+  --admin-bg: oklch(96.9% 0.012 248);
+  --admin-surface: oklch(99% 0.006 248);
+  --admin-surface-soft: oklch(97.7% 0.012 248);
+  --admin-border: oklch(89.5% 0.018 248);
+  --admin-border-strong: oklch(82.6% 0.03 248);
+  --admin-text: oklch(24% 0.03 248);
+  --admin-text-muted: oklch(49% 0.035 248);
+  --admin-text-faint: oklch(61% 0.032 248);
+  --admin-accent: oklch(57% 0.17 248);
+  --admin-accent-soft: oklch(94.2% 0.035 248);
+  --admin-success: oklch(58% 0.13 158);
+  --admin-warning: oklch(66% 0.15 68);
+  --admin-danger: oklch(58% 0.18 28);
+  --admin-shadow-sm: 0 10px 28px rgb(21 36 61 / 7%);
+  --admin-shadow-md: 0 18px 42px rgb(21 36 61 / 10%);
+  --admin-radius: 8px;
+}
+
+body {
+  background: var(--admin-bg);
+  color: var(--admin-text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.page {
+  padding: 22px 24px 28px;
+}
+
+@media (max-width: 768px) {
+  .page {
+    padding: 16px;
+  }
+}
+
+.panel {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-shadow-sm);
+}
+
+.el-button {
+  letter-spacing: 0;
+}
+
+.el-table {
+  --el-table-border-color: var(--admin-border);
+  --el-table-header-bg-color: var(--admin-surface-soft);
+  --el-table-header-text-color: var(--admin-text-muted);
+  --el-table-row-hover-bg-color: var(--admin-accent-soft);
+  color: var(--admin-text);
+}
+
+.el-table th.el-table__cell {
+  font-weight: 650;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  box-shadow: 0 0 0 1px var(--admin-border) inset;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px var(--admin-border-strong) inset;
+}

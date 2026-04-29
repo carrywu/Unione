@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<title>Quiz App - Answering</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline": "#737686",
+                        "on-secondary-fixed": "#2e1500",
+                        "error": "#ba1a1a",
+                        "surface-container": "#edeef0",
+                        "on-tertiary-container": "#ffccbc",
+                        "primary-fixed": "#dbe1ff",
+                        "surface-container-high": "#e7e8ea",
+                        "primary": "#003da6",
+                        "background": "#f8f9fb",
+                        "on-primary": "#ffffff",
+                        "outline-variant": "#c3c6d7",
+                        "error-container": "#ffdad6",
+                        "secondary-fixed": "#ffdcc1",
+                        "surface-container-highest": "#e1e2e4",
+                        "on-surface": "#191c1e",
+                        "tertiary": "#822600",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "on-error-container": "#93000a",
+                        "surface-container-low": "#f3f4f6",
+                        "on-surface-variant": "#434654",
+                        "surface-bright": "#f8f9fb",
+                        "tertiary-fixed": "#ffdbd0",
+                        "inverse-primary": "#b4c5ff",
+                        "on-primary-container": "#cbd6ff",
+                        "tertiary-container": "#aa3500",
+                        "secondary": "#8e4e00",
+                        "surface": "#f8f9fb",
+                        "tertiary-fixed-dim": "#ffb59c",
+                        "on-tertiary-fixed-variant": "#832700",
+                        "on-error": "#ffffff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "secondary-fixed-dim": "#ffb778",
+                        "on-secondary-fixed-variant": "#6c3a00",
+                        "on-primary-fixed": "#00174b",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed": "#390c00",
+                        "inverse-surface": "#2e3132",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-tint": "#0353da",
+                        "surface-dim": "#d9dadc",
+                        "secondary-container": "#fd9000",
+                        "primary-container": "#0052d9",
+                        "on-secondary-container": "#613400",
+                        "surface-variant": "#e1e2e4",
+                        "on-background": "#191c1e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "xs": "4px",
+                        "md": "16px",
+                        "base": "8px",
+                        "container-padding": "16px",
+                        "sm": "12px",
+                        "card-gap": "12px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "question-text": ["Lexend"],
+                        "label-sm": ["Lexend"],
+                        "body-md": ["Lexend"],
+                        "caption": ["Lexend"],
+                        "option-text": ["Lexend"],
+                        "display-lg": ["Lexend"]
+                    },
+                    "fontSize": {
+                        "question-text": ["18px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "500" }],
+                        "label-sm": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "500" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "caption": ["12px", { "lineHeight": "16px", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "option-text": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "display-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .pt-safe { padding-top: env(safe-area-inset-top); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md antialiased pt-safe pb-safe">
+<!-- TopAppBar Semantic Shell - Modified for linear flow -->
+<header class="bg-surface-container-lowest text-primary font-body-md font-semibold text-lg font-bold w-full top-0 z-50 sticky border-b border-surface-variant shadow-sm flex justify-between items-center w-full px-md h-14">
+<button class="text-on-surface-variant hover:bg-surface-container transition-colors p-base rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+<div class="flex-1 flex justify-center items-center gap-xs">
+<span class="material-symbols-outlined text-outline" data-icon="timer">timer</span>
+<span class="font-label-sm text-label-sm text-on-surface">14:32</span>
+</div>
+<button class="text-on-surface-variant hover:bg-surface-container transition-colors p-base rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</header>
+<!-- Progress Bar -->
+<div class="w-full bg-surface-variant h-1">
+<div class="bg-primary h-full w-2/5 rounded-r-full"></div>
+</div>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto px-container-padding py-lg flex flex-col gap-lg max-w-2xl mx-auto w-full pb-32">
+<!-- Question Meta -->
+<div class="flex items-center justify-between">
+<span class="bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm px-sm py-xs rounded-full">Question 4 of 10</span>
+<span class="text-secondary font-label-sm text-label-sm bg-secondary-fixed px-sm py-xs rounded-full">Multiple Choice</span>
+</div>
+<!-- Question Content -->
+<div class="bg-surface-container-lowest border border-surface-variant rounded-lg p-md shadow-[0_4px_8px_rgba(0,0,0,0.02)] flex flex-col gap-md">
+<p class="font-question-text text-question-text text-on-surface">
+                Which of the following principles best describes the concept of "stare decisis" in the context of common law legal systems?
+            </p>
+</div>
+<!-- Options Container -->
+<div class="flex flex-col gap-sm">
+<!-- Option A (Inactive) -->
+<label class="flex items-start gap-sm p-md bg-surface-container-lowest border border-surface-variant rounded-lg cursor-pointer hover:bg-surface-container-low transition-colors shadow-[0_4px_8px_rgba(0,0,0,0.02)]">
+<div class="flex-shrink-0 w-6 h-6 rounded-full border-2 border-outline flex items-center justify-center mt-0.5">
+<span class="font-label-sm text-label-sm text-outline">A</span>
+</div>
+<span class="font-option-text text-option-text text-on-surface">The requirement that the prosecution must prove guilt beyond a reasonable doubt.</span>
+<input class="hidden" name="q4" type="radio"/>
+</label>
+<!-- Option B (Selected) -->
+<label class="flex items-start gap-sm p-md bg-primary-fixed border-2 border-primary rounded-lg cursor-pointer shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
+<div class="flex-shrink-0 w-6 h-6 rounded-full border-2 border-primary bg-primary flex items-center justify-center mt-0.5">
+<span class="font-label-sm text-label-sm text-on-primary">B</span>
+</div>
+<span class="font-option-text text-option-text text-on-primary-container">The legal principle of determining points in litigation according to precedent.</span>
+<input checked="" class="hidden" name="q4" type="radio"/>
+</label>
+<!-- Option C (Inactive) -->
+<label class="flex items-start gap-sm p-md bg-surface-container-lowest border border-surface-variant rounded-lg cursor-pointer hover:bg-surface-container-low transition-colors shadow-[0_4px_8px_rgba(0,0,0,0.02)]">
+<div class="flex-shrink-0 w-6 h-6 rounded-full border-2 border-outline flex items-center justify-center mt-0.5">
+<span class="font-label-sm text-label-sm text-outline">C</span>
+</div>
+<span class="font-option-text text-option-text text-on-surface">The right to a speedy and public trial by an impartial jury.</span>
+<input class="hidden" name="q4" type="radio"/>
+</label>
+<!-- Option D (Inactive) -->
+<label class="flex items-start gap-sm p-md bg-surface-container-lowest border border-surface-variant rounded-lg cursor-pointer hover:bg-surface-container-low transition-colors shadow-[0_4px_8px_rgba(0,0,0,0.02)]">
+<div class="flex-shrink-0 w-6 h-6 rounded-full border-2 border-outline flex items-center justify-center mt-0.5">
+<span class="font-label-sm text-label-sm text-outline">D</span>
+</div>
+<span class="font-option-text text-option-text text-on-surface">The power of a court to hear a case for the first time.</span>
+<input class="hidden" name="q4" type="radio"/>
+</label>
+</div>
+</main>
+<!-- Linear Navigation Bottom Bar (Replaces BottomNavBar shell) -->
+<div class="fixed bottom-0 left-0 w-full bg-surface-container-lowest/95 backdrop-blur-md border-t border-surface-variant p-md pb-safe z-50 flex justify-between items-center max-w-2xl mx-auto right-0">
+<button class="px-lg py-sm rounded-lg border border-primary text-primary font-label-sm text-label-sm hover:bg-primary-fixed transition-colors flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]" data-icon="chevron_left">chevron_left</span>
+            Previous
+        </button>
+<button class="px-lg py-sm rounded-lg bg-primary text-on-primary font-label-sm text-label-sm shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:bg-primary/90 transition-colors flex items-center gap-xs">
+            Next
+            <span class="material-symbols-outlined text-[18px]" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</body></html>

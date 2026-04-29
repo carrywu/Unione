@@ -1,0 +1,44 @@
+.DS_Store
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+auth.json
+auth.json.bak
+
+# Dependencies
+node_modules/
+*/node_modules/
+.venv/
+.venv-*/
+__pycache__/
+*.py[cod]
+
+# Build and generated output
+dist/
+*/dist/
+.turbo/
+.vite/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Runtime/debug artifacts
+.claude/
+.omx/
+.playwright-mcp/
+artifacts/
+pdf-service/tmp/
+pdf-service/*.pdf
+*.log
+h5-console-errors.txt
+*.zip
+
+# Large local media/screenshots
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.mp4

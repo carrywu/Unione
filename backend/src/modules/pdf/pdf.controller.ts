@@ -1,0 +1,67 @@
+import { Body, Controller, Delete, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { ParsePdfDto } from './dto/parse-pdf.dto';
+import { OcrRegionDto } from './dto/ocr-region.dto';
+import { QueryParseTaskDto } from './dto/query-parse-task.dto';
+import { PdfService } from './pdf.service';
+
+@ApiTags('Admin PDF')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('admin')
+@Controller('admin/pdf')
+export class PdfController {
+  constructor(private readonly pdfService: PdfService) {}
+
+  @Post('parse')
+  @ApiOperation({ summary: '创建 PDF 解析任务' })
+  parse(@Body() dto: ParsePdfDto) {
+    return this.pdfService.parse(dto);
+  }
+
+  @Post('ocr-region')
+  @ApiOperation({ summary: '框选区域 OCR / 截图' })
+  ocrRegion(@Body() dto: OcrRegionDto) {
+    return this.pdfService.ocrRegion(dto);
+  }
+
+  @Get('task/:taskId')
+  @ApiOperation({ summary: '获取解析任务状态' })
+  getTask(@Param('taskId') taskId: string) {
+    return this.pdfService.getTask(taskId);
+  }
+
+  @Get('proxy/:taskId')
+  @ApiOperation({ summary: '代理预览原始 PDF' })
+  proxy(@Param('taskId') taskId: string, @Res() res: Response) {
+    return this.pdfService.proxySourcePdf(taskId, res);
+  }
+
+  @Get('tasks')
+  @ApiOperation({ summary: '解析任务历史' })
+  listTasks(@Query() query: QueryParseTaskDto) {
+    return this.pdfService.listTasks(query);
+  }
+
+  @Post('retry/:taskId')
+  @ApiOperation({ summary: '重试失败解析任务' })
+  retry(@Param('taskId') taskId: string) {
+    return this.pdfService.retry(taskId);
+  }
+
+  @Post('pause/:taskId')
+  @ApiOperation({ summary: '暂停正在解析的任务' })
+  pause(@Param('taskId') taskId: string) {
+    return this.pdfService.pause(taskId);
+  }
+
+  @Delete('task/:taskId')
+  @ApiOperation({ summary: '删除解析任务记录' })
+  remove(@Param('taskId') taskId: string) {
+    return this.pdfService.remove(taskId);
+  }
+}

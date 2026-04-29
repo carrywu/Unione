@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fenbi Study - 题库</title>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-highest": "#d3e4fe",
+                        "secondary-container": "#fd933d",
+                        "primary-container": "#2563eb",
+                        "on-error": "#ffffff",
+                        "outline-variant": "#c3c6d7",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "primary": "#004ac6",
+                        "on-primary": "#ffffff",
+                        "inverse-on-surface": "#eaf1ff",
+                        "surface-container-low": "#eff4ff",
+                        "on-tertiary-fixed": "#002113",
+                        "surface-dim": "#cbdbf5",
+                        "on-secondary-container": "#693300",
+                        "surface-variant": "#d3e4fe",
+                        "inverse-primary": "#b4c5ff",
+                        "error": "#ba1a1a",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-surface-variant": "#434655",
+                        "on-primary-fixed": "#00174b",
+                        "background": "#f8f9ff",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "primary-fixed": "#dbe1ff",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "on-tertiary-container": "#bdffdb",
+                        "on-secondary-fixed-variant": "#713700",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "tertiary": "#006242",
+                        "on-surface": "#0b1c30",
+                        "error-container": "#ffdad6",
+                        "on-secondary": "#ffffff",
+                        "on-background": "#0b1c30",
+                        "tertiary-container": "#007d55",
+                        "secondary": "#944a00",
+                        "on-secondary-fixed": "#301400",
+                        "surface-container-high": "#dce9ff",
+                        "outline": "#737686",
+                        "inverse-surface": "#213145",
+                        "surface": "#f8f9ff",
+                        "surface-bright": "#f8f9ff",
+                        "surface-container": "#e5eeff",
+                        "on-primary-container": "#eeefff",
+                        "on-error-container": "#93000a",
+                        "surface-tint": "#0053db",
+                        "secondary-fixed-dim": "#ffb783",
+                        "secondary-fixed": "#ffdcc5"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "xs": "4px",
+                        "unit": "4px",
+                        "card-gutter": "12px",
+                        "xl": "32px",
+                        "md": "16px",
+                        "container-padding": "16px",
+                        "lg": "24px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Lexend"],
+                        "body-md": ["Lexend"],
+                        "body-lg": ["Lexend"],
+                        "label-sm": ["Lexend"],
+                        "headline-md": ["Lexend"],
+                        "label-lg": ["Lexend"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }],
+                        "label-lg": ["14px", { "lineHeight": "20px", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface antialiased font-body-md">
+<header class="bg-white dark:bg-slate-900 docked full-width top-0 z-40 border-b border-slate-100 dark:border-slate-800 flat no-shadows transition-all duration-200 ease-in-out flex justify-between items-center w-full px-4 h-16 fixed">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-slate-500 dark:text-slate-400 cursor-pointer" data-icon="menu">menu</span>
+<h1 class="font-lexend text-lg font-semibold tracking-tight text-xl font-black text-blue-600 dark:text-blue-400">Fenbi Study</h1>
+</div>
+<div class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 cursor-pointer">
+<span class="material-symbols-outlined text-slate-500 dark:text-slate-400 text-sm" data-icon="person">person</span>
+</div>
+</header>
+<main class="pt-[80px] pb-[100px]">
+<div class="px-container-padding">
+<div class="bg-surface-container-lowest rounded-full h-[48px] flex items-center px-md shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-outline-variant/20">
+<span class="material-symbols-outlined text-outline mr-sm" data-icon="search">search</span>
+<input class="bg-transparent border-none outline-none w-full font-body-md text-body-md text-on-surface placeholder:text-outline focus:ring-0 p-0" placeholder="搜索题目或考点" type="text"/>
+</div>
+</div>
+<div class="px-container-padding mt-lg">
+<div class="flex justify-between items-start">
+<div class="flex flex-col items-center gap-sm cursor-pointer active:scale-95 transition-transform">
+<div class="w-12 h-12 rounded-[16px] bg-primary-fixed flex items-center justify-center shadow-[0_4px_16px_rgba(37,99,235,0.1)]">
+<span class="material-symbols-outlined text-on-primary-fixed-variant" data-icon="assignment" data-weight="fill" style="font-variation-settings: 'FILL' 1;">assignment</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface">专项练习</span>
+</div>
+<div class="flex flex-col items-center gap-sm cursor-pointer active:scale-95 transition-transform">
+<div class="w-12 h-12 rounded-[16px] bg-tertiary-fixed flex items-center justify-center shadow-[0_4px_16px_rgba(0,125,85,0.1)]">
+<span class="material-symbols-outlined text-on-tertiary-fixed-variant" data-icon="timer" data-weight="fill" style="font-variation-settings: 'FILL' 1;">timer</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface">快速练习</span>
+</div>
+<div class="flex flex-col items-center gap-sm cursor-pointer active:scale-95 transition-transform">
+<div class="w-12 h-12 rounded-[16px] bg-secondary-fixed flex items-center justify-center shadow-[0_4px_16px_rgba(148,74,0,0.1)]">
+<span class="material-symbols-outlined text-on-secondary-fixed-variant" data-icon="history_edu" data-weight="fill" style="font-variation-settings: 'FILL' 1;">history_edu</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface">历年真题</span>
+</div>
+<div class="flex flex-col items-center gap-sm cursor-pointer active:scale-95 transition-transform">
+<div class="w-12 h-12 rounded-[16px] bg-surface-container-high flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-primary" data-icon="query_stats" data-weight="fill" style="font-variation-settings: 'FILL' 1;">query_stats</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface">模拟预测</span>
+</div>
+</div>
+</div>
+<div class="px-container-padding mt-xl">
+<div class="bg-gradient-to-br from-surface-container to-surface-container-lowest rounded-xl p-md border border-primary-fixed/50 shadow-[0_8px_24px_rgba(0,74,198,0.04)] flex items-center justify-between relative overflow-hidden">
+<div class="absolute right-0 top-0 w-32 h-32 bg-primary-fixed-dim/20 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+<div class="flex flex-col gap-xs z-10">
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="local_fire_department" data-weight="fill" style="font-variation-settings: 'FILL' 1;">local_fire_department</span>
+<h2 class="font-headline-md text-headline-md text-on-surface">每日一练</h2>
+</div>
+<p class="font-body-md text-body-md text-outline">今日进度：0 / 15 题</p>
+</div>
+<button class="bg-primary hover:bg-primary-container active:scale-95 transition-all text-on-primary rounded-full px-lg py-[10px] font-label-lg text-label-lg shadow-[0_4px_12px_rgba(0,74,198,0.2)] z-10">
+                    去练习
+                </button>
+</div>
+</div>
+<div class="px-container-padding mt-xl">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-md">行测题库</h2>
+<div class="grid grid-cols-2 gap-card-gutter">
+<div class="bg-surface-container-lowest rounded-lg p-card-gutter border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col gap-sm active:bg-surface-container-lowest/80 transition-colors cursor-pointer">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="forum">forum</span>
+</div>
+<div>
+<h3 class="font-label-lg text-label-lg text-on-surface">言语理解</h3>
+<p class="font-label-sm text-label-sm text-outline mt-1">共 1,200 题</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-lg p-card-gutter border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col gap-sm active:bg-surface-container-lowest/80 transition-colors cursor-pointer">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary" data-icon="extension">extension</span>
+</div>
+<div>
+<h3 class="font-label-lg text-label-lg text-on-surface">判断推理</h3>
+<p class="font-label-sm text-label-sm text-outline mt-1">共 1,500 题</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-lg p-card-gutter border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col gap-sm active:bg-surface-container-lowest/80 transition-colors cursor-pointer">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary" data-icon="calculate">calculate</span>
+</div>
+<div>
+<h3 class="font-label-lg text-label-lg text-on-surface">数量关系</h3>
+<p class="font-label-sm text-label-sm text-outline mt-1">共 800 题</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-lg p-card-gutter border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col gap-sm active:bg-surface-container-lowest/80 transition-colors cursor-pointer">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="bar_chart">bar_chart</span>
+</div>
+<div>
+<h3 class="font-label-lg text-label-lg text-on-surface">资料分析</h3>
+<p class="font-label-sm text-label-sm text-outline mt-1">共 900 题</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-lg p-card-gutter border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex flex-col gap-sm active:bg-surface-container-lowest/80 transition-colors cursor-pointer col-span-2">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-outline" data-icon="menu_book">menu_book</span>
+</div>
+<div class="flex-1">
+<h3 class="font-label-lg text-label-lg text-on-surface">常识判断</h3>
+<p class="font-label-sm text-label-sm text-outline mt-1">涵盖法律、政治、经济等</p>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</div>
+</div>
+<div class="px-container-padding mt-xl">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-md">申论与面试</h2>
+<div class="flex flex-col gap-sm">
+<div class="bg-surface-container-lowest rounded-lg p-md border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="edit_square">edit_square</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">申论大题库</span>
+<span class="font-label-sm text-label-sm text-outline mt-[2px]">真题范文及精讲解析</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</div>
+<div class="bg-surface-container-lowest rounded-lg p-md border border-outline-variant/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="record_voice_over">record_voice_over</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface">面试实战</span>
+<span class="font-label-sm text-label-sm text-outline mt-[2px]">结构化与无领导全真模拟</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 w-full z-50 border-t border-slate-100 dark:border-slate-800 shadow-[0_-2px_10px_rgba(0,0,0,0.03)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md fixed bottom-0 left-0 w-full flex justify-around items-center h-20 px-2 pb-safe">
+<div class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1.5 hover:text-blue-500 dark:hover:text-blue-300 active:scale-95 transition-transform duration-150 cursor-pointer font-lexend text-[11px] font-medium">
+<span class="material-symbols-outlined mb-1" data-icon="edit_note">edit_note</span>
+<span>Exercise</span>
+</div>
+<div class="flex flex-col items-center justify-center text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20 rounded-2xl px-4 py-1.5 hover:text-blue-500 dark:hover:text-blue-300 active:scale-95 transition-transform duration-150 cursor-pointer font-lexend text-[11px] font-medium">
+<span class="material-symbols-outlined mb-1" data-icon="inventory_2" data-weight="fill" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span>Bank</span>
+</div>
+<div class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1.5 hover:text-blue-500 dark:hover:text-blue-300 active:scale-95 transition-transform duration-150 cursor-pointer font-lexend text-[11px] font-medium">
+<span class="material-symbols-outlined mb-1" data-icon="analytics">analytics</span>
+<span>Study</span>
+</div>
+<div class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-1.5 hover:text-blue-500 dark:hover:text-blue-300 active:scale-95 transition-transform duration-150 cursor-pointer font-lexend text-[11px] font-medium">
+<span class="material-symbols-outlined mb-1" data-icon="person">person</span>
+<span>Me</span>
+</div>
+</nav>
+</body></html>
