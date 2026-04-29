@@ -350,11 +350,18 @@ async function bootstrap() {
   );
 
   const password = await bcrypt.hash('123456', 10);
+  const adminTestPassword = await bcrypt.hash('admin', 10);
 
   await upsertUser(userRepository, {
     phone: '13800138000',
     password,
     nickname: '管理员',
+    role: UserRole.Admin,
+  });
+  await upsertUser(userRepository, {
+    phone: 'admin',
+    password: adminTestPassword,
+    nickname: '测试管理员',
     role: UserRole.Admin,
   });
   await upsertUser(userRepository, {
@@ -383,6 +390,7 @@ async function bootstrap() {
   await app.close();
   console.log('Seed completed.');
   console.log('Admin: 13800138000 / 123456');
+  console.log('Test admin: admin / admin');
   console.log('User:  13900139000 / 123456');
   console.log('Mock users: 13900000001-13900000008 / 123456');
 }
