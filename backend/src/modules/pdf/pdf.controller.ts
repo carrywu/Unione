@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { ParsePdfDto } from './dto/parse-pdf.dto';
+import { PublishResultDto } from './dto/publish-result.dto';
 import { OcrRegionDto } from './dto/ocr-region.dto';
 import { QueryParseTaskDto } from './dto/query-parse-task.dto';
 import { PdfService } from './pdf.service';
@@ -33,6 +34,15 @@ export class PdfController {
   @ApiOperation({ summary: '获取解析任务状态' })
   getTask(@Param('taskId') taskId: string) {
     return this.pdfService.getTask(taskId);
+  }
+
+  @Post('task/:taskId/publish-result')
+  @ApiOperation({ summary: '发布解析结果到题库/H5' })
+  publishResult(
+    @Param('taskId') taskId: string,
+    @Body() dto: PublishResultDto,
+  ) {
+    return this.pdfService.publishResult(taskId, dto);
   }
 
   @Post('task/:taskId/debug/generate')

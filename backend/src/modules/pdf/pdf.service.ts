@@ -10,7 +10,7 @@ import axios from 'axios';
 import { EventEmitter } from 'events';
 import { Response } from 'express';
 import { Repository } from 'typeorm';
-import { QuestionBank } from '../bank/entities/question-bank.entity';
+import { BankStatus, QuestionBank } from '../bank/entities/question-bank.entity';
 import { Material } from '../question/entities/material.entity';
 import { SystemConfig } from '../system/entities/system-config.entity';
 import { UploadService } from '../upload/upload.service';
@@ -21,6 +21,7 @@ import {
 } from '../question/entities/question.entity';
 import { ParsePdfDto } from './dto/parse-pdf.dto';
 import { OcrRegionDto, OcrRegionMode } from './dto/ocr-region.dto';
+import { PublishResultDto } from './dto/publish-result.dto';
 import { QueryParseTaskDto } from './dto/query-parse-task.dto';
 import { ParseTask, ParseTaskStatus } from './entities/parse-task.entity';
 
@@ -84,6 +85,53 @@ export class PdfService {
       done_count: task.done_count,
       result_summary: task.result_summary,
       error: task.error,
+    };
+  }
+
+  async publishResult(taskId: string, body: PublishResultDto) {
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    if (!task) {
+      throw new NotFoundException('解析任务不存在');
+    }
+    if (task.status !== ParseTaskStatus.Done) {
+      throw new BadRequestException('只有已完成的解析任务才能发布结果');
+    }
+
+    const publishedCount = await this.questionRepository.count({
+      where: { parse_task_id: task.id },
+    });
+
+    await this.questionRepository.update(
+      { parse_task_id: task.id },
+      {
+        status: QuestionStatus.Published,
+        needs_review: false,
+      },
+    );
+
+    const totalCount = await this.questionRepository.count({
+      where: { bank_id: task.bank_id, status: QuestionStatus.Published },
+    });
+
+    const bank = await this.bankRepository.findOne({
+      where: { id: task.bank_id },
+    });
+    if (!bank) {
+      throw new NotFoundException('题库不存在');
+    }
+
+    bank.total_count = totalCount;
+    if (body.publish_bank) {
+      bank.status = BankStatus.Published;
+    }
+    await this.bankRepository.save(bank);
+
+    return {
+      task_id: task.id,
+      bank_id: task.bank_id,
+      published_count: publishedCount,
+      bank_status: bank.status,
+      total_count: totalCount,
     };
   }
 

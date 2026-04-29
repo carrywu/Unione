@@ -73,4 +73,10 @@ export class AdminBankController {
   publish(@Param('id') id: string) {
     return this.bankService.publish(id);
   }
+
+  @Get(':id/export-json')
+  @ApiOperation({ summary: '导出已发布题库 JSON' })
+  exportJson(@Param('id') id: string) {
+    return this.bankService.exportJson(id);
+  }
 }

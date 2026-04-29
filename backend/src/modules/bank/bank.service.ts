@@ -1,11 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Material } from '../question/entities/material.entity';
+import { BankStatus, QuestionBank } from './entities/question-bank.entity';
 import {
-  BankStatus,
-  QuestionBank,
-} from './entities/question-bank.entity';
-import { Question, QuestionStatus } from '../question/entities/question.entity';
+  Question,
+  QuestionStatus,
+  QuestionType,
+} from '../question/entities/question.entity';
 import { CreateBankDto } from './dto/create-bank.dto';
 import { QueryBankDto } from './dto/query-bank.dto';
 import { UpdateBankDto } from './dto/update-bank.dto';
@@ -17,6 +19,8 @@ export class BankService {
     private readonly bankRepository: Repository<QuestionBank>,
     @InjectRepository(Question)
     private readonly questionRepository: Repository<Question>,
+    @InjectRepository(Material)
+    private readonly materialRepository: Repository<Material>,
   ) {}
 
   listPublished(query: QueryBankDto) {
@@ -63,6 +67,67 @@ export class BankService {
     bank.status = BankStatus.Published;
     bank.total_count = total;
     return this.bankRepository.save(bank);
+  }
+
+  async exportJson(id: string) {
+    const bank = await this.detail(id);
+    const questions = await this.questionRepository.find({
+      where: { bank_id: id, status: QuestionStatus.Published },
+      relations: ['material'],
+      order: { index_num: 'ASC' },
+    });
+    const materialIds = [
+      ...new Set(
+        questions
+          .map((question) => question.material_id)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+    const materials = materialIds.length
+      ? await this.materialRepository.find({
+          where: { bank_id: id },
+          order: { created_at: 'ASC' },
+        })
+      : [];
+
+    return {
+      bank,
+      materials: materials
+        .filter((material) => materialIds.includes(material.id))
+        .map((material) => ({
+          id: material.id,
+          content: material.content,
+          images: material.images || [],
+          page_range: material.page_range || null,
+        })),
+      questions: questions.map((question) => ({
+        id: question.id,
+        index_num: question.index_num,
+        type: question.type,
+        stem: question.content,
+        options:
+          question.type === QuestionType.Judge
+            ? {
+                A: question.option_a || '',
+                B: question.option_b || '',
+              }
+            : {
+                A: question.option_a || '',
+                B: question.option_b || '',
+                C: question.option_c || '',
+                D: question.option_d || '',
+              },
+        answer: question.answer || '',
+        analysis: question.analysis || '',
+        images: question.images || [],
+        material_group: question.material_id || null,
+        source_page: {
+          page_num: question.page_num ?? null,
+          start: question.source_page_start ?? question.page_num ?? null,
+          end: question.source_page_end ?? question.page_num ?? null,
+        },
+      })),
+    };
   }
 
   private async list(query: QueryBankDto, status?: BankStatus) {
