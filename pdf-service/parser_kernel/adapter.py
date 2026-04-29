@@ -124,7 +124,7 @@ def parse_extractor_with_kernel(
 
     for raw in raw_questions:
         content, options = _split_options(raw.text)
-        effective_material_id = raw.material_id or visual_links.get("question_material_ids", {}).get(raw.index)
+        effective_material_id = visual_links.get("question_material_ids", {}).get(raw.index) or raw.material_id
         effective_material_text = raw.material_text or visual_links.get("material_texts", {}).get(effective_material_id)
         material_temp_id = None
         if effective_material_text:
@@ -146,12 +146,15 @@ def parse_extractor_with_kernel(
                         for region in visual_links.get("materials", {}).get(effective_material_id or "", [])
                     ]
                     break
-        question_images = [_region_to_image(region) for region in raw.images]
-        question_images.extend(
-            _region_to_image(region, assignment_confidence=0.8)
-            for region in visual_links.get("questions", {}).get(raw.index, [])
-            if not _has_matching_image_region(question_images, region)
-        )
+        linked_regions = list(raw.images)
+        if effective_material_id:
+            linked_regions.extend(visual_links.get("materials", {}).get(effective_material_id, []))
+        linked_regions.extend(visual_links.get("questions", {}).get(raw.index, []))
+        question_regions: list[Region] = []
+        for region in linked_regions:
+            if not _has_matching_region(question_regions, region):
+                question_regions.append(region)
+        question_images = [_region_to_image(region) for region in question_regions]
         question_warnings = list(getattr(raw, "warnings", []) or [])
         question_warnings.extend(link_warnings.get(raw.index, []))
         material_group_id = material_group_ids_by_question.get(raw.index)
@@ -160,9 +163,8 @@ def parse_extractor_with_kernel(
             question_warnings.extend(material_group.get("warnings") or [])
         if not content:
             question_warnings.append("question_content_empty")
-        if not question_images:
-            question_warnings.append("question_region_missing")
-            question_images.append(_region_to_image(_full_page_region(extractor, raw.page_num - 1), assignment_confidence=0.2))
+        image_refs = [str(image.get("ref") or "") for image in question_images if image.get("ref")]
+        visual_refs = [_region_to_visual_ref(region) for region in question_regions]
         source_bbox = _source_bbox_for_question(extractor, raw, visual_links)
         questions.append(
             {
@@ -185,6 +187,8 @@ def parse_extractor_with_kernel(
                 "material_group_reason": (material_group or {}).get("link_reason"),
                 "shared_material": bool(material_group and len(material_group.get("question_indexes") or []) > 1),
                 "images": question_images,
+                "image_refs": image_refs,
+                "visual_refs": visual_refs,
                 "page_num": raw.page_num,
                 "page_range": [raw.page_num, raw.page_num],
                 "source_page_start": raw.page_num,
@@ -453,14 +457,24 @@ def _pages_from_visual_fallback(
             anchor_line = f"{index}. {str(question.get('content') or '').strip()}".strip()
             lines.append(anchor_line)
             question_bbox = question.get("bbox") or [0.0, y, 1000.0, y + 10.0]
-            blocks.append({"bbox": question_bbox, "text": anchor_line})
+            stem_bbox = question.get("stem_bbox") or question.get("bbox")
+            option_bboxes = {item.get("label"): item.get("bbox") for item in question.get("options", []) or []}
+            source_bboxes = [
+                bbox
+                for bbox in [stem_bbox, *[option_bboxes.get(label) for label in ["A", "B", "C", "D"]]]
+                if _valid_source_visual_bbox(extractor, page_index, bbox)
+            ]
+            source_bbox = _union_visual_bboxes([_coerce_visual_bbox(bbox) for bbox in source_bboxes])
+            text_block_bbox = source_bbox or [0.0, y, 1000.0, y + 10.0]
+            blocks.append({"bbox": text_block_bbox, "text": anchor_line})
             visual_links["question_positions"][index] = {
                 "page_num": page_index + 1,
-                "bbox": question_bbox,
-                "y0": float(question_bbox[1]),
-                "y1": float(question_bbox[3]),
+                "bbox": source_bbox,
+                "question_bbox": question_bbox,
+                "source_bboxes": source_bboxes,
+                "y0": float(text_block_bbox[1]),
+                "y1": float(text_block_bbox[3]),
             }
-            stem_bbox = question.get("stem_bbox") or question.get("bbox")
             stem_region = _region_from_bbox(
                 extractor,
                 page_index,
@@ -473,9 +487,6 @@ def _pages_from_visual_fallback(
                 regions.append(stem_region)
             y += 12.0
             question_regions = visual_links["questions"].setdefault(index, [])
-            if stem_region:
-                question_regions.append(stem_region)
-            option_bboxes = {item.get("label"): item.get("bbox") for item in question.get("options", []) or []}
             for label in ["A", "B", "C", "D"]:
                 option_value = question.get(f"option_{label.lower()}")
                 if not option_value:
@@ -483,7 +494,14 @@ def _pages_from_visual_fallback(
                 option_line = f"{label}. {str(option_value).strip()}"
                 lines.append(option_line)
                 option_bbox = option_bboxes.get(label) or [0.0, y, 1000.0, y + 10.0]
-                blocks.append({"bbox": option_bbox, "text": option_line})
+                blocks.append(
+                    {
+                        "bbox": option_bbox
+                        if _valid_source_visual_bbox(extractor, page_index, option_bbox)
+                        else [0.0, y, 1000.0, y + 10.0],
+                        "text": option_line,
+                    }
+                )
                 if option_bboxes.get(label):
                     option_region = _region_from_bbox(
                         extractor,
@@ -494,7 +512,6 @@ def _pages_from_visual_fallback(
                     )
                     if option_region:
                         regions.append(option_region)
-                        question_regions.append(option_region)
                 y += 12.0
 
         question_bboxes = [
@@ -512,7 +529,6 @@ def _pages_from_visual_fallback(
             bbox = visual.get("bbox")
             if not bbox:
                 continue
-            blocks.append({"bbox": bbox, "text": visual.get("caption") or f"[{visual.get('kind') or 'image'}]"})
             visual_region = _region_from_bbox(
                 extractor,
                 page_index,
@@ -597,10 +613,13 @@ def _pages_from_visual_fallback(
 
 def _attach_regions(question: QuestionGroup, pages: list[PageContent]) -> list[Region]:
     regions: list[Region] = []
+    visual_region_types = {"chart", "table", "image", "visual"}
     for page in pages:
         if page.page_num != question.page_num:
             continue
         for region in page.regions:
+            if region.type not in visual_region_types:
+                continue
             y0 = region.bbox[1]
             if question.y0 <= y0 <= question.y1:
                 regions.append(region)
@@ -609,17 +628,19 @@ def _attach_regions(question: QuestionGroup, pages: list[PageContent]) -> list[R
 
 def _source_bbox_for_question(extractor: Any, raw: RawQuestion, visual_links: dict[str, Any]) -> list[float] | None:
     position = (visual_links.get("question_positions") or {}).get(raw.index) or {}
+    source_bboxes = position.get("source_bboxes") or []
+    normalized_bboxes: list[list[float]] = []
+    for bbox in source_bboxes:
+        normalized = _normalized_source_bbox(extractor, raw.page_num - 1, bbox)
+        if normalized:
+            normalized_bboxes.append(normalized)
+    if normalized_bboxes:
+        return _union_visual_bboxes(normalized_bboxes)
+
     bbox = position.get("bbox")
     if bbox:
-        rect, normalized = _bbox_to_page_rect(extractor, raw.page_num - 1, bbox, [])
-        if rect is not None and normalized is not None:
-            return normalized
-
-    try:
-        page_rect = _page_rect(extractor, raw.page_num - 1)
-        return [page_rect.x0, float(raw.y0), page_rect.x1, float(raw.y1)]
-    except Exception:
-        return None
+        return _normalized_source_bbox(extractor, raw.page_num - 1, bbox)
+    return None
 
 
 def _split_options(text: str) -> tuple[str, dict[str, str]]:
@@ -689,7 +710,7 @@ def _full_page_region(extractor: Any, page_index: int, region_type: str = "page_
 def _region_to_image(region: Region, assignment_confidence: float = 0.7) -> dict[str, Any]:
     return {
         "base64": region.base64,
-        "ref": region.type,
+        "ref": _region_ref(region),
         "role": region.type,
         "image_role": _image_role_for_region(region.type),
         "caption": region.caption,
@@ -700,9 +721,29 @@ def _region_to_image(region: Region, assignment_confidence: float = 0.7) -> dict
     }
 
 
-def _has_matching_image_region(images: list[dict[str, Any]], region: Region) -> bool:
-    for image in images:
-        if image.get("role") == region.type and image.get("bbox") == region.bbox:
+def _region_to_visual_ref(region: Region) -> dict[str, Any]:
+    return {
+        "id": _region_ref(region),
+        "ref": _region_ref(region),
+        "page": region.page,
+        "bbox": region.bbox,
+        "role": region.type,
+        "kind": region.type,
+        "caption": region.caption,
+        "same_visual_group_id": region.same_visual_group_id,
+        "assignment_confidence": region.assignment_confidence,
+    }
+
+
+def _region_ref(region: Region) -> str:
+    page = region.page or 0
+    bbox_key = "-".join(str(int(round(value))) for value in region.bbox[:4])
+    return f"{region.type}-p{page}-{bbox_key}"
+
+
+def _has_matching_region(regions: list[Region], region: Region) -> bool:
+    for existing in regions:
+        if existing.type == region.type and existing.bbox == region.bbox and existing.page == region.page:
             return True
     return False
 
@@ -1142,6 +1183,58 @@ def _visual_page_height(extractor: Any, page_index: int) -> float:
     if height > 0:
         return height
     return float(_page_rect(extractor, page_index).height)
+
+
+def _visual_page_width(extractor: Any, page_index: int) -> float:
+    image_size = _cached_visual_render_size(extractor, page_index)
+    try:
+        width = float((image_size or {}).get("width") or 0)
+    except (TypeError, ValueError, AttributeError):
+        width = 0.0
+    if width > 0:
+        return width
+    page_rect = _page_rect(extractor, page_index)
+    scale_x, _ = _visual_render_scale(extractor, page_index, page_rect)
+    return float(page_rect.width * scale_x)
+
+
+def _valid_source_visual_bbox(extractor: Any, page_index: int, bbox_value: Any) -> bool:
+    bbox = _coerce_visual_bbox(bbox_value)
+    if not bbox:
+        return False
+    page_width = max(_visual_page_width(extractor, page_index), 1.0)
+    page_height = max(_visual_page_height(extractor, page_index), 1.0)
+    width = bbox[2] - bbox[0]
+    height = bbox[3] - bbox[1]
+    if bbox[0] < -page_width * 0.02 or bbox[1] < -page_height * 0.02:
+        return False
+    if bbox[2] > page_width * 1.02 or bbox[3] > page_height * 1.02:
+        return False
+    if width > page_width * 1.05 or height > page_height * 0.45:
+        return False
+    return (width * height) / (page_width * page_height) <= 0.5
+
+
+def _normalized_source_bbox(extractor: Any, page_index: int, bbox_value: Any) -> list[float] | None:
+    if not _valid_source_visual_bbox(extractor, page_index, bbox_value):
+        return None
+    warnings: list[str] = []
+    _, normalized = _bbox_to_page_rect(extractor, page_index, bbox_value, warnings)
+    if normalized is None:
+        return None
+    page_rect = _page_rect(extractor, page_index)
+    if "visual_bbox_clamped" in warnings and _source_bbox_looks_like_page_fallback(normalized, page_rect):
+        return None
+    return normalized
+
+
+def _source_bbox_looks_like_page_fallback(bbox: list[float], page_rect: fitz.Rect) -> bool:
+    page_width = max(float(page_rect.width), 1.0)
+    page_height = max(float(page_rect.height), 1.0)
+    width_ratio = (bbox[2] - bbox[0]) / page_width
+    height_ratio = (bbox[3] - bbox[1]) / page_height
+    area_ratio = width_ratio * height_ratio
+    return area_ratio >= 0.65 or (width_ratio >= 0.95 and height_ratio >= 0.45)
 
 
 def _coerce_visual_bbox(value: Any) -> list[float] | None:

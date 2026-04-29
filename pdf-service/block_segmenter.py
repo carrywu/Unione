@@ -278,8 +278,6 @@ def _source_bbox(core: QuestionCoreBlock) -> list[float] | None:
     source_boxes = getattr(core, "source_bbox_range", None) or []
     boxes = [bbox for bbox in source_boxes if bbox and len(bbox) == 4]
     if not boxes:
-        boxes = [bbox for bbox in core.bbox_range if bbox and len(bbox) == 4]
-    if not boxes:
         return None
     return [
         min(box[0] for box in boxes),

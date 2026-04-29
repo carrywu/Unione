@@ -159,7 +159,7 @@ def _nearest_following_question(
             following.append((q_min, question))
     if following:
         q_min, question = min(following, key=lambda item: item[0])
-        return question if q_min - visual_order <= 4 else None
+        return question if q_min - visual_order <= 8 else None
 
     next_page_following: list[tuple[int, QuestionCoreBlock]] = []
     for question in questions:

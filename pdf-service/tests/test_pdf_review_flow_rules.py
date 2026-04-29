@@ -397,11 +397,15 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
                 working_pdf=working_pdf,
             )
             assertions = run_visual_assertions(layout, case)
+            questions_by_index = {int(question["index"]): question for question in layout["questions"]}
 
         self.assertTrue(
             assertions["passed"],
             json.dumps(assertions["failures"], ensure_ascii=False, indent=2),
         )
+        self.assertEqual([image["ref"] for image in questions_by_index[4]["images"]], ["p2-img2"])
+        self.assertEqual(questions_by_index[5]["images"], [])
+        self.assertEqual([image["ref"] for image in questions_by_index[6]["images"]], ["p3-img1", "p3-img2"])
 
     def test_validator_accepts_options_dict_without_options_missing_warning(self):
         result = validate_and_clean(

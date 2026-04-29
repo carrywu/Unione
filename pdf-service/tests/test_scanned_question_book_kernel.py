@@ -149,6 +149,84 @@ class ScannedQuestionBookKernelTest(unittest.TestCase):
             visual_pages = json.loads(Path(tmpdir, "debug", "visual_pages.json").read_text(encoding="utf-8"))
             self.assertNotIn("visual_bbox_clamped", visual_pages[0]["page_warnings"])
 
+    def test_scanned_question_source_bbox_uses_text_parts_not_visual_region(self):
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": 1,
+                        "content": "第一题题干",
+                        "bbox": [0, 300, 1000, 900],
+                        "stem_bbox": [0, 300, 1000, 360],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                        "options": [
+                            {"label": "A", "text": "甲", "bbox": [0, 360, 1000, 420]},
+                            {"label": "B", "text": "乙", "bbox": [0, 420, 1000, 480]},
+                            {"label": "C", "text": "丙", "bbox": [0, 480, 1000, 540]},
+                            {"label": "D", "text": "丁", "bbox": [0, 540, 1000, 600]},
+                        ],
+                    }
+                ],
+                "visuals": [
+                    {
+                        "kind": "table",
+                        "bbox": [0, 650, 1000, 880],
+                        "caption": "下一段表格",
+                        "question_index": 1,
+                    }
+                ],
+            },
+        ):
+            result = parse_extractor_with_kernel(FakeScannedQuestionExtractor(), debug_dir=tmpdir)
+
+            question = result["questions"][0]
+            self.assertEqual(question["source_bbox"], [0.0, 196.36363220214844, 654.5454711914062, 392.7272644042969])
+            self.assertEqual([image["role"] for image in question["images"]], ["table"])
+            self.assertEqual([ref["role"] for ref in question["visual_refs"]], ["table"])
+
+    def test_scanned_question_without_visual_keeps_images_empty(self):
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": 1,
+                        "content": "无图题题干",
+                        "bbox": [0, 300, 1000, 600],
+                        "stem_bbox": [0, 300, 1000, 360],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                        "options": [
+                            {"label": "A", "text": "甲", "bbox": [0, 360, 1000, 420]},
+                            {"label": "B", "text": "乙", "bbox": [0, 420, 1000, 480]},
+                            {"label": "C", "text": "丙", "bbox": [0, 480, 1000, 540]},
+                            {"label": "D", "text": "丁", "bbox": [0, 540, 1000, 600]},
+                        ],
+                    }
+                ],
+                "visuals": [],
+            },
+        ):
+            result = parse_extractor_with_kernel(FakeScannedQuestionExtractor(), debug_dir=tmpdir)
+
+            question = result["questions"][0]
+            self.assertEqual(question["source_bbox"], [0.0, 196.36363220214844, 654.5454711914062, 392.7272644042969])
+            self.assertEqual(question["images"], [])
+            self.assertEqual(question["image_refs"], [])
+            self.assertEqual(question["visual_refs"], [])
+
     def test_scanned_question_book_retries_once_and_classifies_schema_error(self):
         attempts = 0
 
@@ -434,7 +512,8 @@ class ScannedQuestionBookKernelTest(unittest.TestCase):
             )
             self.assertEqual(len(result["questions"]), 1)
             self.assertEqual(result["questions"][0]["index"], 1)
-            self.assertTrue(result["questions"][0]["images"])
+            self.assertEqual(result["questions"][0]["images"], [])
+            self.assertIsNone(result["questions"][0]["source_bbox"])
             warnings = json.loads(Path(tmpdir, "debug", "warnings.json").read_text(encoding="utf-8"))
             parser_warnings = warnings.get("parser_warnings") or []
             self.assertTrue(any("visual_bbox_clamped" in item.get("warnings", []) for item in parser_warnings))
