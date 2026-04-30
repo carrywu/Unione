@@ -93,6 +93,11 @@ class Question(BaseModel):
     ai_risk_flags: List[str] = []
     ai_solver_provider: Optional[str] = None
     ai_solver_model: Optional[str] = None
+    ai_solver_first_model: Optional[str] = None
+    ai_solver_final_model: Optional[str] = None
+    ai_solver_rechecked: Optional[bool] = None
+    ai_solver_recheck_reason: Optional[str] = None
+    ai_solver_recheck_result: Optional[Dict[str, Any]] = None
     ai_solver_created_at: Optional[str] = None
     ai_answer_conflict: Optional[bool] = None
 

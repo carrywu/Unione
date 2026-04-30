@@ -25,7 +25,7 @@ class BailianDeepSeekProvider(QuestionSolverProvider):
         base_url: str | None = None,
     ):
         self.api_key = api_key
-        self.model = model or os.getenv("BAILIAN_DEEPSEEK_MODEL") or "deepseek-r1"
+        self.model = model or resolve_default_model()
         self.timeout_seconds = timeout_seconds or _float_env("AI_SOLVER_TIMEOUT_SECONDS", 60.0)
         self.max_retries = max_retries if max_retries is not None else _int_env("AI_SOLVER_MAX_RETRIES", 2)
         self.base_url = base_url or os.getenv("DASHSCOPE_BASE_URL") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -33,12 +33,13 @@ class BailianDeepSeekProvider(QuestionSolverProvider):
     def solve_question(self, request: QuestionSolvingRequest) -> QuestionSolvingResponse:
         prompt = build_question_solving_prompt(request)
         last_error: Exception | None = None
+        model = request.model or self.model
         for _attempt in range(max(1, self.max_retries + 1)):
             try:
                 record_ai_call("bailian_deepseek")
                 client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=self.timeout_seconds)
                 response = client.chat.completions.create(
-                    model=self.model,
+                    model=model,
                     temperature=0,
                     messages=[{"role": "user", "content": prompt}],
                 )
@@ -61,6 +62,14 @@ def provider_from_env() -> BailianDeepSeekProvider | None:
     if not api_key:
         return None
     return BailianDeepSeekProvider(api_key=api_key)
+
+
+def resolve_default_model() -> str:
+    for key in ("BAILIAN_DEEPSEEK_DEFAULT_MODEL", "BAILIAN_DEEPSEEK_MODEL"):
+        value = (os.getenv(key) or "").strip()
+        if value:
+            return value
+    return "deepseek-r1"
 
 
 def _extract_json(text: str) -> str:

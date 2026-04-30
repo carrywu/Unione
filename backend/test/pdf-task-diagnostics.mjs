@@ -169,6 +169,11 @@ try {
             ${optionalColumn('ai_risk_flags', 'json')},
             ${optionalColumn('ai_solver_provider', 'text')},
             ${optionalColumn('ai_solver_model', 'text')},
+            ${optionalColumn('ai_solver_first_model', 'text')},
+            ${optionalColumn('ai_solver_final_model', 'text')},
+            ${optionalColumn('ai_solver_rechecked', 'boolean')},
+            ${optionalColumn('ai_solver_recheck_reason', 'text')},
+            ${optionalColumn('ai_solver_recheck_result', 'json')},
             ${optionalColumn('ai_solver_created_at', 'text')},
             ${optionalColumn('ai_answer_conflict', 'boolean')}
        FROM questions
@@ -206,6 +211,11 @@ try {
       ai_risk_flags: asArray(row.ai_risk_flags),
       ai_solver_provider: row.ai_solver_provider || null,
       ai_solver_model: row.ai_solver_model || null,
+      ai_solver_first_model: row.ai_solver_first_model || null,
+      ai_solver_final_model: row.ai_solver_final_model || null,
+      ai_solver_rechecked: Boolean(row.ai_solver_rechecked),
+      ai_solver_recheck_reason: row.ai_solver_recheck_reason || '',
+      ai_solver_recheck_result: row.ai_solver_recheck_result || null,
       ai_solver_created_at: row.ai_solver_created_at || null,
       ai_answer_conflict: Boolean(row.ai_answer_conflict),
       options: options(row),

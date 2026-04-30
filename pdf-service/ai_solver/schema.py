@@ -21,6 +21,7 @@ class QuestionSolvingRequest:
     source_page: int | None
     parse_warnings: list[str]
     needs_review: bool
+    model: str | None = None
 
 
 @dataclass

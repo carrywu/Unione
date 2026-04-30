@@ -270,6 +270,9 @@
                   <el-tag v-if="aiSolverPanel.model" size="small" type="info" effect="plain">
                     {{ aiSolverPanel.model }}
                   </el-tag>
+                  <el-tag v-if="aiSolverPanel.rechecked" size="small" type="warning" effect="plain">
+                    已进行 Pro 复核
+                  </el-tag>
                   <el-tag v-if="aiSolverPanel.confidenceText" size="small" type="success" effect="plain">
                     {{ aiSolverPanel.confidenceText }}
                   </el-tag>
@@ -281,6 +284,12 @@
               <div class="ai-solver-grid">
                 <span>候选答案</span>
                 <strong>{{ aiSolverPanel.answer || '-' }}</strong>
+                <span v-if="aiSolverPanel.firstModel">首轮模型</span>
+                <p v-if="aiSolverPanel.firstModel">{{ aiSolverPanel.firstModel }}</p>
+                <span v-if="aiSolverPanel.finalModel">最终模型</span>
+                <p v-if="aiSolverPanel.finalModel">{{ aiSolverPanel.finalModel }}</p>
+                <span v-if="aiSolverPanel.recheckReason">复核原因</span>
+                <p v-if="aiSolverPanel.recheckReason">{{ aiSolverPanel.recheckReason }}</p>
                 <span v-if="aiSolverPanel.summary">推理摘要</span>
                 <p v-if="aiSolverPanel.summary">{{ aiSolverPanel.summary }}</p>
                 <span v-if="aiSolverPanel.knowledgePoints.length">知识点</span>
@@ -532,10 +541,15 @@ const aiSolverPanel = computed(() => {
       || form.ai_candidate_analysis
       || form.ai_reasoning_summary
       || form.ai_solver_provider
+      || form.ai_solver_rechecked
       || form.ai_answer_conflict,
     ),
     provider: String(form.ai_solver_provider || ''),
-    model: String(form.ai_solver_model || ''),
+    model: String(form.ai_solver_final_model || form.ai_solver_model || ''),
+    firstModel: String(form.ai_solver_first_model || ''),
+    finalModel: String(form.ai_solver_final_model || form.ai_solver_model || ''),
+    rechecked: Boolean(form.ai_solver_rechecked),
+    recheckReason: String(form.ai_solver_recheck_reason || ''),
     answer: String(form.ai_candidate_answer || ''),
     analysis: String(form.ai_candidate_analysis || ''),
     summary: String(form.ai_reasoning_summary || ''),

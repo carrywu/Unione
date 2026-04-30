@@ -438,6 +438,15 @@ async function testPdfSavePersistsAiSolverCandidateFields() {
         ai_risk_flags: ['requires_table'],
         ai_solver_provider: 'bailian-deepseek',
         ai_solver_model: 'deepseek-r1',
+        ai_solver_first_model: 'fast-model',
+        ai_solver_final_model: 'pro-model',
+        ai_solver_rechecked: true,
+        ai_solver_recheck_reason: 'low_confidence',
+        ai_solver_recheck_result: {
+          previous_result: { ai_candidate_answer: 'B' },
+          pro_result: { ai_candidate_answer: 'C' },
+          selected_result: 'pro',
+        },
         ai_solver_created_at: '2026-04-30T10:00:00.000Z',
         ai_answer_conflict: true,
         needs_review: true,
@@ -457,6 +466,11 @@ async function testPdfSavePersistsAiSolverCandidateFields() {
   assert.deepEqual(saved.ai_risk_flags, ['requires_table']);
   assert.equal(saved.ai_solver_provider, 'bailian-deepseek');
   assert.equal(saved.ai_solver_model, 'deepseek-r1');
+  assert.equal(saved.ai_solver_first_model, 'fast-model');
+  assert.equal(saved.ai_solver_final_model, 'pro-model');
+  assert.equal(saved.ai_solver_rechecked, true);
+  assert.equal(saved.ai_solver_recheck_reason, 'low_confidence');
+  assert.equal(saved.ai_solver_recheck_result.selected_result, 'pro');
   assert.equal(saved.ai_answer_conflict, true);
   assert.equal(saved.needs_review, true);
 }

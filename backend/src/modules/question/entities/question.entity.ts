@@ -166,6 +166,21 @@ export class Question {
   @Column({ name: 'ai_solver_model', nullable: true })
   ai_solver_model?: string;
 
+  @Column({ name: 'ai_solver_first_model', nullable: true })
+  ai_solver_first_model?: string;
+
+  @Column({ name: 'ai_solver_final_model', nullable: true })
+  ai_solver_final_model?: string;
+
+  @Column({ name: 'ai_solver_rechecked', default: false })
+  ai_solver_rechecked?: boolean;
+
+  @Column({ name: 'ai_solver_recheck_reason', type: 'text', nullable: true })
+  ai_solver_recheck_reason?: string;
+
+  @Column({ name: 'ai_solver_recheck_result', type: 'json', nullable: true })
+  ai_solver_recheck_result?: Record<string, unknown>;
+
   @Column({ name: 'ai_solver_created_at', nullable: true })
   ai_solver_created_at?: string;
 

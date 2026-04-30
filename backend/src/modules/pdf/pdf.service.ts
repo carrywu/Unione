@@ -927,6 +927,17 @@ export class PdfService {
         ai_solver_provider:
           raw.ai_solver_provider || raw.aiSolverProvider || null,
         ai_solver_model: raw.ai_solver_model || raw.aiSolverModel || null,
+        ai_solver_first_model:
+          raw.ai_solver_first_model || raw.aiSolverFirstModel || null,
+        ai_solver_final_model:
+          raw.ai_solver_final_model || raw.aiSolverFinalModel || null,
+        ai_solver_rechecked: Boolean(
+          raw.ai_solver_rechecked ?? raw.aiSolverRechecked,
+        ),
+        ai_solver_recheck_reason:
+          raw.ai_solver_recheck_reason || raw.aiSolverRecheckReason || null,
+        ai_solver_recheck_result:
+          raw.ai_solver_recheck_result || raw.aiSolverRecheckResult || null,
         ai_solver_created_at:
           raw.ai_solver_created_at || raw.aiSolverCreatedAt || null,
         ai_answer_conflict: Boolean(

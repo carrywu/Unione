@@ -264,6 +264,11 @@ def _to_parse_result(
                 ai_risk_flags=raw_question.get("ai_risk_flags") or [],
                 ai_solver_provider=raw_question.get("ai_solver_provider"),
                 ai_solver_model=raw_question.get("ai_solver_model"),
+                ai_solver_first_model=raw_question.get("ai_solver_first_model"),
+                ai_solver_final_model=raw_question.get("ai_solver_final_model"),
+                ai_solver_rechecked=raw_question.get("ai_solver_rechecked"),
+                ai_solver_recheck_reason=raw_question.get("ai_solver_recheck_reason"),
+                ai_solver_recheck_result=raw_question.get("ai_solver_recheck_result"),
                 ai_solver_created_at=raw_question.get("ai_solver_created_at"),
                 ai_answer_conflict=raw_question.get("ai_answer_conflict"),
             )

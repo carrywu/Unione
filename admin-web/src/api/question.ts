@@ -80,6 +80,11 @@ export interface Question {
   ai_risk_flags?: string[];
   ai_solver_provider?: string;
   ai_solver_model?: string;
+  ai_solver_first_model?: string;
+  ai_solver_final_model?: string;
+  ai_solver_rechecked?: boolean;
+  ai_solver_recheck_reason?: string;
+  ai_solver_recheck_result?: Record<string, unknown>;
   ai_solver_created_at?: string;
   ai_answer_conflict?: boolean;
   material?: {

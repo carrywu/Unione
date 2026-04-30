@@ -67,6 +67,11 @@ export class QuestionService {
       delete safeQuestion.ai_risk_flags;
       delete safeQuestion.ai_solver_provider;
       delete safeQuestion.ai_solver_model;
+      delete safeQuestion.ai_solver_first_model;
+      delete safeQuestion.ai_solver_final_model;
+      delete safeQuestion.ai_solver_rechecked;
+      delete safeQuestion.ai_solver_recheck_reason;
+      delete safeQuestion.ai_solver_recheck_result;
       delete safeQuestion.ai_solver_created_at;
       delete safeQuestion.ai_answer_conflict;
       return safeQuestion as Question;
@@ -587,6 +592,11 @@ export class QuestionService {
       ai_risk_flags: question.ai_risk_flags || [],
       ai_solver_provider: question.ai_solver_provider || null,
       ai_solver_model: question.ai_solver_model || null,
+      ai_solver_first_model: question.ai_solver_first_model || null,
+      ai_solver_final_model: question.ai_solver_final_model || null,
+      ai_solver_rechecked: Boolean(question.ai_solver_rechecked),
+      ai_solver_recheck_reason: question.ai_solver_recheck_reason || null,
+      ai_solver_recheck_result: question.ai_solver_recheck_result || null,
       ai_solver_created_at: question.ai_solver_created_at || null,
       ai_answer_conflict: Boolean(question.ai_answer_conflict),
       parse_warnings: question.parse_warnings || [],

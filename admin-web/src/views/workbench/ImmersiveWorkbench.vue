@@ -170,6 +170,9 @@
                 <el-tag v-if="aiSolverAssist.model" size="small" type="info" effect="plain">
                   {{ aiSolverAssist.model }}
                 </el-tag>
+                <el-tag v-if="aiSolverAssist.rechecked" size="small" type="warning" effect="plain">
+                  已进行 Pro 复核
+                </el-tag>
                 <el-tag v-if="aiSolverAssist.confidenceText" size="small" type="success" effect="plain">
                   {{ aiSolverAssist.confidenceText }}
                 </el-tag>
@@ -181,6 +184,12 @@
             <div class="ai-solver-grid">
               <span>候选答案</span>
               <strong>{{ aiSolverAssist.answer || '-' }}</strong>
+              <span v-if="aiSolverAssist.firstModel">首轮模型</span>
+              <p v-if="aiSolverAssist.firstModel">{{ aiSolverAssist.firstModel }}</p>
+              <span v-if="aiSolverAssist.finalModel">最终模型</span>
+              <p v-if="aiSolverAssist.finalModel">{{ aiSolverAssist.finalModel }}</p>
+              <span v-if="aiSolverAssist.recheckReason">复核原因</span>
+              <p v-if="aiSolverAssist.recheckReason">{{ aiSolverAssist.recheckReason }}</p>
               <span v-if="aiSolverAssist.summary">推理摘要</span>
               <p v-if="aiSolverAssist.summary">{{ aiSolverAssist.summary }}</p>
               <span v-if="aiSolverAssist.knowledgePoints.length">知识点</span>
@@ -423,10 +432,15 @@ const aiSolverAssist = computed(() => {
       || question?.ai_candidate_analysis
       || question?.ai_reasoning_summary
       || question?.ai_solver_provider
+      || question?.ai_solver_rechecked
       || question?.ai_answer_conflict,
     ),
     provider: question?.ai_solver_provider || '',
-    model: question?.ai_solver_model || '',
+    model: question?.ai_solver_final_model || question?.ai_solver_model || '',
+    firstModel: question?.ai_solver_first_model || '',
+    finalModel: question?.ai_solver_final_model || question?.ai_solver_model || '',
+    rechecked: Boolean(question?.ai_solver_rechecked),
+    recheckReason: question?.ai_solver_recheck_reason || '',
     answer: question?.ai_candidate_answer || '',
     analysis: question?.ai_candidate_analysis || '',
     summary: question?.ai_reasoning_summary || '',

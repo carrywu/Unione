@@ -13,15 +13,20 @@ class FakeSolverProvider:
     name = "bailian-deepseek"
     model = "deepseek-r1"
 
-    def __init__(self, responses=None, error: Exception | None = None):
+    def __init__(self, responses=None, error: Exception | None = None, errors=None):
         self.responses = list(responses or [])
         self.error = error
+        self.errors = list(errors or [])
         self.calls = []
 
     def solve_question(self, request):
         self.calls.append(request)
         if self.error:
             raise self.error
+        if self.errors:
+            error = self.errors.pop(0)
+            if error:
+                raise error
         if self.responses:
             return self.responses.pop(0)
         return QuestionSolvingResponse(
@@ -250,6 +255,218 @@ class AISolverEnhancementTest(unittest.TestCase):
         self.assertFalse(should_solve_question(q1, scope="review_only"))
         self.assertTrue(should_solve_question(q2, scope="review_only"))
         self.assertTrue(should_solve_question(q1, scope="all"))
+
+    def test_legacy_bailian_deepseek_model_still_routes_when_only_old_env_is_set(self):
+        provider = FakeSolverProvider()
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_AI_SOLVER": "true",
+                "AI_SOLVER_SCOPE": "all",
+                "BAILIAN_DEEPSEEK_FAST_MODEL": "",
+                "BAILIAN_DEEPSEEK_REASONER_MODEL": "",
+                "BAILIAN_DEEPSEEK_PRO_MODEL": "",
+                "BAILIAN_DEEPSEEK_DEFAULT_MODEL": "",
+                "BAILIAN_DEEPSEEK_MODEL": "legacy-r1",
+            },
+            clear=False,
+        ):
+            result = enhance_questions_with_ai_solver(
+                questions=[sample_questions()[0]],
+                materials=materials(),
+                provider=provider,
+            )
+
+        self.assertEqual(provider.calls[0].model, "legacy-r1")
+        self.assertEqual(result.questions[0]["ai_solver_first_model"], "legacy-r1")
+        self.assertEqual(result.questions[0]["ai_solver_final_model"], "legacy-r1")
+
+    def test_fast_model_is_selected_for_simple_text_questions(self):
+        provider = FakeSolverProvider()
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_AI_SOLVER": "true",
+                "AI_SOLVER_SCOPE": "all",
+                "BAILIAN_DEEPSEEK_FAST_MODEL": "fast-model",
+                "BAILIAN_DEEPSEEK_REASONER_MODEL": "reasoner-model",
+                "BAILIAN_DEEPSEEK_DEFAULT_MODEL": "default-model",
+            },
+            clear=False,
+        ):
+            result = enhance_questions_with_ai_solver(
+                questions=[sample_questions()[0]],
+                materials=materials(),
+                provider=provider,
+            )
+
+        self.assertEqual(provider.calls[0].model, "fast-model")
+        self.assertEqual(result.questions[0]["ai_solver_final_model"], "fast-model")
+
+    def test_reasoner_model_is_selected_for_visual_review_questions(self):
+        provider = FakeSolverProvider()
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_AI_SOLVER": "true",
+                "AI_SOLVER_SCOPE": "review_only",
+                "BAILIAN_DEEPSEEK_FAST_MODEL": "fast-model",
+                "BAILIAN_DEEPSEEK_REASONER_MODEL": "reasoner-model",
+                "BAILIAN_DEEPSEEK_DEFAULT_MODEL": "default-model",
+            },
+            clear=False,
+        ):
+            result = enhance_questions_with_ai_solver(
+                questions=sample_questions(),
+                materials=materials(),
+                provider=provider,
+            )
+
+        self.assertEqual([call.model for call in provider.calls], ["reasoner-model"])
+        self.assertEqual(result.questions[1]["ai_solver_first_model"], "reasoner-model")
+
+    def test_reasoner_model_is_selected_for_existing_answer_conflict(self):
+        provider = FakeSolverProvider()
+        question = sample_questions()[0]
+        question["ai_answer_conflict"] = True
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_AI_SOLVER": "true",
+                "AI_SOLVER_SCOPE": "all",
+                "BAILIAN_DEEPSEEK_FAST_MODEL": "fast-model",
+                "BAILIAN_DEEPSEEK_REASONER_MODEL": "reasoner-model",
+            },
+            clear=False,
+        ):
+            result = enhance_questions_with_ai_solver(
+                questions=[question],
+                materials=materials(),
+                provider=provider,
+            )
+
+        self.assertEqual([call.model for call in provider.calls], ["reasoner-model"])
+        self.assertEqual(result.questions[0]["ai_solver_first_model"], "reasoner-model")
+
+    def test_pro_model_rechecks_low_confidence_and_higher_pro_result_becomes_final(self):
+        provider = FakeSolverProvider(
+            responses=[
+                QuestionSolvingResponse("q1", "B", "低置信度一轮解析。", 0.5, "信息不足。", ["常识判断"], [], False),
+                QuestionSolvingResponse("q1", "A", "Pro 复核认为 A 正确。", 0.92, "复核后确认。", ["常识判断"], [], False),
+            ]
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_AI_SOLVER": "true",
+                "AI_SOLVER_SCOPE": "all",
+                "ENABLE_AI_SOLVER_PRO_RECHECK": "true",
+                "AI_SOLVER_PRO_RECHECK_THRESHOLD": "0.75",
+                "BAILIAN_DEEPSEEK_FAST_MODEL": "fast-model",
+                "BAILIAN_DEEPSEEK_PRO_MODEL": "pro-model",
+            },
+            clear=False,
+        ):
+            result = enhance_questions_with_ai_solver(
+                questions=[sample_questions()[0]],
+                materials=materials(),
+                provider=provider,
+            )
+
+        q1 = result.questions[0]
+        self.assertEqual([call.model for call in provider.calls], ["fast-model", "pro-model"])
+        self.assertTrue(q1["ai_solver_rechecked"])
+        self.assertEqual(q1["ai_solver_first_model"], "fast-model")
+        self.assertEqual(q1["ai_solver_final_model"], "pro-model")
+        self.assertEqual(q1["ai_candidate_answer"], "A")
+        self.assertEqual(q1["answer"], "A")
+        self.assertEqual(q1["analysis"], "官方解析")
+        self.assertEqual(q1["ai_solver_recheck_result"]["previous_result"]["ai_candidate_answer"], "B")
+
+    def test_pro_model_rechecks_answer_conflict(self):
+        provider = FakeSolverProvider(
+            responses=[
+                QuestionSolvingResponse("q1", "C", "一轮与官方答案冲突。", 0.91, "冲突。", ["常识判断"], [], False),
+                QuestionSolvingResponse("q1", "A", "Pro 复核回到 A。", 0.93, "复核。", ["常识判断"], [], False),
+            ]
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_AI_SOLVER": "true",
+                "AI_SOLVER_SCOPE": "all",
+                "ENABLE_AI_SOLVER_PRO_RECHECK": "true",
+                "BAILIAN_DEEPSEEK_FAST_MODEL": "fast-model",
+                "BAILIAN_DEEPSEEK_PRO_MODEL": "pro-model",
+            },
+            clear=False,
+        ):
+            result = enhance_questions_with_ai_solver(
+                questions=[sample_questions()[0]],
+                materials=materials(),
+                provider=provider,
+            )
+
+        self.assertEqual([call.model for call in provider.calls], ["fast-model", "pro-model"])
+        self.assertTrue(result.questions[0]["ai_solver_rechecked"])
+        self.assertIn("answer_conflict", result.questions[0]["ai_solver_recheck_reason"])
+
+    def test_pro_recheck_does_not_call_same_model_twice(self):
+        provider = FakeSolverProvider(
+            responses=[
+                QuestionSolvingResponse("q1", "B", "低置信度。", 0.5, "低置信度。", ["常识判断"], [], False),
+            ]
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_AI_SOLVER": "true",
+                "AI_SOLVER_SCOPE": "all",
+                "ENABLE_AI_SOLVER_PRO_RECHECK": "true",
+                "BAILIAN_DEEPSEEK_FAST_MODEL": "same-model",
+                "BAILIAN_DEEPSEEK_PRO_MODEL": "same-model",
+            },
+            clear=False,
+        ):
+            result = enhance_questions_with_ai_solver(
+                questions=[sample_questions()[0]],
+                materials=materials(),
+                provider=provider,
+            )
+
+        self.assertEqual([call.model for call in provider.calls], ["same-model"])
+        self.assertFalse(result.questions[0].get("ai_solver_rechecked", False))
+
+    def test_pro_recheck_failure_preserves_first_pass_result(self):
+        provider = FakeSolverProvider(
+            responses=[
+                QuestionSolvingResponse("q1", "B", "低置信度。", 0.5, "低置信度。", ["常识判断"], [], False),
+            ],
+            errors=[None, ValueError("pro failed")],
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_AI_SOLVER": "true",
+                "AI_SOLVER_SCOPE": "all",
+                "ENABLE_AI_SOLVER_PRO_RECHECK": "true",
+                "BAILIAN_DEEPSEEK_FAST_MODEL": "fast-model",
+                "BAILIAN_DEEPSEEK_PRO_MODEL": "pro-model",
+            },
+            clear=False,
+        ):
+            result = enhance_questions_with_ai_solver(
+                questions=[sample_questions()[0]],
+                materials=materials(),
+                provider=provider,
+            )
+
+        q1 = result.questions[0]
+        self.assertEqual([call.model for call in provider.calls], ["fast-model", "pro-model"])
+        self.assertEqual(q1["ai_candidate_answer"], "B")
+        self.assertEqual(q1["ai_solver_final_model"], "fast-model")
+        self.assertIn("ai_solver_pro_recheck_failed", q1["parse_warnings"])
+        self.assertIn("ai_solver_pro_recheck_failed", result.stats["warnings"])
 
 
 if __name__ == "__main__":
