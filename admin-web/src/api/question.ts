@@ -87,6 +87,7 @@ export interface Question {
   ai_solver_recheck_result?: Record<string, unknown>;
   ai_solver_created_at?: string;
   ai_answer_conflict?: boolean;
+  ai_action_logs?: QuestionAiActionLog[];
   material?: {
     id: string;
     content: string;
@@ -107,6 +108,31 @@ export interface Question {
     source_anchor_text?: string | null;
     source_confidence?: number | null;
   } | null;
+}
+
+export type QuestionAiAction =
+  | 'accept_ai_answer'
+  | 'accept_ai_analysis'
+  | 'accept_ai_both'
+  | 'ignore_ai_suggestion';
+
+export interface QuestionAiActionLog {
+  id: string;
+  question_id: string;
+  action: QuestionAiAction;
+  field?: string;
+  old_value?: string;
+  new_value?: string;
+  ai_candidate_answer?: string;
+  ai_candidate_analysis?: string;
+  ai_solver_provider?: string;
+  ai_solver_model?: string;
+  ai_solver_first_model?: string;
+  ai_solver_final_model?: string;
+  ai_solver_rechecked?: boolean;
+  ai_answer_confidence?: number;
+  operator_id?: string;
+  created_at?: string;
 }
 
 export interface ReviewStats {
@@ -188,6 +214,10 @@ export interface AiRepairProposal {
 
 export function repairQuestionWithAi(id: string, data: Record<string, unknown> = {}) {
   return http.post<AiRepairProposal, AiRepairProposal>(`/admin/questions/${id}/ai-repair`, data);
+}
+
+export function applyQuestionAiAction(id: string, action: QuestionAiAction) {
+  return http.post<Question, Question>(`/admin/questions/${id}/ai-action`, { action });
 }
 
 export function reviewQuestionReadability(id: string) {

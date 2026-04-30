@@ -8,6 +8,7 @@ import {
   QuestionStatus,
   QuestionType,
 } from '../src/modules/question/entities/question.entity';
+import { QuestionAiAction } from '../src/modules/question/entities/question-ai-action-log.entity';
 import {
   MergeQuestionImagesDto,
   QuestionImageInsertPosition,
@@ -48,8 +49,18 @@ function createRepository<T extends Row>(rows: T[]) {
       }
       return found[0] ? clone(found[0]) : null;
     },
-    async find(options: { where?: Record<string, any>; order?: Record<string, 'ASC' | 'DESC'> } = {}) {
-      return clone(rows.filter((row) => !row.deleted_at && matchesWhere(row, options.where)));
+    async find(options: { where?: Record<string, any>; order?: Record<string, 'ASC' | 'DESC'>; take?: number } = {}) {
+      let found = rows.filter((row) => !row.deleted_at && matchesWhere(row, options.where));
+      if (options.order) {
+        const [field, direction] = Object.entries(options.order)[0];
+        found = found.sort((a, b) => {
+          if (a[field] === b[field]) return 0;
+          const result = a[field] > b[field] ? 1 : -1;
+          return direction === 'DESC' ? -result : result;
+        });
+      }
+      if (options.take != null) found = found.slice(0, options.take);
+      return clone(found);
     },
     async count(options: { where?: Record<string, any> } = {}) {
       return rows.filter((row) => !row.deleted_at && matchesWhere(row, options.where)).length;
@@ -117,6 +128,16 @@ function harness() {
       needs_review: false,
       parse_confidence: 0.92,
       parse_warnings: [],
+      answer: 'A',
+      analysis: '旧官方解析',
+      ai_candidate_answer: 'C',
+      ai_candidate_analysis: 'AI 候选解析',
+      ai_answer_confidence: 0.86,
+      ai_solver_provider: 'bailian-deepseek',
+      ai_solver_model: 'deepseek-r1',
+      ai_solver_first_model: 'fast-model',
+      ai_solver_final_model: 'pro-model',
+      ai_solver_rechecked: true,
       created_at: now,
     },
     {
@@ -157,9 +178,11 @@ function harness() {
     },
   ] as Question[];
   const materials: Row[] = [];
+  const aiActionLogs: Row[] = [];
   const configs: Row[] = [];
   const taskRepository = createRepository(tasks as Row[]);
   const questionRepository = createRepository(questions as unknown as Row[]);
+  const aiActionLogRepository = createRepository(aiActionLogs);
   const materialRepository = createRepository(materials);
   const bankRepository = createRepository(banks as Row[]);
   const configRepository = createRepository(configs);
@@ -171,6 +194,7 @@ function harness() {
   return {
     banks,
     questions,
+    aiActionLogs,
     configs,
     pdfService: new PdfService(
       taskRepository as any,
@@ -183,6 +207,7 @@ function harness() {
     ),
     questionService: new QuestionService(
       questionRepository as any,
+      aiActionLogRepository as any,
       createRepository([]) as any,
       materialRepository as any,
       bankRepository as any,
@@ -202,6 +227,10 @@ async function run() {
   await testAiRepairReturnsProposalWithoutPersisting();
   await testPdfSavePersistsVisionAiCorrectionFields();
   await testPdfSavePersistsAiSolverCandidateFields();
+  await testAcceptAiAnswerRecordsAuditLog();
+  await testAcceptAiAnalysisRecordsAuditLog();
+  await testAcceptAiBothRecordsAuditLog();
+  await testIgnoreAiSuggestionRecordsAuditLog();
 }
 
 async function testPublishSkipsLowConfidenceAndWarningQuestions() {
@@ -473,6 +502,71 @@ async function testPdfSavePersistsAiSolverCandidateFields() {
   assert.equal(saved.ai_solver_recheck_result.selected_result, 'pro');
   assert.equal(saved.ai_answer_conflict, true);
   assert.equal(saved.needs_review, true);
+}
+
+async function testAcceptAiAnswerRecordsAuditLog() {
+  const h = harness();
+
+  await h.questionService.applyAiAction('q1', { action: QuestionAiAction.AcceptAnswer }, 'admin-1');
+
+  assert.equal(h.questions[0].answer, 'C');
+  assert.equal(h.questions[0].analysis, '旧官方解析');
+  assert.equal(h.aiActionLogs.length, 1);
+  assert.equal(h.aiActionLogs[0].action, QuestionAiAction.AcceptAnswer);
+  assert.equal(h.aiActionLogs[0].field, 'answer');
+  assert.equal(h.aiActionLogs[0].old_value, 'A');
+  assert.equal(h.aiActionLogs[0].new_value, 'C');
+  assert.equal(h.aiActionLogs[0].operator_id, 'admin-1');
+  assert.equal(h.aiActionLogs[0].ai_solver_final_model, 'pro-model');
+}
+
+async function testAcceptAiAnalysisRecordsAuditLog() {
+  const h = harness();
+
+  await h.questionService.applyAiAction('q1', { action: QuestionAiAction.AcceptAnalysis }, 'admin-1');
+
+  assert.equal(h.questions[0].answer, 'A');
+  assert.equal(h.questions[0].analysis, 'AI 候选解析');
+  assert.equal(h.aiActionLogs.length, 1);
+  assert.equal(h.aiActionLogs[0].action, QuestionAiAction.AcceptAnalysis);
+  assert.equal(h.aiActionLogs[0].field, 'analysis');
+  assert.equal(h.aiActionLogs[0].old_value, '旧官方解析');
+  assert.equal(h.aiActionLogs[0].new_value, 'AI 候选解析');
+}
+
+async function testAcceptAiBothRecordsAuditLog() {
+  const h = harness();
+
+  await h.questionService.applyAiAction('q1', { action: QuestionAiAction.AcceptBoth }, 'admin-1');
+
+  assert.equal(h.questions[0].answer, 'C');
+  assert.equal(h.questions[0].analysis, 'AI 候选解析');
+  assert.equal(h.aiActionLogs.length, 1);
+  assert.equal(h.aiActionLogs[0].action, QuestionAiAction.AcceptBoth);
+  assert.equal(h.aiActionLogs[0].field, 'answer,analysis');
+  assert.deepEqual(JSON.parse(h.aiActionLogs[0].old_value), {
+    answer: 'A',
+    analysis: '旧官方解析',
+  });
+  assert.deepEqual(JSON.parse(h.aiActionLogs[0].new_value), {
+    answer: 'C',
+    analysis: 'AI 候选解析',
+  });
+}
+
+async function testIgnoreAiSuggestionRecordsAuditLog() {
+  const h = harness();
+
+  const result = await h.questionService.applyAiAction('q1', { action: QuestionAiAction.IgnoreSuggestion }, 'admin-1');
+
+  assert.equal(h.questions[0].answer, 'A');
+  assert.equal(h.questions[0].analysis, '旧官方解析');
+  assert.equal(h.aiActionLogs.length, 1);
+  assert.equal(h.aiActionLogs[0].action, QuestionAiAction.IgnoreSuggestion);
+  assert.equal(h.aiActionLogs[0].field, 'suggestion');
+  assert.equal(h.aiActionLogs[0].old_value, '');
+  assert.equal(h.aiActionLogs[0].new_value, '');
+  assert.equal((result as any).ai_action_logs[0].action, QuestionAiAction.IgnoreSuggestion);
 }
 
 run().catch((error) => {

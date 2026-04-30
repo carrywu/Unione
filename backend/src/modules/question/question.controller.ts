@@ -28,6 +28,7 @@ import {
   SplitQuestionDto,
 } from './dto/question-review.dto';
 import { QueryQuestionDto } from './dto/query-question.dto';
+import { QuestionAiActionDto } from './dto/question-ai-action.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QuestionService } from './question.service';
 
@@ -156,6 +157,16 @@ export class AdminQuestionController {
   @ApiOperation({ summary: 'AI 修复当前题候选结果' })
   repairWithAi(@Param('id') id: string, @Body() dto: AiRepairQuestionDto) {
     return this.questionService.repairQuestionWithAi(id, dto);
+  }
+
+  @Post(':id/ai-action')
+  @ApiOperation({ summary: '记录并应用 AI 建议操作' })
+  applyAiAction(
+    @Param('id') id: string,
+    @Body() dto: QuestionAiActionDto,
+    @CurrentUser('sub') operatorId?: string,
+  ) {
+    return this.questionService.applyAiAction(id, dto, operatorId);
   }
 
   @Post(':id/split')

@@ -12,6 +12,7 @@ import {
 import { QuestionBank } from '../../bank/entities/question-bank.entity';
 import { UserRecord } from '../../record/entities/user-record.entity';
 import { Material } from './material.entity';
+import { QuestionAiActionLog } from './question-ai-action-log.entity';
 
 export enum QuestionType {
   Single = 'single',
@@ -232,4 +233,7 @@ export class Question {
 
   @OneToMany(() => UserRecord, (record) => record.question)
   records: UserRecord[];
+
+  @OneToMany(() => QuestionAiActionLog, (log) => log.question)
+  ai_action_logs: QuestionAiActionLog[];
 }

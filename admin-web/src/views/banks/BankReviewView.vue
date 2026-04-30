@@ -260,10 +260,13 @@
               <el-input v-model="form.analysis" type="textarea" autosize @input="dirty = true" />
             </el-form-item>
 
-            <div v-if="aiSolverPanel.visible" class="ai-solver-panel" :class="{ conflict: aiSolverPanel.conflict, caution: aiSolverPanel.lowConfidence }">
+            <div v-if="aiSolverPanel.visible" class="ai-solver-panel" :class="{ conflict: aiSolverPanel.conflict, caution: aiSolverPanel.lowConfidence, ignored: aiSolverPanel.ignored }">
               <div class="ai-solver-head">
                 <strong>AI 候选解析</strong>
                 <div>
+                  <el-tag v-if="aiSolverPanel.ignored" size="small" type="info" effect="plain">
+                    已忽略
+                  </el-tag>
                   <el-tag v-if="aiSolverPanel.provider" size="small" effect="plain">
                     {{ aiSolverPanel.provider }}
                   </el-tag>
@@ -326,6 +329,12 @@
                   <div class="ai-analysis-text">{{ aiSolverPanel.analysis }}</div>
                 </el-collapse-item>
               </el-collapse>
+              <div v-if="aiSolverPanel.latestAction" class="ai-audit-line">
+                <span>最近一次 AI 操作</span>
+                <strong>{{ aiActionLabel(aiSolverPanel.latestAction.action) }}</strong>
+                <small>{{ formatActionTime(aiSolverPanel.latestAction.created_at) }}</small>
+                <small v-if="aiSolverPanel.latestAction.operator_id">操作人 {{ aiSolverPanel.latestAction.operator_id }}</small>
+              </div>
               <div class="ai-accept-actions">
                 <el-button size="small" :loading="aiAccepting === 'answer'" :disabled="!aiSolverPanel.answer" @click="handleAcceptAiSuggestion('answer')">
                   接受 AI 答案
@@ -335,6 +344,9 @@
                 </el-button>
                 <el-button size="small" type="primary" :loading="aiAccepting === 'both'" :disabled="!aiSolverPanel.answer && !aiSolverPanel.analysis" @click="handleAcceptAiSuggestion('both')">
                   同时接受答案和解析
+                </el-button>
+                <el-button size="small" :loading="aiAccepting === 'ignore'" :disabled="aiSolverPanel.ignored" @click="handleIgnoreAiSuggestion">
+                  忽略 AI 建议
                 </el-button>
               </div>
             </div>
@@ -449,6 +461,7 @@ import {
   mergeQuestionImages,
   moveQuestionImage,
   reorderQuestionImages,
+  applyQuestionAiAction,
   batchPublish,
   deleteQuestion,
   deleteQuestionImage,
@@ -458,6 +471,7 @@ import {
   repairQuestionWithAi,
   updateQuestion,
   type Question,
+  type QuestionAiAction,
   type ReviewStats,
 } from '@/api/question';
 import { addHeaderFooterBlacklist } from '@/api/pdf';
@@ -501,7 +515,7 @@ const deleting = ref(false);
 const batchLoading = ref(false);
 const imageBusy = ref(false);
 const aiRepairLoading = ref(false);
-const aiAccepting = ref<'' | 'answer' | 'analysis' | 'both'>('');
+const aiAccepting = ref<'' | 'answer' | 'analysis' | 'both' | 'ignore'>('');
 const blacklistLoading = ref(false);
 const dirty = ref(false);
 const blacklistText = ref('');
@@ -568,6 +582,7 @@ const aiSolverPanel = computed(() => {
   const knowledgePoints = stringArray(form.ai_knowledge_points);
   const riskFlags = stringArray(form.ai_risk_flags);
   const lowConfidence = Number.isFinite(confidence) && confidence < 0.7;
+  const latestAction = Array.isArray(form.ai_action_logs) ? form.ai_action_logs[0] : null;
   return {
     visible: Boolean(
       form.ai_candidate_answer
@@ -589,6 +604,8 @@ const aiSolverPanel = computed(() => {
     summary: String(form.ai_reasoning_summary || ''),
     confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
     lowConfidence,
+    latestAction,
+    ignored: latestAction?.action === 'ignore_ai_suggestion',
     knowledgePoints,
     riskFlags,
     conflict: Boolean(form.ai_answer_conflict),
@@ -623,12 +640,12 @@ async function fetchQuestions() {
     if (selected.value) {
       const fresh = questions.value.find((item) => item.id === selected.value?.id);
       if (fresh) {
-        fillForm(fresh);
+        await loadQuestionDetail(fresh.id);
         return;
       }
     }
     if (questions.value.length) {
-      fillForm(questions.value[0]);
+      await loadQuestionDetail(questions.value[0].id);
     } else {
       selected.value = null;
       Object.keys(form).forEach((key) => delete form[key]);
@@ -657,7 +674,14 @@ async function selectQuestion(question: Question) {
       type: 'warning',
     });
   }
-  fillForm(question);
+  await loadQuestionDetail(question.id);
+}
+
+async function loadQuestionDetail(questionId: string) {
+  const detail = await getQuestion(questionId);
+  const index = questions.value.findIndex((question) => question.id === detail.id);
+  if (index >= 0) questions.value[index] = detail;
+  fillForm(detail);
 }
 
 function fillForm(question: Question) {
@@ -805,17 +829,10 @@ async function handleSave() {
   }
 }
 
-// TODO: persist "ignore AI suggestion" once the backend exposes an audit field for ignored AI recommendations.
 async function handleAcceptAiSuggestion(scope: 'answer' | 'analysis' | 'both') {
   if (!selected.value) return;
-  const payload: Partial<Question> = {};
-  if ((scope === 'answer' || scope === 'both') && aiSolverPanel.value.answer) {
-    payload.answer = aiSolverPanel.value.answer;
-  }
-  if ((scope === 'analysis' || scope === 'both') && aiSolverPanel.value.analysis) {
-    payload.analysis = aiSolverPanel.value.analysis;
-  }
-  if (!Object.keys(payload).length) return;
+  const action = aiActionForScope(scope);
+  if (!action) return;
   const label = scope === 'answer' ? 'AI 答案' : scope === 'analysis' ? 'AI 解析' : 'AI 答案和解析';
   const dirtyNote = dirty.value ? '\n当前表单有未保存修改，采纳成功后会刷新当前题。' : '';
   await ElMessageBox.confirm(`确认用${label}覆盖当前题目的对应字段？${dirtyNote}`, '采纳 AI 建议', {
@@ -825,14 +842,57 @@ async function handleAcceptAiSuggestion(scope: 'answer' | 'analysis' | 'both') {
   });
   aiAccepting.value = scope;
   try {
-    await updateQuestion(selected.value.id, payload);
+    const detail = await applyQuestionAiAction(selected.value.id, action);
     ElMessage.success(`已采纳${label}`);
     dirty.value = false;
-    await refreshSelected();
+    const index = questions.value.findIndex((question) => question.id === detail.id);
+    if (index >= 0) questions.value[index] = detail;
+    fillForm(detail);
     await fetchStats();
   } finally {
     aiAccepting.value = '';
   }
+}
+
+async function handleIgnoreAiSuggestion() {
+  if (!selected.value) return;
+  await ElMessageBox.confirm('确认忽略当前 AI 建议？该操作只记录审计日志，不会修改答案或解析。', '忽略 AI 建议', {
+    type: 'warning',
+    confirmButtonText: '确认忽略',
+    cancelButtonText: '取消',
+  });
+  aiAccepting.value = 'ignore';
+  try {
+    const detail = await applyQuestionAiAction(selected.value.id, 'ignore_ai_suggestion');
+    ElMessage.success('已记录忽略 AI 建议');
+    dirty.value = false;
+    const index = questions.value.findIndex((question) => question.id === detail.id);
+    if (index >= 0) questions.value[index] = detail;
+    fillForm(detail);
+  } finally {
+    aiAccepting.value = '';
+  }
+}
+
+function aiActionForScope(scope: 'answer' | 'analysis' | 'both'): QuestionAiAction | '' {
+  if (scope === 'answer') return aiSolverPanel.value.answer ? 'accept_ai_answer' : '';
+  if (scope === 'analysis') return aiSolverPanel.value.analysis ? 'accept_ai_analysis' : '';
+  return aiSolverPanel.value.answer || aiSolverPanel.value.analysis ? 'accept_ai_both' : '';
+}
+
+function aiActionLabel(action: string) {
+  return {
+    accept_ai_answer: '接受 AI 答案',
+    accept_ai_analysis: '接受 AI 解析',
+    accept_ai_both: '同时接受答案和解析',
+    ignore_ai_suggestion: '忽略 AI 建议',
+  }[action] || action;
+}
+
+function formatActionTime(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 async function handlePublish() {
@@ -851,10 +911,7 @@ async function handlePublish() {
 
 async function refreshSelected() {
   if (!selected.value) return;
-  const detail = await getQuestion(selected.value.id);
-  const index = questions.value.findIndex((question) => question.id === detail.id);
-  if (index >= 0) questions.value[index] = detail;
-  fillForm(detail);
+  await loadQuestionDetail(selected.value.id);
 }
 
 async function handleDeleteImage(index: number) {
@@ -1425,6 +1482,11 @@ onMounted(async () => {
   background: #fffaf2;
 }
 
+.ai-solver-panel.ignored {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
 .ai-solver-head {
   display: flex;
   align-items: center;
@@ -1530,6 +1592,21 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.ai-audit-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--admin-border);
+  color: var(--admin-text-faint);
+  font-size: 12px;
+}
+
+.ai-audit-line strong {
+  color: var(--admin-text);
 }
 
 .full {

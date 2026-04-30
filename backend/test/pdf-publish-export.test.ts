@@ -412,6 +412,7 @@ function createHarness() {
   const questionService = new QuestionService(
     questionRepository as any,
     createRepository([]) as any,
+    createRepository([]) as any,
     materialRepository as any,
     bankRepository as any,
     taskRepository as any,

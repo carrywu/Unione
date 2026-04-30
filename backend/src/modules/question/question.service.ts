@@ -13,6 +13,10 @@ import { ParseTask } from '../pdf/entities/parse-task.entity';
 import { SystemConfig } from '../system/entities/system-config.entity';
 import { Material } from './entities/material.entity';
 import {
+  QuestionAiAction,
+  QuestionAiActionLog,
+} from './entities/question-ai-action-log.entity';
+import {
   Question,
   QuestionReviewStatus,
   QuestionStatus,
@@ -30,6 +34,7 @@ import {
   SplitQuestionDto,
 } from './dto/question-review.dto';
 import { QueryQuestionDto } from './dto/query-question.dto';
+import { QuestionAiActionDto } from './dto/question-ai-action.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 
 @Injectable()
@@ -37,6 +42,8 @@ export class QuestionService {
   constructor(
     @InjectRepository(Question)
     private readonly questionRepository: Repository<Question>,
+    @InjectRepository(QuestionAiActionLog)
+    private readonly aiActionLogRepository: Repository<QuestionAiActionLog>,
     @InjectRepository(UserRecord)
     private readonly recordRepository: Repository<UserRecord>,
     @InjectRepository(Material)
@@ -112,7 +119,7 @@ export class QuestionService {
       relations: ['material'],
     });
     if (!question) throw new NotFoundException('题目不存在');
-    const [answerCount, correctCount, task] = await Promise.all([
+    const [answerCount, correctCount, task, aiActionLogs] = await Promise.all([
       this.recordRepository.count({ where: { question_id: id } }),
       this.recordRepository.count({
         where: { question_id: id, is_correct: true },
@@ -120,9 +127,15 @@ export class QuestionService {
       question.parse_task_id
         ? this.taskRepository.findOne({ where: { id: question.parse_task_id } })
         : Promise.resolve(null),
+      this.aiActionLogRepository.find({
+        where: { question_id: id },
+        order: { created_at: 'DESC' },
+        take: 5,
+      }),
     ]);
     return {
       ...this.normalizeQuestionForRead(question),
+      ai_action_logs: aiActionLogs,
       pdf_source: task
         ? {
             task_id: task.id,
@@ -224,6 +237,83 @@ export class QuestionService {
       );
     }
     return saved;
+  }
+
+  async applyAiAction(
+    id: string,
+    dto: QuestionAiActionDto,
+    operatorId?: string,
+  ) {
+    const question = await this.questionRepository.findOne({ where: { id } });
+    if (!question) {
+      throw new NotFoundException('题目不存在');
+    }
+
+    const patch: Partial<Question> = {};
+    let field = 'suggestion';
+    let oldValue = '';
+    let newValue = '';
+
+    if (dto.action === QuestionAiAction.AcceptAnswer) {
+      if (!question.ai_candidate_answer) {
+        throw new BadRequestException('缺少 AI 候选答案');
+      }
+      field = 'answer';
+      oldValue = question.answer || '';
+      newValue = question.ai_candidate_answer;
+      patch.answer = question.ai_candidate_answer;
+    } else if (dto.action === QuestionAiAction.AcceptAnalysis) {
+      if (!question.ai_candidate_analysis) {
+        throw new BadRequestException('缺少 AI 候选解析');
+      }
+      field = 'analysis';
+      oldValue = question.analysis || '';
+      newValue = question.ai_candidate_analysis;
+      patch.analysis = question.ai_candidate_analysis;
+    } else if (dto.action === QuestionAiAction.AcceptBoth) {
+      if (!question.ai_candidate_answer && !question.ai_candidate_analysis) {
+        throw new BadRequestException('缺少 AI 候选答案或解析');
+      }
+      field = 'answer,analysis';
+      oldValue = JSON.stringify({
+        answer: question.answer || '',
+        analysis: question.analysis || '',
+      });
+      newValue = JSON.stringify({
+        answer: question.ai_candidate_answer || question.answer || '',
+        analysis: question.ai_candidate_analysis || question.analysis || '',
+      });
+      if (question.ai_candidate_answer) patch.answer = question.ai_candidate_answer;
+      if (question.ai_candidate_analysis) patch.analysis = question.ai_candidate_analysis;
+    } else if (dto.action !== QuestionAiAction.IgnoreSuggestion) {
+      throw new BadRequestException('不支持的 AI 操作');
+    }
+
+    await this.aiActionLogRepository.save(
+      this.aiActionLogRepository.create({
+        question_id: question.id,
+        action: dto.action,
+        field,
+        old_value: oldValue,
+        new_value: newValue,
+        ai_candidate_answer: question.ai_candidate_answer || null,
+        ai_candidate_analysis: question.ai_candidate_analysis || null,
+        ai_solver_provider: question.ai_solver_provider || null,
+        ai_solver_model: question.ai_solver_model || null,
+        ai_solver_first_model: question.ai_solver_first_model || null,
+        ai_solver_final_model: question.ai_solver_final_model || null,
+        ai_solver_rechecked: Boolean(question.ai_solver_rechecked),
+        ai_answer_confidence: question.ai_answer_confidence ?? null,
+        operator_id: operatorId || null,
+      }),
+    );
+
+    if (Object.keys(patch).length) {
+      Object.assign(question, patch);
+      await this.questionRepository.save(question);
+    }
+
+    return this.detailAdmin(id);
   }
 
   async reviewReadability(id: string) {

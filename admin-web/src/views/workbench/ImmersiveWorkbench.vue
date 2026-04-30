@@ -170,10 +170,13 @@
             </div>
           </div>
 
-          <div v-if="aiSolverAssist.visible" class="ai-solver-panel" :class="{ conflict: aiSolverAssist.conflict, caution: aiSolverAssist.lowConfidence }">
+          <div v-if="aiSolverAssist.visible" class="ai-solver-panel" :class="{ conflict: aiSolverAssist.conflict, caution: aiSolverAssist.lowConfidence, ignored: aiSolverAssist.ignored }">
             <div class="ai-solver-head">
               <strong>AI 候选解析</strong>
               <div>
+                <el-tag v-if="aiSolverAssist.ignored" size="small" type="info" effect="plain">
+                  已忽略
+                </el-tag>
                 <el-tag v-if="aiSolverAssist.provider" size="small" effect="plain">
                   {{ aiSolverAssist.provider }}
                 </el-tag>
@@ -242,6 +245,12 @@
                 <div class="ai-analysis-text">{{ aiSolverAssist.analysis }}</div>
               </el-collapse-item>
             </el-collapse>
+            <div v-if="aiSolverAssist.latestAction" class="ai-audit-line">
+              <span>最近一次 AI 操作</span>
+              <strong>{{ aiActionLabel(aiSolverAssist.latestAction.action) }}</strong>
+              <small>{{ formatActionTime(aiSolverAssist.latestAction.created_at) }}</small>
+              <small v-if="aiSolverAssist.latestAction.operator_id">操作人 {{ aiSolverAssist.latestAction.operator_id }}</small>
+            </div>
             <div class="ai-accept-actions">
               <el-button size="small" :loading="aiAccepting === 'answer'" :disabled="!aiSolverAssist.answer" @click="handleAcceptAiSuggestion('answer')">
                 接受 AI 答案
@@ -251,6 +260,9 @@
               </el-button>
               <el-button size="small" type="primary" :loading="aiAccepting === 'both'" :disabled="!aiSolverAssist.answer && !aiSolverAssist.analysis" @click="handleAcceptAiSuggestion('both')">
                 同时接受答案和解析
+              </el-button>
+              <el-button size="small" :loading="aiAccepting === 'ignore'" :disabled="aiSolverAssist.ignored" @click="handleIgnoreAiSuggestion">
+                忽略 AI 建议
               </el-button>
             </div>
           </div>
@@ -372,7 +384,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowLeft, Delete, DocumentChecked, Picture, Plus, Refresh, RefreshLeft, Search } from '@element-plus/icons-vue';
 import { getBanks, type Bank } from '@/api/bank';
 import { pdfProxyUrl } from '@/api/pdf';
-import { getQuestion, getQuestions, updateQuestion, type Question } from '@/api/question';
+import { applyQuestionAiAction, getQuestion, getQuestions, updateQuestion, type Question, type QuestionAiAction } from '@/api/question';
 import PdfLocator from '@/components/PdfLocator.vue';
 import { buildSourceHighlights, sourcePageForQuestion } from '@/utils/pdfHighlights';
 
@@ -412,7 +424,7 @@ const lastSnapshot = ref<QuestionData | null>(null);
 const bankLoading = ref(false);
 const workbenchLoading = ref(false);
 const saving = ref(false);
-const aiAccepting = ref<'' | 'answer' | 'analysis' | 'both'>('');
+const aiAccepting = ref<'' | 'answer' | 'analysis' | 'both' | 'ignore'>('');
 const banks = ref<Bank[]>([]);
 const questions = ref<Question[]>([]);
 const selectedQuestion = ref<Question | null>(null);
@@ -477,6 +489,7 @@ const aiSolverAssist = computed(() => {
   const knowledgePoints = question?.ai_knowledge_points || [];
   const riskFlags = question?.ai_risk_flags || [];
   const lowConfidence = Number.isFinite(confidence) && confidence < 0.7;
+  const latestAction = question?.ai_action_logs?.[0] || null;
   return {
     visible: Boolean(
       question?.ai_candidate_answer
@@ -498,6 +511,8 @@ const aiSolverAssist = computed(() => {
     summary: question?.ai_reasoning_summary || '',
     confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
     lowConfidence,
+    latestAction,
+    ignored: latestAction?.action === 'ignore_ai_suggestion',
     knowledgePoints,
     riskFlags,
     conflict: Boolean(question?.ai_answer_conflict),
@@ -769,14 +784,8 @@ async function markStemReviewed() {
 
 async function handleAcceptAiSuggestion(scope: 'answer' | 'analysis' | 'both') {
   if (!selectedQuestion.value) return;
-  const payload: Partial<Question> = {};
-  if ((scope === 'answer' || scope === 'both') && aiSolverAssist.value.answer) {
-    payload.answer = aiSolverAssist.value.answer;
-  }
-  if ((scope === 'analysis' || scope === 'both') && aiSolverAssist.value.analysis) {
-    payload.analysis = aiSolverAssist.value.analysis;
-  }
-  if (!Object.keys(payload).length) return;
+  const action = aiActionForScope(scope);
+  if (!action) return;
   const label = scope === 'answer' ? 'AI 答案' : scope === 'analysis' ? 'AI 解析' : 'AI 答案和解析';
   await ElMessageBox.confirm(`确认用${label}覆盖当前题目的对应字段？此操作不会自动发布题目。`, '采纳 AI 建议', {
     type: aiSolverAssist.value.conflict || aiSolverAssist.value.lowConfidence ? 'warning' : 'info',
@@ -785,12 +794,52 @@ async function handleAcceptAiSuggestion(scope: 'answer' | 'analysis' | 'both') {
   });
   aiAccepting.value = scope;
   try {
-    await updateQuestion(selectedQuestion.value.id, payload);
-    await loadQuestion(selectedQuestion.value.id);
+    const detail = await applyQuestionAiAction(selectedQuestion.value.id, action);
+    selectedQuestion.value = detail;
+    hydrateQuestionData(detail);
     ElMessage.success(`已采纳${label}`);
   } finally {
     aiAccepting.value = '';
   }
+}
+
+async function handleIgnoreAiSuggestion() {
+  if (!selectedQuestion.value) return;
+  await ElMessageBox.confirm('确认忽略当前 AI 建议？该操作只记录审计日志，不会修改答案或解析。', '忽略 AI 建议', {
+    type: 'warning',
+    confirmButtonText: '确认忽略',
+    cancelButtonText: '取消',
+  });
+  aiAccepting.value = 'ignore';
+  try {
+    const detail = await applyQuestionAiAction(selectedQuestion.value.id, 'ignore_ai_suggestion');
+    selectedQuestion.value = detail;
+    hydrateQuestionData(detail);
+    ElMessage.success('已记录忽略 AI 建议');
+  } finally {
+    aiAccepting.value = '';
+  }
+}
+
+function aiActionForScope(scope: 'answer' | 'analysis' | 'both'): QuestionAiAction | '' {
+  if (scope === 'answer') return aiSolverAssist.value.answer ? 'accept_ai_answer' : '';
+  if (scope === 'analysis') return aiSolverAssist.value.analysis ? 'accept_ai_analysis' : '';
+  return aiSolverAssist.value.answer || aiSolverAssist.value.analysis ? 'accept_ai_both' : '';
+}
+
+function aiActionLabel(action: string) {
+  return {
+    accept_ai_answer: '接受 AI 答案',
+    accept_ai_analysis: '接受 AI 解析',
+    accept_ai_both: '同时接受答案和解析',
+    ignore_ai_suggestion: '忽略 AI 建议',
+  }[action] || action;
+}
+
+function formatActionTime(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 onMounted(fetchBanks);
@@ -1148,6 +1197,11 @@ h1 {
   background: #fffaf2;
 }
 
+.ai-solver-panel.ignored {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
 .ai-solver-head {
   display: flex;
   align-items: center;
@@ -1234,6 +1288,21 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.ai-audit-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid #dbe4f0;
+  color: #64748b;
+  font-size: 12px;
+  padding-top: 8px;
+}
+
+.ai-audit-line strong {
+  color: #0f172a;
 }
 
 .image-editor {
