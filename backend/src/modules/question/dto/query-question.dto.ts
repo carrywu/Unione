@@ -37,6 +37,12 @@ export class QueryQuestionDto extends PaginationDto {
   @IsString()
   keyword?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  include_ai_action_logs?: boolean;
+
   @ApiPropertyOptional({
     enum: [
       'index_num',

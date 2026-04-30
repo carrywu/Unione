@@ -66,7 +66,7 @@
             <div class="bank-card-actions">
               <el-button @click="router.push(`/banks/${bank.id}/questions`)">题目列表</el-button>
               <el-button @click="router.push(`/banks/${bank.id}/review`)">审核</el-button>
-              <el-button type="primary" @click="enterWorkbench(bank.id)">题干审核</el-button>
+              <el-button type="primary" @click="enterWorkbench(bank.id)">制卷工作台</el-button>
             </div>
           </article>
         </div>
@@ -80,7 +80,7 @@
         <div>
           <h1>{{ activeBank?.name || questionData.title }}</h1>
           <div class="header-meta">
-            <el-tag effect="plain" type="info">题干审核</el-tag>
+            <el-tag effect="plain" type="info">制卷审核</el-tag>
             <el-tag effect="plain">{{ activeBank?.subject || '当前题库' }}</el-tag>
             <span class="save-state" :class="saveState">{{ saveStateText }}</span>
           </div>
@@ -128,14 +128,69 @@
       <section class="pane editor-pane">
         <div class="pane-head">
           <div>
-            <strong>题干结构审核</strong>
-            <span>只校对题干、选项、图片和定位，答案后续匹配</span>
+            <strong>题目结构与 AI 审核</strong>
+            <span>在制卷流程内校对题干、选项、图片、答案和 AI 建议</span>
           </div>
         </div>
 
         <el-form class="editor-form" label-position="top">
           <div class="stage-note">
-            当前阶段不录入正确答案，题干通过后仍保留草稿状态，等待答案册匹配后再发布练习。
+            制卷时可直接处理 AI 候选答案和解析；采纳或忽略都会写入审计日志，保存前会提示未处理的 AI 风险题。
+          </div>
+
+          <section class="paper-question-queue">
+            <div class="queue-head">
+              <div>
+                <strong>制卷题目队列</strong>
+                <span>{{ filteredWorkbenchQuestions.length }} / {{ questions.length }} 题</span>
+              </div>
+              <div class="queue-filters">
+                <button
+                  v-for="filter in aiQueueFilters"
+                  :key="filter.value"
+                  type="button"
+                  :class="{ active: aiQueueFilter === filter.value }"
+                  @click="aiQueueFilter = filter.value"
+                >
+                  {{ filter.label }}
+                </button>
+              </div>
+            </div>
+            <div class="queue-list">
+              <button
+                v-for="question in filteredWorkbenchQuestions"
+                :key="question.id"
+                type="button"
+                class="queue-question"
+                :class="{ active: selectedQuestion?.id === question.id, risk: hasUnresolvedAiRisk(question) }"
+                @click="selectQueueQuestion(question)"
+              >
+                <div class="queue-question-main">
+                  <strong>{{ question.index_num }}.</strong>
+                  <span>{{ questionBrief(question) }}</span>
+                </div>
+                <div class="queue-ai-tags">
+                  <span v-if="!hasAiSuggestion(question)" class="queue-tag muted">无 AI 建议</span>
+                  <span v-if="question.answer" class="queue-tag">当前 {{ question.answer }}</span>
+                  <span v-if="question.ai_candidate_answer" class="queue-tag candidate">AI {{ question.ai_candidate_answer }}</span>
+                  <span v-if="aiConfidenceText(question)" class="queue-tag" :class="{ warning: isLowAiConfidence(question) }">{{ aiConfidenceText(question) }}</span>
+                  <span v-if="question.ai_answer_conflict" class="queue-tag danger">答案冲突</span>
+                  <span v-if="question.ai_solver_rechecked" class="queue-tag warning">Pro 复核</span>
+                  <span v-if="isAiIgnored(question)" class="queue-tag muted">已忽略</span>
+                  <span v-if="latestAiAction(question)" class="queue-tag muted">{{ aiActionLabel(latestAiAction(question)?.action || '') }}</span>
+                  <span v-if="question.ai_solver_final_model || question.ai_solver_model" class="queue-tag model">{{ question.ai_solver_final_model || question.ai_solver_model }}</span>
+                  <span v-for="flag in aiRiskFlags(question)" :key="flag" class="queue-tag warning">{{ flag }}</span>
+                </div>
+              </button>
+            </div>
+          </section>
+
+          <div v-if="selectedQuestion?.answer || selectedQuestion?.analysis" class="current-answer-panel">
+            <div>
+              <span>当前答案</span>
+              <strong>{{ selectedQuestion?.answer || '-' }}</strong>
+            </div>
+            <p v-if="selectedQuestion?.analysis">{{ selectedQuestion.analysis }}</p>
           </div>
 
           <div v-if="aiAssistance.visible" class="ai-assist-panel">
@@ -250,6 +305,14 @@
               <strong>{{ aiActionLabel(aiSolverAssist.latestAction.action) }}</strong>
               <small>{{ formatActionTime(aiSolverAssist.latestAction.created_at) }}</small>
               <small v-if="aiSolverAssist.latestAction.operator_id">操作人 {{ aiSolverAssist.latestAction.operator_id }}</small>
+            </div>
+            <div v-if="aiSolverAssist.actionLogs.length" class="ai-action-history">
+              <strong>AI 操作记录</strong>
+              <div v-for="log in aiSolverAssist.actionLogs" :key="log.id" class="ai-history-row">
+                <span>{{ aiActionLabel(log.action) }}</span>
+                <small>{{ formatActionTime(log.created_at) }}</small>
+                <small v-if="log.operator_id">操作人 {{ log.operator_id }}</small>
+              </div>
             </div>
             <div class="ai-accept-actions">
               <el-button size="small" :loading="aiAccepting === 'answer'" :disabled="!aiSolverAssist.answer" @click="handleAcceptAiSuggestion('answer')">
@@ -390,6 +453,7 @@ import { buildSourceHighlights, sourcePageForQuestion } from '@/utils/pdfHighlig
 
 type OptionKey = 'A' | 'B' | 'C' | 'D';
 type ImageSlot = 'stem' | 'options';
+type AiQueueFilter = 'all' | 'conflict' | 'low_confidence' | 'rechecked' | 'ignored' | 'unreviewed' | 'high_risk';
 
 interface QuestionOption {
   key: OptionKey;
@@ -429,6 +493,7 @@ const banks = ref<Bank[]>([]);
 const questions = ref<Question[]>([]);
 const selectedQuestion = ref<Question | null>(null);
 const bankKeyword = ref('');
+const aiQueueFilter = ref<AiQueueFilter>('all');
 const currentPdfPage = ref(1);
 
 const selectedBankId = computed(() => String(route.query.bankId || ''));
@@ -449,6 +514,16 @@ const questionData = reactive<QuestionData>({
   ],
   images: [],
 });
+
+const aiQueueFilters: Array<{ label: string; value: AiQueueFilter }> = [
+  { label: '全部', value: 'all' },
+  { label: '答案冲突', value: 'conflict' },
+  { label: '低置信度', value: 'low_confidence' },
+  { label: 'Pro 复核', value: 'rechecked' },
+  { label: '已忽略', value: 'ignored' },
+  { label: '未处理', value: 'unreviewed' },
+  { label: '高风险/缺上下文', value: 'high_risk' },
+];
 
 let saveTimer: number | undefined;
 let hydratingQuestion = false;
@@ -489,7 +564,8 @@ const aiSolverAssist = computed(() => {
   const knowledgePoints = question?.ai_knowledge_points || [];
   const riskFlags = question?.ai_risk_flags || [];
   const lowConfidence = Number.isFinite(confidence) && confidence < 0.7;
-  const latestAction = question?.ai_action_logs?.[0] || null;
+  const actionLogs = question?.ai_action_logs || [];
+  const latestAction = actionLogs[0] || null;
   return {
     visible: Boolean(
       question?.ai_candidate_answer
@@ -512,12 +588,23 @@ const aiSolverAssist = computed(() => {
     confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
     lowConfidence,
     latestAction,
+    actionLogs,
     ignored: latestAction?.action === 'ignore_ai_suggestion',
     knowledgePoints,
     riskFlags,
     conflict: Boolean(question?.ai_answer_conflict),
   };
 });
+const filteredWorkbenchQuestions = computed(() => questions.value.filter((question) => {
+  if (aiQueueFilter.value === 'all') return true;
+  if (aiQueueFilter.value === 'conflict') return Boolean(question.ai_answer_conflict);
+  if (aiQueueFilter.value === 'low_confidence') return isLowAiConfidence(question);
+  if (aiQueueFilter.value === 'rechecked') return Boolean(question.ai_solver_rechecked);
+  if (aiQueueFilter.value === 'ignored') return isAiIgnored(question);
+  if (aiQueueFilter.value === 'unreviewed') return hasAiSuggestion(question) && !latestAiAction(question);
+  return isHighRiskAiQuestion(question);
+}));
+const unresolvedAiRiskQuestions = computed(() => questions.value.filter(hasUnresolvedAiRisk));
 
 async function fetchBanks() {
   bankLoading.value = true;
@@ -568,7 +655,7 @@ watch(
 async function fetchWorkbenchQuestions(bankId: string) {
   workbenchLoading.value = true;
   try {
-    const result = await getQuestions({ bankId, page: 1, pageSize: 100 });
+    const result = await getQuestions({ bankId, page: 1, pageSize: 100, include_ai_action_logs: true });
     questions.value = result.list;
     const requestedQuestionId = String(route.query.questionId || '');
     const first = requestedQuestionId
@@ -588,8 +675,14 @@ async function fetchWorkbenchQuestions(bankId: string) {
 async function loadQuestion(questionId: string) {
   const detail = await getQuestion(questionId);
   selectedQuestion.value = detail;
+  replaceQuestionInList(detail);
   hydrateQuestionData(detail);
   currentPdfPage.value = Math.max(1, Number(sourcePage.value) || 1);
+}
+
+async function selectQueueQuestion(question: Question) {
+  await loadQuestion(question.id);
+  void router.replace({ path: '/workbench', query: { bankId: selectedBankId.value, questionId: question.id } });
 }
 
 async function selectQuestionByOffset(offset: number) {
@@ -675,6 +768,66 @@ function imageAiStatus(imageId: string) {
   });
 }
 
+function replaceQuestionInList(question: Question) {
+  const index = questions.value.findIndex((item) => item.id === question.id);
+  if (index >= 0) {
+    questions.value[index] = { ...questions.value[index], ...question };
+  }
+}
+
+function questionBrief(question: Question) {
+  const content = String(question.content || '暂无题干').replace(/\s+/g, ' ').trim();
+  return content.length > 72 ? `${content.slice(0, 72)}...` : content;
+}
+
+function hasAiSuggestion(question: Question | null | undefined) {
+  return Boolean(
+    question?.ai_candidate_answer
+      || question?.ai_candidate_analysis
+      || question?.ai_review_notes
+      || question?.ai_corrections?.length
+      || question?.ai_solver_provider,
+  );
+}
+
+function latestAiAction(question: Question | null | undefined) {
+  return question?.ai_action_logs?.[0] || null;
+}
+
+function isAiIgnored(question: Question | null | undefined) {
+  return latestAiAction(question)?.action === 'ignore_ai_suggestion';
+}
+
+function aiRiskFlags(question: Question | null | undefined) {
+  return Array.isArray(question?.ai_risk_flags) ? question.ai_risk_flags.map(String).filter(Boolean) : [];
+}
+
+function aiConfidenceText(question: Question | null | undefined) {
+  const confidence = Number(question?.ai_answer_confidence);
+  return Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : '';
+}
+
+function isLowAiConfidence(question: Question | null | undefined) {
+  const confidence = Number(question?.ai_answer_confidence);
+  return Number.isFinite(confidence) && confidence < 0.7;
+}
+
+function isHighRiskAiQuestion(question: Question | null | undefined) {
+  const flags = new Set(aiRiskFlags(question));
+  return Boolean(flags.has('missing_context') || flags.has('requires_table') || flags.has('requires_chart'));
+}
+
+function hasUnresolvedAiRisk(question: Question | null | undefined) {
+  if (!question || latestAiAction(question)) return false;
+  return Boolean(
+    question.ai_answer_conflict
+      || isLowAiConfidence(question)
+      || isHighRiskAiQuestion(question)
+      || question.ai_candidate_answer
+      || question.ai_candidate_analysis,
+  );
+}
+
 function openImagePicker() {
   imageInputRef.value?.click();
 }
@@ -736,8 +889,8 @@ function buildQuestionPayload(needsReview = selectedQuestion.value?.needs_review
     option_b: questionData.options.find((option) => option.key === 'B')?.text || '',
     option_c: questionData.options.find((option) => option.key === 'C')?.text || '',
     option_d: questionData.options.find((option) => option.key === 'D')?.text || '',
-    answer: '',
-    analysis: '',
+    answer: selectedQuestion.value?.answer || '',
+    analysis: selectedQuestion.value?.analysis || '',
     images,
     status: 'draft' as const,
     needs_review: needsReview,
@@ -746,6 +899,8 @@ function buildQuestionPayload(needsReview = selectedQuestion.value?.needs_review
 
 async function manualSave() {
   if (!selectedQuestion.value) return;
+  const shouldContinue = await confirmUnresolvedAiRisks('保存草稿');
+  if (!shouldContinue) return;
   saveState.value = 'saving';
   window.clearTimeout(saveTimer);
   saving.value = true;
@@ -772,6 +927,8 @@ async function markNeedsReview() {
 
 async function markStemReviewed() {
   if (!selectedQuestion.value) return;
+  const shouldContinue = await confirmUnresolvedAiRisks('题干审核通过');
+  if (!shouldContinue) return;
   saving.value = true;
   try {
     await updateQuestion(selectedQuestion.value.id, buildQuestionPayload(false));
@@ -796,6 +953,7 @@ async function handleAcceptAiSuggestion(scope: 'answer' | 'analysis' | 'both') {
   try {
     const detail = await applyQuestionAiAction(selectedQuestion.value.id, action);
     selectedQuestion.value = detail;
+    replaceQuestionInList(detail);
     hydrateQuestionData(detail);
     ElMessage.success(`已采纳${label}`);
   } finally {
@@ -814,10 +972,30 @@ async function handleIgnoreAiSuggestion() {
   try {
     const detail = await applyQuestionAiAction(selectedQuestion.value.id, 'ignore_ai_suggestion');
     selectedQuestion.value = detail;
+    replaceQuestionInList(detail);
     hydrateQuestionData(detail);
     ElMessage.success('已记录忽略 AI 建议');
   } finally {
     aiAccepting.value = '';
+  }
+}
+
+async function confirmUnresolvedAiRisks(actionLabelText: string) {
+  const risky = unresolvedAiRiskQuestions.value;
+  if (!risky.length) return true;
+  try {
+    await ElMessageBox.confirm(
+      `当前试卷还有 ${risky.length} 道 AI 风险题未处理，是否继续${actionLabelText}？`,
+      'AI 风险未处理',
+      {
+        type: 'warning',
+        confirmButtonText: '继续',
+        cancelButtonText: '返回处理',
+      },
+    );
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -1108,6 +1286,183 @@ h1 {
   padding: 10px 12px;
 }
 
+.paper-question-queue {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  border: 1px solid #dbe2ee;
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 12px;
+}
+
+.queue-head {
+  display: grid;
+  gap: 10px;
+}
+
+.queue-head > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.queue-head strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.queue-head span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.queue-filters,
+.queue-ai-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.queue-filters button {
+  min-height: 28px;
+  border: 1px solid #dbe2ee;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.queue-filters button.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.queue-list {
+  display: grid;
+  max-height: 260px;
+  overflow: auto;
+  gap: 8px;
+}
+
+.queue-question {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid #e1e8f2;
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  padding: 10px;
+  text-align: left;
+}
+
+.queue-question:hover,
+.queue-question.active {
+  border-color: #2563eb;
+  background: #f4f8ff;
+}
+
+.queue-question.risk:not(.active) {
+  border-color: #fed7aa;
+  background: #fffaf2;
+}
+
+.queue-question-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.queue-question-main strong {
+  color: #111827;
+}
+
+.queue-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border: 1px solid #dbe2ee;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 2px 7px;
+}
+
+.queue-tag.candidate {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.queue-tag.danger {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
+.queue-tag.warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.queue-tag.muted {
+  color: #64748b;
+}
+
+.queue-tag.model {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current-answer-panel {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  border: 1px solid #dbe2ee;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.current-answer-panel div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.current-answer-panel span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.current-answer-panel strong {
+  color: #111827;
+  font-size: 16px;
+}
+
+.current-answer-panel p {
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
 .ai-assist-panel {
   display: grid;
   gap: 10px;
@@ -1303,6 +1658,32 @@ h1 {
 
 .ai-audit-line strong {
   color: #0f172a;
+}
+
+.ai-action-history {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid #dbe4f0;
+  padding-top: 8px;
+}
+
+.ai-action-history > strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.ai-history-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.ai-history-row span {
+  color: #334155;
+  font-weight: 650;
 }
 
 .image-editor {

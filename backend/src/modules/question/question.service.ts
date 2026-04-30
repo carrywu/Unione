@@ -81,6 +81,7 @@ export class QuestionService {
       delete safeQuestion.ai_solver_recheck_result;
       delete safeQuestion.ai_solver_created_at;
       delete safeQuestion.ai_answer_conflict;
+      delete safeQuestion.ai_action_logs;
       return safeQuestion as Question;
     });
     return result;
@@ -990,8 +991,18 @@ export class QuestionService {
         keyword: `%${query.keyword}%`,
       });
     }
-
     const [list, total] = await qb.getManyAndCount();
+    if (query.include_ai_action_logs && list.length) {
+      const logs = await this.aiActionLogRepository.find({
+        where: { question_id: In(list.map((question) => question.id)) },
+        order: { created_at: 'DESC' },
+      });
+      for (const question of list) {
+        question.ai_action_logs = logs
+          .filter((log) => log.question_id === question.id)
+          .slice(0, 5);
+      }
+    }
     return {
       list: list.map((question) => this.normalizeQuestionForRead(question)),
       total,
