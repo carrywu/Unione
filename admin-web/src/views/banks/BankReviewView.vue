@@ -260,7 +260,7 @@
               <el-input v-model="form.analysis" type="textarea" autosize @input="dirty = true" />
             </el-form-item>
 
-            <div v-if="aiSolverPanel.visible" class="ai-solver-panel" :class="{ conflict: aiSolverPanel.conflict }">
+            <div v-if="aiSolverPanel.visible" class="ai-solver-panel" :class="{ conflict: aiSolverPanel.conflict, caution: aiSolverPanel.lowConfidence }">
               <div class="ai-solver-head">
                 <strong>AI 候选解析</strong>
                 <div>
@@ -271,9 +271,9 @@
                     {{ aiSolverPanel.model }}
                   </el-tag>
                   <el-tag v-if="aiSolverPanel.rechecked" size="small" type="warning" effect="plain">
-                    已进行 Pro 复核
+                    已 Pro 复核
                   </el-tag>
-                  <el-tag v-if="aiSolverPanel.confidenceText" size="small" type="success" effect="plain">
+                  <el-tag v-if="aiSolverPanel.confidenceText" size="small" :type="aiSolverPanel.lowConfidence ? 'warning' : 'success'" effect="plain">
                     {{ aiSolverPanel.confidenceText }}
                   </el-tag>
                   <el-tag v-if="aiSolverPanel.conflict" size="small" type="danger" effect="plain">
@@ -281,31 +281,62 @@
                   </el-tag>
                 </div>
               </div>
+              <el-alert
+                v-if="aiSolverPanel.conflict"
+                title="AI 候选答案与当前答案不一致，采纳前需要人工复核。"
+                type="error"
+                :closable="false"
+                show-icon
+              />
+              <el-alert
+                v-else-if="aiSolverPanel.lowConfidence"
+                title="AI 候选答案置信度低于 70%，建议只作为参考。"
+                type="warning"
+                :closable="false"
+                show-icon
+              />
+              <div class="ai-compact-summary">
+                <div class="answer-box official">
+                  <span>当前答案</span>
+                  <strong>{{ aiSolverPanel.officialAnswer || '-' }}</strong>
+                </div>
+                <div class="answer-box candidate">
+                  <span>AI 候选答案</span>
+                  <strong>{{ aiSolverPanel.answer || '-' }}</strong>
+                </div>
+                <p v-if="aiSolverPanel.summary" class="ai-summary">{{ aiSolverPanel.summary }}</p>
+                <div v-if="aiSolverPanel.riskFlags.length" class="ai-tag-row risk-row">
+                  <el-tag v-for="item in aiSolverPanel.riskFlags" :key="item" size="small" type="warning" effect="plain">{{ item }}</el-tag>
+                </div>
+              </div>
               <div class="ai-solver-grid">
-                <span>候选答案</span>
-                <strong>{{ aiSolverPanel.answer || '-' }}</strong>
                 <span v-if="aiSolverPanel.firstModel">首轮模型</span>
                 <p v-if="aiSolverPanel.firstModel">{{ aiSolverPanel.firstModel }}</p>
                 <span v-if="aiSolverPanel.finalModel">最终模型</span>
                 <p v-if="aiSolverPanel.finalModel">{{ aiSolverPanel.finalModel }}</p>
                 <span v-if="aiSolverPanel.recheckReason">复核原因</span>
                 <p v-if="aiSolverPanel.recheckReason">{{ aiSolverPanel.recheckReason }}</p>
-                <span v-if="aiSolverPanel.summary">推理摘要</span>
-                <p v-if="aiSolverPanel.summary">{{ aiSolverPanel.summary }}</p>
                 <span v-if="aiSolverPanel.knowledgePoints.length">知识点</span>
                 <div v-if="aiSolverPanel.knowledgePoints.length" class="ai-tag-row">
-                  <el-tag v-for="item in aiSolverPanel.knowledgePoints" :key="item" size="small" effect="plain">
-                    {{ item }}
-                  </el-tag>
-                </div>
-                <span v-if="aiSolverPanel.riskFlags.length">风险</span>
-                <div v-if="aiSolverPanel.riskFlags.length" class="ai-tag-row">
-                  <el-tag v-for="item in aiSolverPanel.riskFlags" :key="item" size="small" type="warning" effect="plain">
-                    {{ item }}
-                  </el-tag>
+                  <el-tag v-for="item in aiSolverPanel.knowledgePoints" :key="item" size="small" effect="plain">{{ item }}</el-tag>
                 </div>
               </div>
-              <p v-if="aiSolverPanel.analysis">{{ aiSolverPanel.analysis }}</p>
+              <el-collapse v-if="aiSolverPanel.analysis" class="ai-analysis-collapse">
+                <el-collapse-item title="查看完整 AI 候选解析" name="analysis">
+                  <div class="ai-analysis-text">{{ aiSolverPanel.analysis }}</div>
+                </el-collapse-item>
+              </el-collapse>
+              <div class="ai-accept-actions">
+                <el-button size="small" :loading="aiAccepting === 'answer'" :disabled="!aiSolverPanel.answer" @click="handleAcceptAiSuggestion('answer')">
+                  接受 AI 答案
+                </el-button>
+                <el-button size="small" :loading="aiAccepting === 'analysis'" :disabled="!aiSolverPanel.analysis" @click="handleAcceptAiSuggestion('analysis')">
+                  接受 AI 解析
+                </el-button>
+                <el-button size="small" type="primary" :loading="aiAccepting === 'both'" :disabled="!aiSolverPanel.answer && !aiSolverPanel.analysis" @click="handleAcceptAiSuggestion('both')">
+                  同时接受答案和解析
+                </el-button>
+              </div>
             </div>
 
             <div class="actions">
@@ -470,6 +501,7 @@ const deleting = ref(false);
 const batchLoading = ref(false);
 const imageBusy = ref(false);
 const aiRepairLoading = ref(false);
+const aiAccepting = ref<'' | 'answer' | 'analysis' | 'both'>('');
 const blacklistLoading = ref(false);
 const dirty = ref(false);
 const blacklistText = ref('');
@@ -535,6 +567,7 @@ const aiSolverPanel = computed(() => {
   const confidence = Number(form.ai_answer_confidence);
   const knowledgePoints = stringArray(form.ai_knowledge_points);
   const riskFlags = stringArray(form.ai_risk_flags);
+  const lowConfidence = Number.isFinite(confidence) && confidence < 0.7;
   return {
     visible: Boolean(
       form.ai_candidate_answer
@@ -550,10 +583,12 @@ const aiSolverPanel = computed(() => {
     finalModel: String(form.ai_solver_final_model || form.ai_solver_model || ''),
     rechecked: Boolean(form.ai_solver_rechecked),
     recheckReason: String(form.ai_solver_recheck_reason || ''),
+    officialAnswer: String(form.answer || ''),
     answer: String(form.ai_candidate_answer || ''),
     analysis: String(form.ai_candidate_analysis || ''),
     summary: String(form.ai_reasoning_summary || ''),
     confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
+    lowConfidence,
     knowledgePoints,
     riskFlags,
     conflict: Boolean(form.ai_answer_conflict),
@@ -767,6 +802,36 @@ async function handleSave() {
     await fetchStats();
   } finally {
     saving.value = false;
+  }
+}
+
+// TODO: persist "ignore AI suggestion" once the backend exposes an audit field for ignored AI recommendations.
+async function handleAcceptAiSuggestion(scope: 'answer' | 'analysis' | 'both') {
+  if (!selected.value) return;
+  const payload: Partial<Question> = {};
+  if ((scope === 'answer' || scope === 'both') && aiSolverPanel.value.answer) {
+    payload.answer = aiSolverPanel.value.answer;
+  }
+  if ((scope === 'analysis' || scope === 'both') && aiSolverPanel.value.analysis) {
+    payload.analysis = aiSolverPanel.value.analysis;
+  }
+  if (!Object.keys(payload).length) return;
+  const label = scope === 'answer' ? 'AI 答案' : scope === 'analysis' ? 'AI 解析' : 'AI 答案和解析';
+  const dirtyNote = dirty.value ? '\n当前表单有未保存修改，采纳成功后会刷新当前题。' : '';
+  await ElMessageBox.confirm(`确认用${label}覆盖当前题目的对应字段？${dirtyNote}`, '采纳 AI 建议', {
+    type: aiSolverPanel.value.conflict || aiSolverPanel.value.lowConfidence ? 'warning' : 'info',
+    confirmButtonText: '确认采纳',
+    cancelButtonText: '取消',
+  });
+  aiAccepting.value = scope;
+  try {
+    await updateQuestion(selected.value.id, payload);
+    ElMessage.success(`已采纳${label}`);
+    dirty.value = false;
+    await refreshSelected();
+    await fetchStats();
+  } finally {
+    aiAccepting.value = '';
   }
 }
 
@@ -1355,6 +1420,11 @@ onMounted(async () => {
   background: #fff7f7;
 }
 
+.ai-solver-panel.caution:not(.conflict) {
+  border-color: #fed7aa;
+  background: #fffaf2;
+}
+
 .ai-solver-head {
   display: flex;
   align-items: center;
@@ -1394,6 +1464,72 @@ onMounted(async () => {
   line-height: 1.65;
   color: var(--admin-text-muted);
   white-space: pre-wrap;
+}
+
+.ai-compact-summary {
+  display: grid;
+  grid-template-columns: 120px 120px minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.answer-box {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: var(--admin-surface);
+}
+
+.answer-box span {
+  color: var(--admin-text-faint);
+  font-size: 12px;
+}
+
+.answer-box strong {
+  color: var(--admin-text);
+  font-size: 18px;
+}
+
+.answer-box.candidate {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.ai-summary {
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: var(--admin-surface);
+  color: var(--admin-text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.risk-row {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.ai-analysis-collapse {
+  border: 0;
+}
+
+.ai-analysis-text {
+  color: var(--admin-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.ai-accept-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .full {

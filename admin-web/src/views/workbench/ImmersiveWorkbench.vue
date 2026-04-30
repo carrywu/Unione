@@ -140,15 +140,25 @@
 
           <div v-if="aiAssistance.visible" class="ai-assist-panel">
             <div class="ai-assist-head">
-              <strong>AI 辅助判断</strong>
+              <strong>视觉 AI 判断</strong>
               <div>
                 <el-tag size="small" effect="plain">{{ aiAssistance.provider }}</el-tag>
+                <el-tag v-if="aiAssistance.model" size="small" type="info" effect="plain">
+                  {{ aiAssistance.model }}
+                </el-tag>
                 <el-tag v-if="aiAssistance.confidenceText" size="small" type="success" effect="plain">
                   {{ aiAssistance.confidenceText }}
                 </el-tag>
               </div>
             </div>
-            <p v-if="aiAssistance.notes">{{ aiAssistance.notes }}</p>
+            <div class="ai-assist-grid">
+              <span>Provider</span>
+              <p>{{ aiAssistance.provider }}</p>
+              <span>Model</span>
+              <p>{{ aiAssistance.model || '-' }}</p>
+              <span v-if="aiAssistance.notes">判断备注</span>
+              <p v-if="aiAssistance.notes">{{ aiAssistance.notes }}</p>
+            </div>
             <div v-if="aiAssistance.corrections.length" class="ai-corrections">
               <div v-for="(correction, index) in aiAssistance.corrections" :key="index" class="ai-correction-row">
                 <el-tag size="small" :type="correction.status === 'applied' ? 'success' : 'warning'" effect="plain">
@@ -160,7 +170,7 @@
             </div>
           </div>
 
-          <div v-if="aiSolverAssist.visible" class="ai-solver-panel" :class="{ conflict: aiSolverAssist.conflict }">
+          <div v-if="aiSolverAssist.visible" class="ai-solver-panel" :class="{ conflict: aiSolverAssist.conflict, caution: aiSolverAssist.lowConfidence }">
             <div class="ai-solver-head">
               <strong>AI 候选解析</strong>
               <div>
@@ -171,9 +181,9 @@
                   {{ aiSolverAssist.model }}
                 </el-tag>
                 <el-tag v-if="aiSolverAssist.rechecked" size="small" type="warning" effect="plain">
-                  已进行 Pro 复核
+                  已 Pro 复核
                 </el-tag>
-                <el-tag v-if="aiSolverAssist.confidenceText" size="small" type="success" effect="plain">
+                <el-tag v-if="aiSolverAssist.confidenceText" size="small" :type="aiSolverAssist.lowConfidence ? 'warning' : 'success'" effect="plain">
                   {{ aiSolverAssist.confidenceText }}
                 </el-tag>
                 <el-tag v-if="aiSolverAssist.conflict" size="small" type="danger" effect="plain">
@@ -181,9 +191,31 @@
                 </el-tag>
               </div>
             </div>
+            <el-alert
+              v-if="aiSolverAssist.conflict"
+              title="AI 候选答案与官方答案不一致，采纳前需要人工复核。"
+              type="error"
+              :closable="false"
+              show-icon
+            />
+            <el-alert
+              v-else-if="aiSolverAssist.lowConfidence"
+              title="AI 候选答案置信度低于 70%，建议只作为参考。"
+              type="warning"
+              :closable="false"
+              show-icon
+            />
+            <div class="ai-answer-compare">
+              <div class="answer-box official">
+                <span>官方答案</span>
+                <strong>{{ aiSolverAssist.officialAnswer || '-' }}</strong>
+              </div>
+              <div class="answer-box candidate">
+                <span>AI 候选答案</span>
+                <strong>{{ aiSolverAssist.answer || '-' }}</strong>
+              </div>
+            </div>
             <div class="ai-solver-grid">
-              <span>候选答案</span>
-              <strong>{{ aiSolverAssist.answer || '-' }}</strong>
               <span v-if="aiSolverAssist.firstModel">首轮模型</span>
               <p v-if="aiSolverAssist.firstModel">{{ aiSolverAssist.firstModel }}</p>
               <span v-if="aiSolverAssist.finalModel">最终模型</span>
@@ -205,7 +237,22 @@
                 </el-tag>
               </div>
             </div>
-            <p v-if="aiSolverAssist.analysis">{{ aiSolverAssist.analysis }}</p>
+            <el-collapse v-if="aiSolverAssist.analysis" class="ai-analysis-collapse">
+              <el-collapse-item title="DeepSeek 候选解析" name="analysis">
+                <div class="ai-analysis-text">{{ aiSolverAssist.analysis }}</div>
+              </el-collapse-item>
+            </el-collapse>
+            <div class="ai-accept-actions">
+              <el-button size="small" :loading="aiAccepting === 'answer'" :disabled="!aiSolverAssist.answer" @click="handleAcceptAiSuggestion('answer')">
+                接受 AI 答案
+              </el-button>
+              <el-button size="small" :loading="aiAccepting === 'analysis'" :disabled="!aiSolverAssist.analysis" @click="handleAcceptAiSuggestion('analysis')">
+                接受 AI 解析
+              </el-button>
+              <el-button size="small" type="primary" :loading="aiAccepting === 'both'" :disabled="!aiSolverAssist.answer && !aiSolverAssist.analysis" @click="handleAcceptAiSuggestion('both')">
+                同时接受答案和解析
+              </el-button>
+            </div>
           </div>
 
           <el-form-item label="题干">
@@ -321,7 +368,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowLeft, Delete, DocumentChecked, Picture, Plus, Refresh, RefreshLeft, Search } from '@element-plus/icons-vue';
 import { getBanks, type Bank } from '@/api/bank';
 import { pdfProxyUrl } from '@/api/pdf';
@@ -365,6 +412,7 @@ const lastSnapshot = ref<QuestionData | null>(null);
 const bankLoading = ref(false);
 const workbenchLoading = ref(false);
 const saving = ref(false);
+const aiAccepting = ref<'' | 'answer' | 'analysis' | 'both'>('');
 const banks = ref<Bank[]>([]);
 const questions = ref<Question[]>([]);
 const selectedQuestion = ref<Question | null>(null);
@@ -413,9 +461,11 @@ const aiAssistance = computed(() => {
   const question = selectedQuestion.value;
   const corrections = question?.ai_corrections || [];
   const confidence = Number(question?.ai_confidence);
+  const correctionProvider = corrections.find((item) => item.provider)?.provider;
   return {
     visible: Boolean(question?.ai_provider || question?.ai_review_notes || corrections.length),
     provider: question?.ai_provider || 'vision-ai',
+    model: correctionProvider || question?.ai_provider || 'qwen-vl',
     confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
     notes: question?.ai_review_notes || '',
     corrections,
@@ -426,6 +476,7 @@ const aiSolverAssist = computed(() => {
   const confidence = Number(question?.ai_answer_confidence);
   const knowledgePoints = question?.ai_knowledge_points || [];
   const riskFlags = question?.ai_risk_flags || [];
+  const lowConfidence = Number.isFinite(confidence) && confidence < 0.7;
   return {
     visible: Boolean(
       question?.ai_candidate_answer
@@ -441,10 +492,12 @@ const aiSolverAssist = computed(() => {
     finalModel: question?.ai_solver_final_model || question?.ai_solver_model || '',
     rechecked: Boolean(question?.ai_solver_rechecked),
     recheckReason: question?.ai_solver_recheck_reason || '',
+    officialAnswer: question?.answer || '',
     answer: question?.ai_candidate_answer || '',
     analysis: question?.ai_candidate_analysis || '',
     summary: question?.ai_reasoning_summary || '',
     confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
+    lowConfidence,
     knowledgePoints,
     riskFlags,
     conflict: Boolean(question?.ai_answer_conflict),
@@ -711,6 +764,32 @@ async function markStemReviewed() {
     ElMessage.success('题干审核通过，等待答案匹配');
   } finally {
     saving.value = false;
+  }
+}
+
+async function handleAcceptAiSuggestion(scope: 'answer' | 'analysis' | 'both') {
+  if (!selectedQuestion.value) return;
+  const payload: Partial<Question> = {};
+  if ((scope === 'answer' || scope === 'both') && aiSolverAssist.value.answer) {
+    payload.answer = aiSolverAssist.value.answer;
+  }
+  if ((scope === 'analysis' || scope === 'both') && aiSolverAssist.value.analysis) {
+    payload.analysis = aiSolverAssist.value.analysis;
+  }
+  if (!Object.keys(payload).length) return;
+  const label = scope === 'answer' ? 'AI 答案' : scope === 'analysis' ? 'AI 解析' : 'AI 答案和解析';
+  await ElMessageBox.confirm(`确认用${label}覆盖当前题目的对应字段？此操作不会自动发布题目。`, '采纳 AI 建议', {
+    type: aiSolverAssist.value.conflict || aiSolverAssist.value.lowConfidence ? 'warning' : 'info',
+    confirmButtonText: '确认采纳',
+    cancelButtonText: '取消',
+  });
+  aiAccepting.value = scope;
+  try {
+    await updateQuestion(selectedQuestion.value.id, payload);
+    await loadQuestion(selectedQuestion.value.id);
+    ElMessage.success(`已采纳${label}`);
+  } finally {
+    aiAccepting.value = '';
   }
 }
 
@@ -1016,6 +1095,18 @@ h1 {
   line-height: 1.55;
 }
 
+.ai-assist-grid {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 7px 10px;
+  color: #315044;
+  font-size: 13px;
+}
+
+.ai-assist-grid span {
+  color: #547066;
+}
+
 .ai-corrections {
   display: grid;
   gap: 6px;
@@ -1050,6 +1141,11 @@ h1 {
 .ai-solver-panel.conflict {
   border-color: #fecaca;
   background: #fff7f7;
+}
+
+.ai-solver-panel.caution:not(.conflict) {
+  border-color: #fed7aa;
+  background: #fffaf2;
 }
 
 .ai-solver-head {
@@ -1090,6 +1186,54 @@ h1 {
   margin: 0;
   color: #334155;
   line-height: 1.55;
+}
+
+.ai-answer-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.answer-box {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.answer-box span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.answer-box strong {
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.answer-box.candidate {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.ai-analysis-collapse {
+  border: 0;
+}
+
+.ai-analysis-text {
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.ai-accept-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .image-editor {
