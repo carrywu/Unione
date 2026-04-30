@@ -909,6 +909,29 @@ export class PdfService {
         ),
         ai_provider: raw.ai_provider || raw.aiProvider || null,
         ai_review_notes: raw.ai_review_notes || raw.aiReviewNotes || null,
+        ai_candidate_answer:
+          raw.ai_candidate_answer || raw.aiCandidateAnswer || null,
+        ai_candidate_analysis:
+          raw.ai_candidate_analysis || raw.aiCandidateAnalysis || null,
+        ai_answer_confidence: this.toOptionalNumber(
+          raw.ai_answer_confidence ?? raw.aiAnswerConfidence,
+        ),
+        ai_reasoning_summary:
+          raw.ai_reasoning_summary || raw.aiReasoningSummary || null,
+        ai_knowledge_points: this.toStringArray(
+          raw.ai_knowledge_points ?? raw.aiKnowledgePoints,
+        ),
+        ai_risk_flags: this.toStringArray(
+          raw.ai_risk_flags ?? raw.aiRiskFlags,
+        ),
+        ai_solver_provider:
+          raw.ai_solver_provider || raw.aiSolverProvider || null,
+        ai_solver_model: raw.ai_solver_model || raw.aiSolverModel || null,
+        ai_solver_created_at:
+          raw.ai_solver_created_at || raw.aiSolverCreatedAt || null,
+        ai_answer_conflict: Boolean(
+          raw.ai_answer_conflict ?? raw.aiAnswerConflict,
+        ),
         status: QuestionStatus.Draft,
         needs_review: Boolean(raw.needs_review || raw.parse_warnings?.length),
         review_status: Boolean(raw.needs_review || raw.parse_warnings?.length)

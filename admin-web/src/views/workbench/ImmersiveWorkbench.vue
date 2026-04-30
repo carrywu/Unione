@@ -160,6 +160,45 @@
             </div>
           </div>
 
+          <div v-if="aiSolverAssist.visible" class="ai-solver-panel" :class="{ conflict: aiSolverAssist.conflict }">
+            <div class="ai-solver-head">
+              <strong>AI 候选解析</strong>
+              <div>
+                <el-tag v-if="aiSolverAssist.provider" size="small" effect="plain">
+                  {{ aiSolverAssist.provider }}
+                </el-tag>
+                <el-tag v-if="aiSolverAssist.model" size="small" type="info" effect="plain">
+                  {{ aiSolverAssist.model }}
+                </el-tag>
+                <el-tag v-if="aiSolverAssist.confidenceText" size="small" type="success" effect="plain">
+                  {{ aiSolverAssist.confidenceText }}
+                </el-tag>
+                <el-tag v-if="aiSolverAssist.conflict" size="small" type="danger" effect="plain">
+                  与官方答案冲突
+                </el-tag>
+              </div>
+            </div>
+            <div class="ai-solver-grid">
+              <span>候选答案</span>
+              <strong>{{ aiSolverAssist.answer || '-' }}</strong>
+              <span v-if="aiSolverAssist.summary">推理摘要</span>
+              <p v-if="aiSolverAssist.summary">{{ aiSolverAssist.summary }}</p>
+              <span v-if="aiSolverAssist.knowledgePoints.length">知识点</span>
+              <div v-if="aiSolverAssist.knowledgePoints.length" class="ai-tag-row">
+                <el-tag v-for="item in aiSolverAssist.knowledgePoints" :key="item" size="small" effect="plain">
+                  {{ item }}
+                </el-tag>
+              </div>
+              <span v-if="aiSolverAssist.riskFlags.length">风险</span>
+              <div v-if="aiSolverAssist.riskFlags.length" class="ai-tag-row">
+                <el-tag v-for="item in aiSolverAssist.riskFlags" :key="item" size="small" type="warning" effect="plain">
+                  {{ item }}
+                </el-tag>
+              </div>
+            </div>
+            <p v-if="aiSolverAssist.analysis">{{ aiSolverAssist.analysis }}</p>
+          </div>
+
           <el-form-item label="题干">
             <el-input v-model="questionData.stem" :autosize="{ minRows: 5, maxRows: 8 }" type="textarea" />
           </el-form-item>
@@ -371,6 +410,30 @@ const aiAssistance = computed(() => {
     confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
     notes: question?.ai_review_notes || '',
     corrections,
+  };
+});
+const aiSolverAssist = computed(() => {
+  const question = selectedQuestion.value;
+  const confidence = Number(question?.ai_answer_confidence);
+  const knowledgePoints = question?.ai_knowledge_points || [];
+  const riskFlags = question?.ai_risk_flags || [];
+  return {
+    visible: Boolean(
+      question?.ai_candidate_answer
+      || question?.ai_candidate_analysis
+      || question?.ai_reasoning_summary
+      || question?.ai_solver_provider
+      || question?.ai_answer_conflict,
+    ),
+    provider: question?.ai_solver_provider || '',
+    model: question?.ai_solver_model || '',
+    answer: question?.ai_candidate_answer || '',
+    analysis: question?.ai_candidate_analysis || '',
+    summary: question?.ai_reasoning_summary || '',
+    confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
+    knowledgePoints,
+    riskFlags,
+    conflict: Boolean(question?.ai_answer_conflict),
   };
 });
 
@@ -958,6 +1021,61 @@ h1 {
   color: #64756e;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ai-solver-panel {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  border: 1px solid #c9d7ee;
+  border-radius: 10px;
+  background: #f6f9ff;
+  padding: 10px 12px;
+}
+
+.ai-solver-panel.conflict {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.ai-solver-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-solver-head strong {
+  color: #1e3a8a;
+  font-size: 14px;
+}
+
+.ai-solver-head > div,
+.ai-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ai-solver-grid {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 10px;
+  color: #334155;
+  font-size: 13px;
+}
+
+.ai-solver-grid > span {
+  color: #64748b;
+}
+
+.ai-solver-grid p,
+.ai-solver-panel > p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.55;
 }
 
 .image-editor {

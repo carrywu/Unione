@@ -72,6 +72,16 @@ export interface Question {
   ai_confidence?: number;
   ai_provider?: string;
   ai_review_notes?: string;
+  ai_candidate_answer?: string;
+  ai_candidate_analysis?: string;
+  ai_answer_confidence?: number;
+  ai_reasoning_summary?: string;
+  ai_knowledge_points?: string[];
+  ai_risk_flags?: string[];
+  ai_solver_provider?: string;
+  ai_solver_model?: string;
+  ai_solver_created_at?: string;
+  ai_answer_conflict?: boolean;
   material?: {
     id: string;
     content: string;

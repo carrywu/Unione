@@ -85,6 +85,16 @@ class Question(BaseModel):
     ai_confidence: Optional[float] = None
     ai_provider: Optional[str] = None
     ai_review_notes: Optional[str] = None
+    ai_candidate_answer: Optional[str] = None
+    ai_candidate_analysis: Optional[str] = None
+    ai_answer_confidence: Optional[float] = None
+    ai_reasoning_summary: Optional[str] = None
+    ai_knowledge_points: List[str] = []
+    ai_risk_flags: List[str] = []
+    ai_solver_provider: Optional[str] = None
+    ai_solver_model: Optional[str] = None
+    ai_solver_created_at: Optional[str] = None
+    ai_answer_conflict: Optional[bool] = None
 
 
 class Material(BaseModel):

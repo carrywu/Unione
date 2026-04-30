@@ -146,10 +146,31 @@ const client = new Client({
 
 await client.connect();
 try {
+  const columnResult = await client.query(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'questions'`,
+  );
+  const columns = new Set(columnResult.rows.map((row) => row.column_name));
+  const optionalColumn = (name, type) => (
+    columns.has(name) ? name : `NULL::${type} AS ${name}`
+  );
   const { rows } = await client.query(
-    `SELECT id::text, index_num, source_page_start, source_page_end, source_bbox,
+      `SELECT id::text, index_num, source_page_start, source_page_end, source_bbox,
             visual_refs, images, content, option_a, option_b, option_c, option_d,
-            ai_provider, ai_confidence, ai_review_notes, ai_corrections
+            ${optionalColumn('ai_provider', 'text')},
+            ${optionalColumn('ai_confidence', 'double precision')},
+            ${optionalColumn('ai_review_notes', 'text')},
+            ${optionalColumn('ai_corrections', 'json')},
+            ${optionalColumn('ai_candidate_answer', 'text')},
+            ${optionalColumn('ai_candidate_analysis', 'text')},
+            ${optionalColumn('ai_answer_confidence', 'double precision')},
+            ${optionalColumn('ai_reasoning_summary', 'text')},
+            ${optionalColumn('ai_knowledge_points', 'json')},
+            ${optionalColumn('ai_risk_flags', 'json')},
+            ${optionalColumn('ai_solver_provider', 'text')},
+            ${optionalColumn('ai_solver_model', 'text')},
+            ${optionalColumn('ai_solver_created_at', 'text')},
+            ${optionalColumn('ai_answer_conflict', 'boolean')}
        FROM questions
       WHERE parse_task_id = $1 AND index_num BETWEEN 1 AND $2 AND deleted_at IS NULL
       ORDER BY index_num`,
@@ -177,6 +198,16 @@ try {
       ai_confidence: row.ai_confidence ?? null,
       ai_review_notes: row.ai_review_notes || '',
       ai_corrections: asArray(row.ai_corrections),
+      ai_candidate_answer: row.ai_candidate_answer || null,
+      ai_candidate_analysis: row.ai_candidate_analysis || '',
+      ai_answer_confidence: row.ai_answer_confidence ?? null,
+      ai_reasoning_summary: row.ai_reasoning_summary || '',
+      ai_knowledge_points: asArray(row.ai_knowledge_points),
+      ai_risk_flags: asArray(row.ai_risk_flags),
+      ai_solver_provider: row.ai_solver_provider || null,
+      ai_solver_model: row.ai_solver_model || null,
+      ai_solver_created_at: row.ai_solver_created_at || null,
+      ai_answer_conflict: Boolean(row.ai_answer_conflict),
       options: options(row),
       source_bbox_overlaps_other_source_bbox: rows
         .filter((other) => other.index_num !== row.index_num && other.source_page_start === row.source_page_start)

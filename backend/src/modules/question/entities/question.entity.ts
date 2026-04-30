@@ -142,6 +142,36 @@ export class Question {
   @Column({ name: 'ai_review_notes', type: 'text', nullable: true })
   ai_review_notes?: string;
 
+  @Column({ name: 'ai_candidate_answer', nullable: true })
+  ai_candidate_answer?: string;
+
+  @Column({ name: 'ai_candidate_analysis', type: 'text', nullable: true })
+  ai_candidate_analysis?: string;
+
+  @Column({ name: 'ai_answer_confidence', type: 'float', nullable: true })
+  ai_answer_confidence?: number;
+
+  @Column({ name: 'ai_reasoning_summary', type: 'text', nullable: true })
+  ai_reasoning_summary?: string;
+
+  @Column({ name: 'ai_knowledge_points', type: 'json', nullable: true })
+  ai_knowledge_points?: string[];
+
+  @Column({ name: 'ai_risk_flags', type: 'json', nullable: true })
+  ai_risk_flags?: string[];
+
+  @Column({ name: 'ai_solver_provider', nullable: true })
+  ai_solver_provider?: string;
+
+  @Column({ name: 'ai_solver_model', nullable: true })
+  ai_solver_model?: string;
+
+  @Column({ name: 'ai_solver_created_at', nullable: true })
+  ai_solver_created_at?: string;
+
+  @Column({ name: 'ai_answer_conflict', default: false })
+  ai_answer_conflict?: boolean;
+
   @Column({
     name: 'review_status',
     type: 'enum',

@@ -6,6 +6,7 @@ import tempfile
 from typing import Any
 
 import ai_client
+from ai_solver.enhancer import ai_solver_enabled, enhance_questions_with_ai_solver
 from debug_writer import write_debug_bundle
 from detector import PDFDetector
 from extractor import PDFExtractor
@@ -56,6 +57,7 @@ async def parse_pdf(
                     markdown_raw.get("materials", []),
                 )
                 _merge_debug_stats(markdown_result, markdown_raw.get("stats", {}))
+                _maybe_apply_ai_solver(markdown_result)
                 if markdown_result["stats"]["total"] > 0:
                     detection = {
                         "type": "markdown_layout",
@@ -92,6 +94,7 @@ async def parse_pdf(
                     kernel_result.get("materials", []),
                 )
                 _merge_debug_stats(final_result, kernel_result.get("stats", {}))
+                _maybe_apply_ai_solver(final_result)
                 kernel_debug = _kernel_scanned_fallback_debug(
                     kernel_pdf_kind=kernel_pdf_kind,
                     kernel_result=kernel_result,
@@ -173,6 +176,7 @@ async def parse_pdf(
                 scanned_fallback_debug["legacy_visual_fallback_page_limit"] = 50
                 scanned_fallback_debug["legacy_visual_fallback_called"] = False
 
+            _maybe_apply_ai_solver(final_result)
             final_result["stats"]["scanned_fallback_debug"] = scanned_fallback_debug
             _write_scanned_debug_artifacts(
                 kernel_pdf_kind=kernel_pdf_kind,
@@ -252,6 +256,16 @@ def _to_parse_result(
                 ai_confidence=raw_question.get("ai_confidence"),
                 ai_provider=raw_question.get("ai_provider"),
                 ai_review_notes=raw_question.get("ai_review_notes"),
+                ai_candidate_answer=raw_question.get("ai_candidate_answer"),
+                ai_candidate_analysis=raw_question.get("ai_candidate_analysis"),
+                ai_answer_confidence=raw_question.get("ai_answer_confidence"),
+                ai_reasoning_summary=raw_question.get("ai_reasoning_summary"),
+                ai_knowledge_points=raw_question.get("ai_knowledge_points") or [],
+                ai_risk_flags=raw_question.get("ai_risk_flags") or [],
+                ai_solver_provider=raw_question.get("ai_solver_provider"),
+                ai_solver_model=raw_question.get("ai_solver_model"),
+                ai_solver_created_at=raw_question.get("ai_solver_created_at"),
+                ai_answer_conflict=raw_question.get("ai_answer_conflict"),
             )
         )
 
@@ -289,6 +303,25 @@ def _merge_debug_stats(result: dict[str, Any], debug_stats: dict[str, Any]) -> N
     stats["accepted_questions_count"] = accepted
     stats["question_candidates_count"] = candidates
     stats["rejected_questions_count"] = max(0, candidates - accepted)
+
+
+def _maybe_apply_ai_solver(result: dict[str, Any]) -> None:
+    if not ai_solver_enabled():
+        return
+    enhancement = enhance_questions_with_ai_solver(
+        questions=result.get("questions", []),
+        materials=result.get("materials", []),
+    )
+    result["questions"] = enhancement.questions
+    stats = result.setdefault("stats", {})
+    stats["ai_solver"] = enhancement.stats
+    stats["needs_review"] = sum(1 for question in enhancement.questions if question.get("needs_review"))
+    if enhancement.stats.get("warnings"):
+        warnings = [str(item) for item in stats.get("warnings") or []]
+        for warning in enhancement.stats["warnings"]:
+            if warning not in warnings:
+                warnings.append(str(warning))
+        stats["warnings"] = warnings
 
 
 def _debug_counts(

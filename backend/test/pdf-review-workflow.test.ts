@@ -201,6 +201,7 @@ async function run() {
   await testMergeAdjacentQuestionImagesMarksSharedGroup();
   await testAiRepairReturnsProposalWithoutPersisting();
   await testPdfSavePersistsVisionAiCorrectionFields();
+  await testPdfSavePersistsAiSolverCandidateFields();
 }
 
 async function testPublishSkipsLowConfidenceAndWarningQuestions() {
@@ -414,6 +415,50 @@ async function testPdfSavePersistsVisionAiCorrectionFields() {
   assert.equal(saved.ai_confidence, 0.92);
   assert.equal(saved.ai_review_notes, '视觉模型认为该文化产业表格应归属第6题');
   assert.equal(saved.ai_corrections[0].status, 'applied');
+}
+
+async function testPdfSavePersistsAiSolverCandidateFields() {
+  const h = harness();
+  await (h.pdfService as any).saveQuestions(
+    'task-1',
+    'bank-1',
+    [
+      {
+        index: 5,
+        type: 'single',
+        content: 'AI 候选答案题',
+        options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+        answer: 'A',
+        analysis: '官方解析',
+        ai_candidate_answer: 'C',
+        ai_candidate_analysis: 'AI 候选解析',
+        ai_answer_confidence: 0.86,
+        ai_reasoning_summary: '资料分析表格读取',
+        ai_knowledge_points: ['资料分析', '表格读取'],
+        ai_risk_flags: ['requires_table'],
+        ai_solver_provider: 'bailian-deepseek',
+        ai_solver_model: 'deepseek-r1',
+        ai_solver_created_at: '2026-04-30T10:00:00.000Z',
+        ai_answer_conflict: true,
+        needs_review: true,
+        parse_warnings: ['ai_answer_conflict'],
+      },
+    ],
+    new Map(),
+  );
+
+  const saved = h.questions.find((question) => question.index_num === 5) as any;
+  assert.equal(saved.answer, 'A');
+  assert.equal(saved.analysis, '官方解析');
+  assert.equal(saved.ai_candidate_answer, 'C');
+  assert.equal(saved.ai_candidate_analysis, 'AI 候选解析');
+  assert.equal(saved.ai_answer_confidence, 0.86);
+  assert.deepEqual(saved.ai_knowledge_points, ['资料分析', '表格读取']);
+  assert.deepEqual(saved.ai_risk_flags, ['requires_table']);
+  assert.equal(saved.ai_solver_provider, 'bailian-deepseek');
+  assert.equal(saved.ai_solver_model, 'deepseek-r1');
+  assert.equal(saved.ai_answer_conflict, true);
+  assert.equal(saved.needs_review, true);
 }
 
 run().catch((error) => {

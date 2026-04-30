@@ -260,6 +260,45 @@
               <el-input v-model="form.analysis" type="textarea" autosize @input="dirty = true" />
             </el-form-item>
 
+            <div v-if="aiSolverPanel.visible" class="ai-solver-panel" :class="{ conflict: aiSolverPanel.conflict }">
+              <div class="ai-solver-head">
+                <strong>AI 候选解析</strong>
+                <div>
+                  <el-tag v-if="aiSolverPanel.provider" size="small" effect="plain">
+                    {{ aiSolverPanel.provider }}
+                  </el-tag>
+                  <el-tag v-if="aiSolverPanel.model" size="small" type="info" effect="plain">
+                    {{ aiSolverPanel.model }}
+                  </el-tag>
+                  <el-tag v-if="aiSolverPanel.confidenceText" size="small" type="success" effect="plain">
+                    {{ aiSolverPanel.confidenceText }}
+                  </el-tag>
+                  <el-tag v-if="aiSolverPanel.conflict" size="small" type="danger" effect="plain">
+                    与官方答案冲突
+                  </el-tag>
+                </div>
+              </div>
+              <div class="ai-solver-grid">
+                <span>候选答案</span>
+                <strong>{{ aiSolverPanel.answer || '-' }}</strong>
+                <span v-if="aiSolverPanel.summary">推理摘要</span>
+                <p v-if="aiSolverPanel.summary">{{ aiSolverPanel.summary }}</p>
+                <span v-if="aiSolverPanel.knowledgePoints.length">知识点</span>
+                <div v-if="aiSolverPanel.knowledgePoints.length" class="ai-tag-row">
+                  <el-tag v-for="item in aiSolverPanel.knowledgePoints" :key="item" size="small" effect="plain">
+                    {{ item }}
+                  </el-tag>
+                </div>
+                <span v-if="aiSolverPanel.riskFlags.length">风险</span>
+                <div v-if="aiSolverPanel.riskFlags.length" class="ai-tag-row">
+                  <el-tag v-for="item in aiSolverPanel.riskFlags" :key="item" size="small" type="warning" effect="plain">
+                    {{ item }}
+                  </el-tag>
+                </div>
+              </div>
+              <p v-if="aiSolverPanel.analysis">{{ aiSolverPanel.analysis }}</p>
+            </div>
+
             <div class="actions">
               <el-button type="danger" :icon="Delete" :loading="deleting" @click="handleDelete">删除</el-button>
               <el-button :icon="Check" type="success" :loading="publishing" @click="handlePublish">通过发布</el-button>
@@ -406,6 +445,9 @@ const warningLabelMap: Record<string, string> = {
   ambiguous_answer: '答案不明确',
   image_assignment_low_confidence: '图片匹配待确认',
   material_match_low_confidence: '材料匹配待确认',
+  ai_answer_conflict: 'AI 候选答案冲突',
+  low_ai_answer_confidence: 'AI 候选低置信度',
+  ai_solver_failed: 'AI 解题失败',
   page_mismatch: '页码可能偏移',
   truncated_content: '内容疑似截断',
   parse_incomplete: '解析不完整',
@@ -480,6 +522,29 @@ const answerPreviewLabel = computed(() => {
 });
 
 const currentImages = computed(() => normalizeImageList((form.images || []) as NonNullable<Question['images']>));
+const aiSolverPanel = computed(() => {
+  const confidence = Number(form.ai_answer_confidence);
+  const knowledgePoints = stringArray(form.ai_knowledge_points);
+  const riskFlags = stringArray(form.ai_risk_flags);
+  return {
+    visible: Boolean(
+      form.ai_candidate_answer
+      || form.ai_candidate_analysis
+      || form.ai_reasoning_summary
+      || form.ai_solver_provider
+      || form.ai_answer_conflict,
+    ),
+    provider: String(form.ai_solver_provider || ''),
+    model: String(form.ai_solver_model || ''),
+    answer: String(form.ai_candidate_answer || ''),
+    analysis: String(form.ai_candidate_analysis || ''),
+    summary: String(form.ai_reasoning_summary || ''),
+    confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
+    knowledgePoints,
+    riskFlags,
+    conflict: Boolean(form.ai_answer_conflict),
+  };
+});
 
 function imagesForPosition(position: string) {
   return currentImages.value.filter((image) => (image.insertPosition || 'below_stem') === position);
@@ -610,6 +675,10 @@ function warningLabel(warning: string) {
 function warningSummary(warnings: string[]) {
   const labels = warnings.map(warningLabel);
   return labels.length > 1 ? `${labels[0]} +${labels.length - 1}` : labels[0];
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
 function questionBrief(question: Question) {
@@ -1255,6 +1324,62 @@ onMounted(async () => {
   padding: 10px 14px;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.ai-solver-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 16px;
+  border: 1px solid #c9d7ee;
+  border-radius: 8px;
+  background: #f6f9ff;
+}
+
+.ai-solver-panel.conflict {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.ai-solver-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-solver-head strong {
+  color: #1e3a8a;
+  font-size: 14px;
+}
+
+.ai-solver-head > div,
+.ai-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ai-solver-grid {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 10px;
+  color: var(--admin-text);
+  font-size: 13px;
+}
+
+.ai-solver-grid > span {
+  color: var(--admin-text-faint);
+}
+
+.ai-solver-grid p,
+.ai-solver-panel > p {
+  margin: 0;
+  line-height: 1.65;
+  color: var(--admin-text-muted);
+  white-space: pre-wrap;
 }
 
 .full {

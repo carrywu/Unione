@@ -59,6 +59,16 @@ export class QuestionService {
       delete safeQuestion.analysis_image_url;
       delete safeQuestion.answer_source_id;
       delete safeQuestion.analysis_match_confidence;
+      delete safeQuestion.ai_candidate_answer;
+      delete safeQuestion.ai_candidate_analysis;
+      delete safeQuestion.ai_answer_confidence;
+      delete safeQuestion.ai_reasoning_summary;
+      delete safeQuestion.ai_knowledge_points;
+      delete safeQuestion.ai_risk_flags;
+      delete safeQuestion.ai_solver_provider;
+      delete safeQuestion.ai_solver_model;
+      delete safeQuestion.ai_solver_created_at;
+      delete safeQuestion.ai_answer_conflict;
       return safeQuestion as Question;
     });
     return result;
@@ -569,6 +579,16 @@ export class QuestionService {
       ai_confidence: question.ai_confidence || null,
       ai_provider: question.ai_provider || null,
       ai_review_notes: question.ai_review_notes || '',
+      ai_candidate_answer: question.ai_candidate_answer || null,
+      ai_candidate_analysis: question.ai_candidate_analysis || null,
+      ai_answer_confidence: question.ai_answer_confidence || null,
+      ai_reasoning_summary: question.ai_reasoning_summary || null,
+      ai_knowledge_points: question.ai_knowledge_points || [],
+      ai_risk_flags: question.ai_risk_flags || [],
+      ai_solver_provider: question.ai_solver_provider || null,
+      ai_solver_model: question.ai_solver_model || null,
+      ai_solver_created_at: question.ai_solver_created_at || null,
+      ai_answer_conflict: Boolean(question.ai_answer_conflict),
       parse_warnings: question.parse_warnings || [],
     };
   }
