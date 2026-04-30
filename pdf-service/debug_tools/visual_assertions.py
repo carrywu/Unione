@@ -48,6 +48,17 @@ def run_visual_assertions(layout: dict[str, Any], case: dict[str, Any]) -> dict[
                 )
             )
 
+        for text in expected.get("expected_content_texts") or []:
+            if str(text) not in str(question.get("content") or ""):
+                failures.append(
+                    _failure(
+                        "content_text_missing",
+                        q_key,
+                        f"expected question content text missing: {text}",
+                        [],
+                    )
+                )
+
         expected_child_visuals = list(expected.get("expected_child_visuals") or [])
         if expected_child_visuals:
             child_ids: list[str] = []

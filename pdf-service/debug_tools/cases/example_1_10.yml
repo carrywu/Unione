@@ -26,6 +26,7 @@ questions:
   q5:
     index: 5
     expected_visuals: []
+    expected_content_texts: [2016 年全国参加失业保险的人数超过1.8 亿人]
     must_not_overlap_visuals: [p3-img1, p3-img2]
   q6:
     index: 6

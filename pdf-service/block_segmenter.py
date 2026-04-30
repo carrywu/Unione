@@ -24,9 +24,11 @@ HEADER_FOOTER_RE = re.compile(r"^(?:\d{1,4}|.*(?:资料分析题库|夸夸刷|�
 
 def segment_question_cores(elements: list[LayoutElement], markdown: str) -> list[QuestionCoreBlock]:
     markers = [element for element in elements if _is_question_marker(element)]
+    elements_by_order = sorted(elements, key=lambda item: item.order_index)
     cores: list[QuestionCoreBlock] = []
     for marker_index, marker in enumerate(markers):
         next_marker = markers[marker_index + 1] if marker_index + 1 < len(markers) else None
+        preface_elements = _preface_elements_for_marker(marker, elements_by_order)
         block_elements = [
             element
             for element in elements
@@ -61,6 +63,9 @@ def segment_question_cores(elements: list[LayoutElement], markdown: str) -> list
         if index is None:
             continue
         stem = _clean_stem("\n".join(stem_parts), marker.text or "")
+        preface_text = _clean_preface(preface_elements)
+        if preface_text:
+            stem = f"{preface_text}\n{stem}".strip()
         if not _valid_question_core(stem, options, marker):
             continue
         warnings: list[str] = []
@@ -85,9 +90,9 @@ def segment_question_cores(elements: list[LayoutElement], markdown: str) -> list
                 marker_text=marker.text or "",
                 stem_text=stem,
                 options=options,
-                element_ids=[item.id for item in block_elements],
+                element_ids=[item.id for item in [*preface_elements, *block_elements]],
                 bbox_range=[item.bbox for item in block_elements if item.page == marker.page],
-                raw_markdown="\n\n".join(raw_parts),
+                raw_markdown="\n\n".join([*(item.markdown or item.text or "" for item in preface_elements), *raw_parts]),
                 source_element_ids=[item.id for item in source_elements],
                 source_bbox_range=[item.bbox for item in source_elements if item.page == marker.page],
                 warnings=warnings,
@@ -184,6 +189,61 @@ def _is_question_marker(element: LayoutElement) -> bool:
     if not QUESTION_RE.match(text):
         return False
     return element.type == "question_marker" or bool(QUESTION_HINT_RE.search(text))
+
+
+def _preface_elements_for_marker(marker: LayoutElement, elements: list[LayoutElement]) -> list[LayoutElement]:
+    preface: list[LayoutElement] = []
+    for element in reversed([item for item in elements if item.order_index < marker.order_index and item.page == marker.page]):
+        text = element.text or element.markdown or ""
+        compact = re.sub(r"\s+", "", text)
+        if not compact:
+            continue
+        if compact in {"【", "】"}:
+            continue
+        if _is_noise_text(text):
+            continue
+        if element.type in {"question_marker", "option", "image", "table", "heading", "material_marker"}:
+            break
+        if _is_visual_caption_preface(element, elements):
+            break
+        if element.type not in {"text", "caption"}:
+            break
+        preface.append(element)
+    return list(reversed(preface))
+
+
+def _is_visual_caption_preface(element: LayoutElement, elements: list[LayoutElement]) -> bool:
+    if element.type != "caption" or not element.bbox or len(element.bbox) != 4:
+        return False
+    for visual in elements:
+        if visual.page != element.page or visual.type not in {"image", "table"}:
+            continue
+        if not visual.bbox or len(visual.bbox) != 4:
+            continue
+        if _vertical_gap(element.bbox, visual.bbox) > 48:
+            continue
+        if _horizontal_overlap_ratio(element.bbox, visual.bbox) >= 0.35:
+            return True
+    return False
+
+
+def _vertical_gap(left: list[float], right: list[float]) -> float:
+    if left[3] < right[1]:
+        return right[1] - left[3]
+    if right[3] < left[1]:
+        return left[1] - right[3]
+    return 0.0
+
+
+def _horizontal_overlap_ratio(left: list[float], right: list[float]) -> float:
+    overlap = max(0.0, min(left[2], right[2]) - max(left[0], right[0]))
+    width = max(1.0, min(left[2] - left[0], right[2] - right[0]))
+    return overlap / width
+
+
+def _clean_preface(elements: list[LayoutElement]) -> str:
+    lines = [item.text or "" for item in elements if item.text]
+    return "\n".join(line.strip() for line in lines if line.strip())
 
 
 def _question_index(text: str) -> int | None:

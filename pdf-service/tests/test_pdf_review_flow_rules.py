@@ -454,10 +454,23 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
         )
         self.assertEqual([image["ref"] for image in questions_by_index[4]["images"]], ["p2-img2"])
         self.assertEqual(questions_by_index[5]["images"], [])
+        self.assertIn("2016 年全国参加失业保险的人数超过1.8 亿人", questions_by_index[5]["content"])
+        self.assertNotIn("2016~2022 年中国可穿戴设备产量", questions_by_index[1]["content"])
+        self.assertNotIn("2012~2016 年社会消费品零售总额", questions_by_index[2]["content"])
+        self.assertNotIn("2009~2018 年我国教育经费投入", questions_by_index[3]["content"])
+        self.assertNotIn("2015~2018 年D 省软件及信息服务业营业额", questions_by_index[7]["content"])
+        preface_element = next(
+            item
+            for item in elements
+            if "2016 年全国参加失业保险的人数超过1.8 亿人" in str(item.get("text") or "")
+        )
+        self.assertFalse(bbox_contains(questions_by_index[5]["source_bbox"], preface_element["bbox"]))
         self.assertEqual([image["ref"] for image in questions_by_index[6]["images"]], ["p3-img1"])
         q6_image = image_by_ref(questions_by_index[6], "p3-img1")
         self.assertEqual(q6_image.get("child_visual_ids"), ["p3-img1", "p3-img2"])
         self.assertTrue(q6_image.get("same_visual_group_id"))
+        self.assertLessEqual(q6_image["bbox"][1], 344.6)
+        self.assertGreaterEqual(q6_image["bbox"][3], 679.9)
         self._assert_visual_absorbed_text(questions_by_index[1], "p1-img1", "2016~2022 年中国可穿戴设备产量", elements)
         self._assert_visual_absorbed_text(questions_by_index[2], "p1-img2", "2012~2016 年社会消费品零售总额", elements)
         self._assert_visual_absorbed_text(questions_by_index[3], "p2-img1", "2009~2018 年我国教育经费投入", elements)

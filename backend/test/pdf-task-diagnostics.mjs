@@ -171,7 +171,7 @@ try {
       source_bbox: roundBbox(source),
       visual_refs: visualRefs(row),
       images: images(row),
-      stem: String(row.content || '').slice(0, 30),
+      stem: String(row.content || '').slice(0, 120),
       options: options(row),
       source_bbox_overlaps_other_source_bbox: rows
         .filter((other) => other.index_num !== row.index_num && other.source_page_start === row.source_page_start)
@@ -194,6 +194,13 @@ try {
   const reviewPayloads = [q1, q2].filter(Boolean).map(reviewPayload);
   const q6Page3Visuals = q6?.visual_refs.filter((visual) => visual.page === 3) || [];
   const q6Title = '2023 年全国规模以上文化及相关产业企业相关指标情况';
+  const q5Preface = '2016 年全国参加失业保险的人数超过1.8 亿人';
+  const contentVisualCaptions = [
+    [q1, '2016~2022 年中国可穿戴设备产量'],
+    [q2, '2012~2016 年社会消费品零售总额'],
+    [q3, '2009~2018 年我国教育经费投入'],
+    [byIndex.get(7), '2015~2018 年D 省软件及信息服务业营业额'],
+  ];
   const assertions = [
     assertion(
       'q1.source_bbox_not_cover_q2_visual_bbox',
@@ -219,6 +226,22 @@ try {
       'no_image_question_images_empty',
       q5 && q5.visual_refs.length === 0 && q5.images.length === 0,
       { q5_visual_refs: q5?.visual_refs, q5_images: q5?.images },
+    ),
+    assertion(
+      'q5_pre_question_material_text_preserved',
+      q5 && String(q5.stem || '').includes(q5Preface),
+      { q5_stem: q5?.stem },
+    ),
+    assertion(
+      'visual_caption_text_not_merged_into_question_content',
+      contentVisualCaptions.every(([question, caption]) => question && !String(question.stem || '').includes(caption)),
+      {
+        checked: contentVisualCaptions.map(([question, caption]) => ({
+          index: question?.index,
+          caption,
+          stem: question?.stem,
+        })),
+      },
     ),
     assertion(
       'q6_contains_page3_table_material',
