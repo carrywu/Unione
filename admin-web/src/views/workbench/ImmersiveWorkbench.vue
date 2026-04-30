@@ -138,6 +138,28 @@
             当前阶段不录入正确答案，题干通过后仍保留草稿状态，等待答案册匹配后再发布练习。
           </div>
 
+          <div v-if="aiAssistance.visible" class="ai-assist-panel">
+            <div class="ai-assist-head">
+              <strong>AI 辅助判断</strong>
+              <div>
+                <el-tag size="small" effect="plain">{{ aiAssistance.provider }}</el-tag>
+                <el-tag v-if="aiAssistance.confidenceText" size="small" type="success" effect="plain">
+                  {{ aiAssistance.confidenceText }}
+                </el-tag>
+              </div>
+            </div>
+            <p v-if="aiAssistance.notes">{{ aiAssistance.notes }}</p>
+            <div v-if="aiAssistance.corrections.length" class="ai-corrections">
+              <div v-for="(correction, index) in aiAssistance.corrections" :key="index" class="ai-correction-row">
+                <el-tag size="small" :type="correction.status === 'applied' ? 'success' : 'warning'" effect="plain">
+                  {{ correction.status || 'suggested' }}
+                </el-tag>
+                <span>{{ correction.action || 'vision_ai' }}</span>
+                <small>{{ correction.reason || '视觉模型给出辅助判断' }}</small>
+              </div>
+            </div>
+          </div>
+
           <el-form-item label="题干">
             <el-input v-model="questionData.stem" :autosize="{ minRows: 5, maxRows: 8 }" type="textarea" />
           </el-form-item>
@@ -183,6 +205,9 @@
                 <img :src="image.src" :alt="image.name" />
                 <div class="image-meta">
                   <strong>{{ image.name }}</strong>
+                  <el-tag v-if="imageAiStatus(image.id)" size="small" type="success" effect="plain">
+                    AI 已调整
+                  </el-tag>
                   <el-select v-model="image.slot" size="small">
                     <el-option label="题干下方" value="stem" />
                     <el-option label="选项上方" value="options" />
@@ -336,6 +361,18 @@ const pdfRequestHeaders = computed(() => {
   return token ? { Authorization: `Bearer ${token}` } : undefined;
 });
 const pdfHighlights = computed(() => buildSourceHighlights(selectedQuestion.value));
+const aiAssistance = computed(() => {
+  const question = selectedQuestion.value;
+  const corrections = question?.ai_corrections || [];
+  const confidence = Number(question?.ai_confidence);
+  return {
+    visible: Boolean(question?.ai_provider || question?.ai_review_notes || corrections.length),
+    provider: question?.ai_provider || 'vision-ai',
+    confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
+    notes: question?.ai_review_notes || '',
+    corrections,
+  };
+});
 
 async function fetchBanks() {
   bankLoading.value = true;
@@ -482,6 +519,15 @@ function restoreQuestionData(snapshot: QuestionData) {
 
 function imagesFor(slot: ImageSlot) {
   return questionData.images.filter((image) => image.slot === slot);
+}
+
+function imageAiStatus(imageId: string) {
+  const corrections = selectedQuestion.value?.ai_corrections || [];
+  return corrections.some((correction) => {
+    if (correction.status !== 'applied') return false;
+    const refs = correction.updates?.visual_refs;
+    return Array.isArray(refs) && refs.map(String).includes(imageId);
+  });
 }
 
 function openImagePicker() {
@@ -855,6 +901,63 @@ h1 {
   font-size: 13px;
   line-height: 1.6;
   padding: 10px 12px;
+}
+
+.ai-assist-panel {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  border: 1px solid #bfe3d0;
+  border-radius: 10px;
+  background: #f2fbf6;
+  padding: 10px 12px;
+}
+
+.ai-assist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-assist-head strong {
+  color: #14532d;
+  font-size: 14px;
+}
+
+.ai-assist-head > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ai-assist-panel p {
+  margin: 0;
+  color: #315044;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.ai-corrections {
+  display: grid;
+  gap: 6px;
+}
+
+.ai-correction-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: #315044;
+  font-size: 12px;
+}
+
+.ai-correction-row small {
+  overflow: hidden;
+  color: #64756e;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .image-editor {

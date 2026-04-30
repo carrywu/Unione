@@ -81,6 +81,10 @@ class Question(BaseModel):
     raw_text: Optional[str] = None
     parse_confidence: Optional[float] = None
     parse_warnings: List[str] = []
+    ai_corrections: List[Dict[str, Any]] = []
+    ai_confidence: Optional[float] = None
+    ai_provider: Optional[str] = None
+    ai_review_notes: Optional[str] = None
 
 
 class Material(BaseModel):

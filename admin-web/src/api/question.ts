@@ -58,7 +58,20 @@ export interface Question {
   parse_confidence?: number;
   page_range?: number[];
   image_refs?: string[];
+  visual_refs?: Array<Record<string, unknown>>;
   parse_warnings?: string[];
+  ai_corrections?: Array<{
+    provider?: string;
+    page?: number;
+    confidence?: number;
+    action?: string;
+    reason?: string;
+    status?: 'applied' | 'suggested' | 'ignored_low_confidence' | string;
+    updates?: Record<string, unknown>;
+  }>;
+  ai_confidence?: number;
+  ai_provider?: string;
+  ai_review_notes?: string;
   material?: {
     id: string;
     content: string;
@@ -150,7 +163,7 @@ export function moveQuestionImage(
 export interface AiRepairProposal {
   content: string;
   options: Partial<Record<'A' | 'B' | 'C' | 'D', string>>;
-  visual_refs: unknown[];
+  visual_refs: Array<Record<string, unknown>>;
   material_text: string;
   remove_texts: string[];
   warnings: string[];

@@ -248,6 +248,10 @@ def _to_parse_result(
                 raw_text=raw_question.get("raw_text"),
                 parse_confidence=raw_question.get("parse_confidence"),
                 parse_warnings=raw_question.get("parse_warnings") or [],
+                ai_corrections=raw_question.get("ai_corrections") or [],
+                ai_confidence=raw_question.get("ai_confidence"),
+                ai_provider=raw_question.get("ai_provider"),
+                ai_review_notes=raw_question.get("ai_review_notes"),
             )
         )
 

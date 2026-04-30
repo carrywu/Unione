@@ -10,6 +10,7 @@ from debug_writer import write_debug_bundle
 from layout_extractor import extract_layout_to_markdown
 from markdown_extractor import write_markdown_debug
 from validators.question_group_validator import validate_parse_result
+from vision_ai.enhancer import enhance_questions_with_vision_ai, vision_ai_enabled
 from visual_linker import assign_visuals
 
 
@@ -35,6 +36,17 @@ class MarkdownQuestionStrategy:
             question_payloads,
             payload["visuals"],
         )
+        vision_ai_stats = None
+        if vision_ai_enabled():
+            enhancement = enhance_questions_with_vision_ai(
+                pdf_path=pdf_path,
+                output_dir=output_dir,
+                questions=question_payloads,
+                page_elements=payload["elements"],
+                visual_payloads=self._visual_payloads(payload["visuals"], output_dir),
+            )
+            question_payloads = enhancement.questions
+            vision_ai_stats = enhancement.stats
         write_markdown_debug(payload, output_dir)
         write_debug_bundle(
             output_dir,
@@ -46,6 +58,7 @@ class MarkdownQuestionStrategy:
             warnings={
                 "assignments": assignments["warnings"],
                 "validation": validation_warnings,
+                "vision_ai": vision_ai_stats or {},
             },
             ai_chunks=[],
         )
@@ -63,6 +76,7 @@ class MarkdownQuestionStrategy:
                 "materials_count": len(material_payloads),
                 "visuals_count": len(payload["visuals"]),
                 "with_images": sum(1 for question in question_payloads if question.get("images")),
+                **({"vision_ai": vision_ai_stats} if vision_ai_stats else {}),
             },
         }
 
@@ -177,6 +191,15 @@ class MarkdownQuestionStrategy:
             "same_visual_group_id": visual.same_visual_group_id,
             "child_visual_ids": visual.child_visual_ids,
             "assignment_confidence": visual.assignment_confidence,
+        }
+
+    def _visual_payloads(self, visuals, output_dir: str) -> dict[str, dict[str, Any]]:
+        return {
+            visual.id: {
+                "visual_ref": self._visual_ref_payload(visual),
+                "image": self._image_payload(visual, output_dir, "question_material"),
+            }
+            for visual in visuals
         }
 
 

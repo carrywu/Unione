@@ -200,6 +200,7 @@ async function run() {
   await testQuestionImageOperationsOnlyTouchCurrentQuestion();
   await testMergeAdjacentQuestionImagesMarksSharedGroup();
   await testAiRepairReturnsProposalWithoutPersisting();
+  await testPdfSavePersistsVisionAiCorrectionFields();
 }
 
 async function testPublishSkipsLowConfidenceAndWarningQuestions() {
@@ -375,6 +376,44 @@ async function testAiRepairReturnsProposalWithoutPersisting() {
   } finally {
     (axios as any).post = originalPost;
   }
+}
+
+async function testPdfSavePersistsVisionAiCorrectionFields() {
+  const h = harness();
+  await (h.pdfService as any).saveQuestions(
+    'task-1',
+    'bank-1',
+    [
+      {
+        index: 4,
+        type: 'single',
+        content: 'AI 纠偏题',
+        options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+        images: [],
+        visual_refs: [{ id: 'p3-img1', page: 3 }],
+        image_refs: ['p3-img1'],
+        ai_corrections: [
+          {
+            provider: 'qwen-vl',
+            confidence: 0.92,
+            action: 'update_visual_refs',
+            reason: '表格标题和主体属于该题',
+            status: 'applied',
+          },
+        ],
+        ai_confidence: 0.92,
+        ai_provider: 'qwen-vl',
+        ai_review_notes: '视觉模型认为该文化产业表格应归属第6题',
+      },
+    ],
+    new Map(),
+  );
+
+  const saved = h.questions.find((question) => question.index_num === 4) as any;
+  assert.equal(saved.ai_provider, 'qwen-vl');
+  assert.equal(saved.ai_confidence, 0.92);
+  assert.equal(saved.ai_review_notes, '视觉模型认为该文化产业表格应归属第6题');
+  assert.equal(saved.ai_corrections[0].status, 'applied');
 }
 
 run().catch((error) => {

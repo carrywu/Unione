@@ -901,6 +901,14 @@ export class PdfService {
         parse_warnings: this.toStringArray(
           raw.parse_warnings ?? raw.parseWarnings,
         ),
+        ai_corrections: Array.isArray(raw.ai_corrections ?? raw.aiCorrections)
+          ? raw.ai_corrections ?? raw.aiCorrections
+          : null,
+        ai_confidence: this.toOptionalNumber(
+          raw.ai_confidence ?? raw.aiConfidence,
+        ),
+        ai_provider: raw.ai_provider || raw.aiProvider || null,
+        ai_review_notes: raw.ai_review_notes || raw.aiReviewNotes || null,
         status: QuestionStatus.Draft,
         needs_review: Boolean(raw.needs_review || raw.parse_warnings?.length),
         review_status: Boolean(raw.needs_review || raw.parse_warnings?.length)

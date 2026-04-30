@@ -148,7 +148,8 @@ await client.connect();
 try {
   const { rows } = await client.query(
     `SELECT id::text, index_num, source_page_start, source_page_end, source_bbox,
-            visual_refs, images, content, option_a, option_b, option_c, option_d
+            visual_refs, images, content, option_a, option_b, option_c, option_d,
+            ai_provider, ai_confidence, ai_review_notes, ai_corrections
        FROM questions
       WHERE parse_task_id = $1 AND index_num BETWEEN 1 AND $2 AND deleted_at IS NULL
       ORDER BY index_num`,
@@ -172,6 +173,10 @@ try {
       visual_refs: visualRefs(row),
       images: images(row),
       stem: String(row.content || '').slice(0, 120),
+      ai_provider: row.ai_provider || null,
+      ai_confidence: row.ai_confidence ?? null,
+      ai_review_notes: row.ai_review_notes || '',
+      ai_corrections: asArray(row.ai_corrections),
       options: options(row),
       source_bbox_overlaps_other_source_bbox: rows
         .filter((other) => other.index_num !== row.index_num && other.source_page_start === row.source_page_start)

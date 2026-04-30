@@ -130,6 +130,18 @@ export class Question {
   @Column({ name: 'parse_warnings', type: 'json', nullable: true })
   parse_warnings?: string[];
 
+  @Column({ name: 'ai_corrections', type: 'json', nullable: true })
+  ai_corrections?: unknown[];
+
+  @Column({ name: 'ai_confidence', type: 'float', nullable: true })
+  ai_confidence?: number;
+
+  @Column({ name: 'ai_provider', nullable: true })
+  ai_provider?: string;
+
+  @Column({ name: 'ai_review_notes', type: 'text', nullable: true })
+  ai_review_notes?: string;
+
   @Column({
     name: 'review_status',
     type: 'enum',

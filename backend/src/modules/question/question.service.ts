@@ -565,6 +565,10 @@ export class QuestionService {
       images: question.images || [],
       image_refs: question.image_refs || [],
       visual_refs: question.visual_refs || [],
+      ai_corrections: question.ai_corrections || [],
+      ai_confidence: question.ai_confidence || null,
+      ai_provider: question.ai_provider || null,
+      ai_review_notes: question.ai_review_notes || '',
       parse_warnings: question.parse_warnings || [],
     };
   }
