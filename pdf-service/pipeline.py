@@ -12,7 +12,7 @@ from detector import PDFDetector
 from extractor import PDFExtractor
 from models import Material, ParseResult, ParseStats, Question, QuestionImage
 from parser_kernel.adapter import parse_extractor_with_kernel
-from parser_kernel.routing import classify_pdf_kind
+from parser_kernel.routing import routing_decision
 from strategies.markdown_question_strategy import MarkdownQuestionStrategy
 from strategies.text_strategy import TextStrategy
 from strategies.universal_question_strategy import UniversalQuestionStrategy
@@ -41,7 +41,8 @@ async def parse_pdf(
     The optional pdf_url parameter is kept for backwards compatibility with
     main.py and the NestJS service contract.
     """
-    preflight_pdf_kind = _preflight_pdf_kind(pdf_path, pdf_url)
+    preflight_routing = _preflight_routing(pdf_path, pdf_url)
+    preflight_pdf_kind = preflight_routing.get("actualKind") if preflight_routing else None
 
     with ai_client.use_config(ai_config):
         if preflight_pdf_kind != "scanned_question_book":
@@ -80,8 +81,10 @@ async def parse_pdf(
     try:
         detector = PDFDetector()
         detection = detector.detect(extractor)
-        kernel_pdf_kind = preflight_pdf_kind or _classify_for_kernel(extractor, pdf_url)
+        kernel_routing = preflight_routing or _routing_for_kernel(extractor, pdf_url)
+        kernel_pdf_kind = kernel_routing.get("actualKind") or _classify_for_kernel(extractor, pdf_url)
         detection.setdefault("stats", {})["kernel_pdf_kind"] = kernel_pdf_kind
+        detection.setdefault("stats", {})["kernel_routing_decision"] = kernel_routing
         pdf_type = detection.get("type", "unknown")
         logger.info("PDF 类型检测结果: %s，置信度: %s", pdf_type, detection.get("confidence"))
         logger.info("PDF 检测统计: %s", detection.get("stats"))
@@ -367,6 +370,10 @@ def _debug_counts(
 
 
 def _classify_for_kernel(extractor: PDFExtractor, pdf_url: str | None) -> str:
+    return _routing_for_kernel(extractor, pdf_url).get("actualKind") or "unknown"
+
+
+def _routing_for_kernel(extractor: PDFExtractor, pdf_url: str | None) -> dict[str, Any]:
     total_pages = getattr(extractor, "total_pages", 0)
     sample_pages = min(total_pages, 20)
     text_lengths = [
@@ -374,14 +381,14 @@ def _classify_for_kernel(extractor: PDFExtractor, pdf_url: str | None) -> str:
         for page_index in range(sample_pages)
     ]
     file_name = os.path.basename(pdf_url or getattr(extractor, "pdf_path", "") or "")
-    return classify_pdf_kind(file_name=file_name, total_pages=total_pages, text_lengths=text_lengths)
+    return routing_decision(file_name=file_name, total_pages=total_pages, text_lengths=text_lengths)
 
 
-def _preflight_pdf_kind(pdf_path: str, pdf_url: str | None) -> str | None:
+def _preflight_routing(pdf_path: str, pdf_url: str | None) -> dict[str, Any] | None:
     extractor = None
     try:
         extractor = PDFExtractor(pdf_path)
-        return _classify_for_kernel(extractor, pdf_url)
+        return _routing_for_kernel(extractor, pdf_url)
     except Exception as exc:
         logger.warning("PDF preflight classification failed; continuing with normal parse: %s", exc)
         return None

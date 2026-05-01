@@ -153,15 +153,24 @@ def parse_extractor_with_kernel(
 
     _inject_semantic_debug_payload(
         debug_dir=debug_dir,
+        total_pages=total_pages,
         visual_pages=getattr(extractor, "_parser_kernel_visual_pages", []),
         failed_pages=getattr(extractor, "_parser_kernel_failed_pages", []),
+        failed_page_details=getattr(extractor, "_parser_kernel_failed_page_details", []),
         visual_links=visual_links,
+        page_elements_count=len(elements),
+        raw_questions_count=len(raw_questions),
+        output_questions_count=len(questions),
+        materials_count=len(materials),
     )
 
     write_debug_bundle(
         debug_dir,
         visual_pages=getattr(extractor, "_parser_kernel_visual_pages", []),
-        failed_pages={"failed_pages": getattr(extractor, "_parser_kernel_failed_pages", [])},
+        failed_pages={
+            "failed_pages": getattr(extractor, "_parser_kernel_failed_pages", []),
+            "failed_page_details": getattr(extractor, "_parser_kernel_failed_page_details", []),
+        },
         page_elements=elements,
         annotated_elements=annotated,
         material_groups=material_groups,
@@ -464,6 +473,7 @@ def _build_page_understanding_record(
 
     uncertain_regions: list[dict[str, Any]] = []
     failed = _visual_result_failed(visual_result)
+    failure_reason = _classify_vision_failure(visual_result)
     warnings = [str(item) for item in visual_result.get("warnings") or []]
     if failed:
         fallback_block = _debug_block(
@@ -506,10 +516,16 @@ def _build_page_understanding_record(
         "suspected_cross_page_links": suspected_cross_page_links,
         "uncertain_regions": uncertain_regions,
         "confidence": 0.0 if failed else float(page_analysis.get("confidence") or 0.6),
-        "reason": visual_result.get("error") or ("vision_ai_failed" if failed else "vision_ai_page_understanding"),
+        "reason": visual_result.get("error") or (failure_reason if failed else "vision_ai_page_understanding"),
+        "failureReason": failure_reason,
+        "recommendedFix": _vision_failure_recommended_fix(failure_reason),
+        "coarse_fallback": bool(failed),
+        "fallback_evidence": "full_page_image" if failed else None,
+        "can_synthesize_question": bool(detected_numbers),
         "page_warnings": warnings,
         "page_analysis": page_analysis,
         "schema_validation": visual_result.get("schema_validation") or {},
+        "vision_call_result": visual_result.get("vision_call_result") or {},
     }
 
 
@@ -1690,34 +1706,62 @@ def _safe_float(value: Any) -> float | None:
 def _inject_semantic_debug_payload(
     *,
     debug_dir: str,
+    total_pages: int,
     visual_pages: list[dict[str, Any]],
     failed_pages: list[int],
-    visual_links: dict[str, Any],
+    visual_links: dict[str, Any] | None,
+    page_elements_count: int,
+    raw_questions_count: int,
+    output_questions_count: int,
+    materials_count: int,
+    failed_page_details: list[dict[str, Any]] | None = None,
 ) -> None:
     try:
         debug_root = Path(debug_dir) / "debug"
         debug_root.mkdir(parents=True, exist_ok=True)
+        visual_links = visual_links or {}
+        failed_page_details = failed_page_details or []
+        semantic_groups_payload = _build_semantic_debug_groups(visual_links)
+        recrop_plan_payload = _build_recrop_debug_plan(semantic_groups_payload)
+        page_understanding_payload = visual_links.get("page_understanding", [])
+        stage_counts = _build_stage_counts_debug(
+            total_pages=total_pages,
+            visual_pages=visual_pages,
+            failed_pages=failed_pages,
+            failed_page_details=failed_page_details,
+            page_understanding=page_understanding_payload,
+            semantic_groups=semantic_groups_payload,
+            recrop_plan=recrop_plan_payload,
+            page_elements_count=page_elements_count,
+            raw_questions_count=raw_questions_count,
+            output_questions_count=output_questions_count,
+            materials_count=materials_count,
+        )
+        first_failed_stage = _first_failed_stage_debug(stage_counts)
         semantic_debug = {
             "task_pages": len(visual_pages),
             "failed_pages": failed_pages,
+            "failed_page_details": failed_page_details,
             "semantic_question_count": len(visual_links.get("semantic_question_entries", [])),
             "semantic_question_entries": visual_links.get("semantic_question_entries", []),
             "semantic_recrop_plans": visual_links.get("semantic_recrop_plans", []),
             "visual_merge_candidates": visual_links.get("visual_merge_candidates", []),
             "page_understanding": visual_links.get("page_understanding", []),
             "semantic_pages": visual_links.get("semantic_pages", []),
+            "stage_counts": stage_counts,
+            "first_failed_stage": first_failed_stage,
         }
         (debug_root / "semantic_debug_payload.json").write_text(
             json.dumps(semantic_debug, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        semantic_groups_payload = _build_semantic_debug_groups(visual_links)
-        recrop_plan_payload = _build_recrop_debug_plan(semantic_groups_payload)
         payload_groups = {
-            "page_understanding": visual_links.get("page_understanding", []),
+            "page_understanding": page_understanding_payload,
             "semantic_groups": semantic_groups_payload,
             "recrop_plan": recrop_plan_payload,
             "visual_merge_candidates": visual_links.get("visual_merge_candidates", []),
+            "stage_counts": stage_counts,
+            "first_failed_stage": first_failed_stage,
         }
         for name, payload in payload_groups.items():
             (debug_root / f"{name}.json").write_text(
@@ -1728,6 +1772,8 @@ def _inject_semantic_debug_payload(
             "page-understanding.json": payload_groups["page_understanding"],
             "semantic-groups.json": payload_groups["semantic_groups"],
             "recrop-plan.json": payload_groups["recrop_plan"],
+            "stage-counts.json": payload_groups["stage_counts"],
+            "first-failed-stage.json": payload_groups["first_failed_stage"],
         }
         for alias_name, payload in legacy_alias.items():
             (debug_root / alias_name).write_text(
@@ -1736,6 +1782,131 @@ def _inject_semantic_debug_payload(
             )
     except Exception:
         return
+
+
+def _build_stage_counts_debug(
+    *,
+    total_pages: int,
+    visual_pages: list[dict[str, Any]],
+    failed_pages: list[int],
+    failed_page_details: list[dict[str, Any]] | None,
+    page_understanding: list[dict[str, Any]],
+    semantic_groups: list[dict[str, Any]],
+    recrop_plan: list[dict[str, Any]],
+    page_elements_count: int,
+    raw_questions_count: int,
+    output_questions_count: int,
+    materials_count: int,
+) -> dict[str, Any]:
+    failed_page_details = failed_page_details or []
+    detected_question_numbers = [
+        number
+        for page in page_understanding
+        for number in (page.get("detected_question_numbers") or [])
+        if number is not None
+    ]
+    reason_counts: dict[str, int] = {}
+    for detail in failed_page_details:
+        reason = str(detail.get("failureReason") or detail.get("reason") or "unknown")
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    def _visual_page_reason(page: dict[str, Any]) -> str | None:
+        raw = page.get("raw_result") if isinstance(page.get("raw_result"), dict) else {}
+        normalized = page.get("normalized_result") if isinstance(page.get("normalized_result"), dict) else {}
+        return _classify_vision_failure(normalized or raw, page.get("attempts"), page.get("attempt_errors") or [])
+
+    visual_reasons = [_visual_page_reason(page) for page in visual_pages]
+    vision_timeout_count = sum(1 for reason in visual_reasons if reason == "provider_timeout")
+    vision_empty_count = sum(1 for reason in visual_reasons if reason == "provider_empty_response")
+    schema_invalid_count = sum(1 for reason in visual_reasons if reason == "schema_invalid")
+    provider_error_count = sum(1 for reason in visual_reasons if reason in {"provider_error", "visual_model_failed"})
+    fallback_attempt_count = sum(1 for page in visual_pages if page.get("fallback_attempted"))
+    fallback_success_count = sum(1 for page in visual_pages if page.get("fallback_success"))
+    schema_repaired_count = sum(
+        1
+        for page in visual_pages
+        if any(str(err.get("retry_type") or "") == "schema_repair_retry" for err in (page.get("attempt_errors") or []))
+        and page.get("request_status") == "ok"
+    )
+    coarse_count = sum(1 for page in page_understanding if page.get("coarse_fallback") or page.get("fallback_evidence") == "full_page_image")
+    success_count = sum(1 for page in visual_pages if page.get("request_status") == "ok")
+
+    failure_reason = None
+    if reason_counts:
+        failure_reason = max(reason_counts.items(), key=lambda item: item[1])[0]
+    elif failed_pages:
+        failure_reason = "fallback_failed" if fallback_attempt_count else "provider_error"
+    elif detected_question_numbers and not semantic_groups:
+        failure_reason = "semantic_grouping_failed"
+    elif semantic_groups and output_questions_count == 0:
+        failure_reason = "candidate_synthesis_failed"
+    elif page_understanding and not detected_question_numbers and coarse_count:
+        failure_reason = "coarse_only_no_synthesizable_question"
+    elif page_understanding and not detected_question_numbers:
+        failure_reason = "page_understanding_failed"
+
+    recommended_fix = _vision_failure_recommended_fix(failure_reason)
+    return {
+        "pages_count": total_pages,
+        "visual_pages_count": len(visual_pages),
+        "failed_pages_count": len(failed_pages),
+        "failed_pages": failed_pages,
+        "failed_page_details": failed_page_details,
+        "page_understanding_count": len(page_understanding),
+        "page_understanding_detected_question_numbers_count": len(detected_question_numbers),
+        "semantic_groups_count": len(semantic_groups),
+        "recrop_plan_count": len(recrop_plan),
+        "page_elements_count": page_elements_count,
+        "raw_questions_count": raw_questions_count,
+        "output_questions_count": output_questions_count,
+        "materials_count": materials_count,
+        "visionCallCount": sum(int(page.get("attempts") or 1) for page in visual_pages),
+        "visionSuccessCount": success_count,
+        "visionTimeoutCount": vision_timeout_count,
+        "visionProviderErrorCount": provider_error_count,
+        "visionEmptyResponseCount": vision_empty_count,
+        "schemaInvalidCount": schema_invalid_count,
+        "schemaRepairedCount": schema_repaired_count,
+        "fallbackAttemptCount": fallback_attempt_count,
+        "fallbackSuccessCount": fallback_success_count,
+        "coarsePageUnderstandingCount": coarse_count,
+        "failureReason": failure_reason,
+        "recommendedFix": recommended_fix,
+        "visionFailureReasonCounts": reason_counts,
+    }
+
+
+def _first_failed_stage_debug(stage_counts: dict[str, Any]) -> dict[str, Any]:
+    total_pages = int(stage_counts.get("pages_count") or 0)
+    visual_pages_count = int(stage_counts.get("visual_pages_count") or 0)
+    failed_pages_count = int(stage_counts.get("failed_pages_count") or 0)
+    detected_count = int(stage_counts.get("page_understanding_detected_question_numbers_count") or 0)
+    semantic_groups_count = int(stage_counts.get("semantic_groups_count") or 0)
+    output_questions_count = int(stage_counts.get("output_questions_count") or 0)
+    failure_reason = stage_counts.get("failureReason")
+
+    if visual_pages_count == 0 or (total_pages > 0 and failed_pages_count >= total_pages):
+        stage = failure_reason or "provider_error"
+        reason = "visual_pages missing or every page is listed in failed_pages"
+    elif detected_count == 0:
+        stage = failure_reason or "page_understanding_failed"
+        reason = "page_understanding exists but detected_question_numbers is empty on all pages"
+    elif semantic_groups_count == 0:
+        stage = failure_reason or "semantic_grouping_failed"
+        reason = "page_understanding detected question numbers but semantic_groups is empty"
+    elif output_questions_count == 0:
+        stage = failure_reason or "candidate_synthesis_failed"
+        reason = "semantic_groups is non-empty but output_questions is empty"
+    else:
+        stage = None
+        reason = "no parser-stage failure detected before backend final preview"
+    return {
+        "firstFailedStage": stage,
+        "reason": reason,
+        "failureReason": failure_reason,
+        "recommendedFix": stage_counts.get("recommendedFix"),
+        "stage_counts": stage_counts,
+    }
 
 
 def _pages_from_extractor(extractor: Any, total_pages: int) -> list[PageContent]:
@@ -1828,6 +1999,7 @@ def _pages_from_visual_fallback(
     pages: list[PageContent] = []
     visual_pages: list[dict[str, Any]] = []
     failed_pages: list[int] = []
+    failed_page_details: list[dict[str, Any]] = []
     page_indexes = _visual_page_indexes(total_pages, debug_dir, retry_failed_pages_only)
     cache_dir = Path(debug_dir) / "debug" / "visual_page_cache"
     vision_ai_dir = Path(debug_dir) / "debug" / "vision_ai_inputs"
@@ -1936,6 +2108,23 @@ def _pages_from_visual_fallback(
             page_prompt_path.write_text(PAGE_PARSE_PROMPT, encoding="utf-8")
         if fallback_success and fallback_prompt_path and not fallback_prompt_path.exists():
             fallback_prompt_path.write_text(PAGE_PARSE_PROMPT, encoding="utf-8")
+        visual_result["vision_call_result"] = _vision_call_result_payload(
+            result=visual_result,
+            attempts=attempts,
+            attempt_errors=attempt_errors,
+            fallback_attempted=fallback_attempted,
+            fallback_success=fallback_success,
+        )
+        visual_result.setdefault("vision_retry_plan", {})
+        visual_result["vision_retry_plan"].setdefault(
+            "reduced_image_retry",
+            "success" if fallback_success else ("failed" if fallback_attempted else "not_attempted"),
+        )
+        visual_result["vision_retry_plan"].setdefault("simplified_prompt_retry", "skipped")
+        visual_result["vision_retry_plan"].setdefault(
+            "simplified_prompt_retry_reason",
+            "prompt_builder_not_yet_parameterized",
+        )
         request_payload = {
             "page": page_num,
             "provider": visual_result.get("_vision_provider") or "qwen_vl",
@@ -2019,6 +2208,11 @@ def _pages_from_visual_fallback(
                 if key != "raw_model_result"
             },
             "request_status": "failed" if _visual_result_failed(visual_result) else "ok",
+            "failureReason": visual_result.get("vision_call_result", {}).get("failureReason"),
+            "recommendedFix": visual_result.get("vision_call_result", {}).get("recommendedFix"),
+            "fallback_attempted": fallback_attempted,
+            "fallback_success": fallback_success,
+            "fallback_attempts": fallback_attempt_count,
             "attempts": attempts,
             "attempt_errors": attempt_errors,
             "image_size": image_size,
@@ -2246,6 +2440,20 @@ def _pages_from_visual_fallback(
         visual_pages.append(visual_debug)
         if _visual_result_failed(visual_result):
             failed_pages.append(page_index + 1)
+            failed_page_details.append(
+                {
+                    "page": page_index + 1,
+                    "reason": visual_result.get("error") or visual_debug.get("failureReason") or "vision_call_failed",
+                    "failureReason": visual_debug.get("failureReason") or _classify_vision_failure(visual_result),
+                    "recommendedFix": visual_debug.get("recommendedFix"),
+                    "attempts": attempts,
+                    "attemptErrors": attempt_errors,
+                    "fallbackAttempted": fallback_attempted,
+                    "fallbackSuccess": fallback_success,
+                    "providerAttempts": visual_result.get("_vision_provider_attempts") or [],
+                    "visionCallResult": visual_result.get("vision_call_result") or {},
+                }
+            )
         parser_warnings.append(
             {
                 "page_num": page_index + 1,
@@ -2265,6 +2473,7 @@ def _pages_from_visual_fallback(
     setattr(extractor, "_parser_kernel_visual_links", visual_links)
     setattr(extractor, "_parser_kernel_warnings", parser_warnings)
     setattr(extractor, "_parser_kernel_failed_pages", failed_pages)
+    setattr(extractor, "_parser_kernel_failed_page_details", failed_page_details)
     setattr(extractor, "_parser_kernel_vision_ai_calls", visual_links.get("vision_ai_calls", []))
     return pages
 
@@ -2562,6 +2771,78 @@ def _cache_visual_render_size(extractor: Any, page_index: int, image_size: dict[
     _visual_render_size_cache(extractor)[page_index] = image_size
 
 
+def _classify_vision_failure(
+    result: dict[str, Any],
+    attempts: Any = None,
+    attempt_errors: list[dict[str, Any]] | None = None,
+) -> str | None:
+    warnings = {str(item) for item in (result.get("warnings") or [])}
+    schema_validation = result.get("schema_validation") if isinstance(result.get("schema_validation"), dict) else {}
+    provider_attempts = result.get("_vision_provider_attempts") or []
+    attempt_errors = attempt_errors or []
+    error = str(result.get("error") or "")
+    error_lc = error.lower()
+    all_attempts = []
+    if isinstance(provider_attempts, list):
+        all_attempts.extend(item for item in provider_attempts if isinstance(item, dict))
+    all_attempts.extend(item for item in attempt_errors if isinstance(item, dict))
+    attempt_error_types = {str(item.get("error_type") or "").lower() for item in all_attempts}
+    attempt_messages = " ".join(str(item.get("error_message") or item.get("error") or "") for item in all_attempts).lower()
+
+    if "vision_page_timeout" in warnings or "timeout" in attempt_error_types or "timeout" in error_lc:
+        return "provider_timeout"
+    if "visual_schema_invalid" in warnings or schema_validation.get("valid") is False:
+        return "schema_invalid"
+    if "empty" in error_lc or "empty" in attempt_messages or error_lc == "visual_page_empty_result":
+        return "provider_empty_response"
+    if "visual_model_failed" in warnings or error or any(item.get("status") == "failed" for item in all_attempts):
+        return "provider_error"
+    return None
+
+
+def _vision_failure_recommended_fix(reason: Any) -> str | None:
+    reason = str(reason or "")
+    mapping = {
+        "provider_timeout": "increase visual provider timeout, inspect provider latency, retry the failed chunk with reduced_image_retry",
+        "provider_empty_response": "inspect raw provider response and retry with reduced image or simplified prompt",
+        "schema_invalid": "inspect raw output and run schema_repair_retry; update prompt/schema if repeated",
+        "schema_repair_failed": "capture raw output, add parser repair tests, and update schema normalization",
+        "provider_error": "inspect provider error details and environment/provider configuration",
+        "fallback_failed": "inspect reduced_image_retry artifacts and provider diagnostics",
+        "coarse_only_no_synthesizable_question": "coarse page evidence exists but no structured question; improve whole-page understanding prompt/parser",
+        "page_understanding_failed": "inspect page-understanding.json and raw visual output; improve page understanding extraction",
+        "semantic_grouping_failed": "inspect semantic-groups.json; improve semantic grouping from page understanding",
+        "candidate_synthesis_failed": "inspect recrop-plan and raw question synthesis; improve candidate construction",
+        "source_evidence_missing": "rerun with full PDF/source locator and block auto/manual publish until evidence is complete",
+    }
+    return mapping.get(reason)
+
+
+def _vision_call_result_payload(
+    *,
+    result: dict[str, Any],
+    attempts: int,
+    attempt_errors: list[dict[str, Any]],
+    fallback_attempted: bool = False,
+    fallback_success: bool = False,
+) -> dict[str, Any]:
+    failure_reason = _classify_vision_failure(result, attempts, attempt_errors)
+    if fallback_attempted and failure_reason and not fallback_success:
+        failure_reason = "fallback_failed"
+    status = "success" if not failure_reason else "failed"
+    return {
+        "status": status,
+        "failureReason": failure_reason,
+        "recommendedFix": _vision_failure_recommended_fix(failure_reason),
+        "attempts": attempts,
+        "providerAttempts": result.get("_vision_provider_attempts") or [],
+        "attemptErrors": attempt_errors,
+        "fallbackAttempted": fallback_attempted,
+        "fallbackSuccess": fallback_success,
+        "schemaValidation": result.get("schema_validation") or {},
+    }
+
+
 def _parse_page_visual_with_retry(
     page_b64: str,
     timeout_seconds: float | None = None,
@@ -2569,19 +2850,55 @@ def _parse_page_visual_with_retry(
     attempt_errors: list[dict[str, Any]] = []
     timeout = timeout_seconds or _visual_page_timeout_seconds()
     first_result = _parse_page_visual_with_timeout(page_b64, timeout_seconds=timeout)
+    first_reason = _classify_vision_failure(first_result, 1, attempt_errors)
     if not _visual_result_retryable(first_result):
+        first_result["vision_call_result"] = _vision_call_result_payload(
+            result=first_result,
+            attempts=1,
+            attempt_errors=attempt_errors,
+        )
+        first_result["vision_retry_plan"] = {
+            "reduced_image_retry": "handled_by_page_fallback" if first_reason else "not_needed",
+            "schema_repair_retry": "not_applicable",
+            "simplified_prompt_retry": "skipped",
+            "simplified_prompt_retry_reason": "prompt_builder_not_yet_parameterized",
+        }
         return first_result, attempt_errors, 1
     first_warnings = set(str(item) for item in first_result.get("warnings") or [])
     if "visual_schema_invalid" not in first_warnings:
+        first_result["vision_call_result"] = _vision_call_result_payload(
+            result=first_result,
+            attempts=1,
+            attempt_errors=attempt_errors,
+        )
+        first_result["vision_retry_plan"] = {
+            "reduced_image_retry": "handled_by_page_fallback" if first_reason else "not_needed",
+            "schema_repair_retry": "skipped_non_schema_retryable_result",
+            "simplified_prompt_retry": "skipped",
+            "simplified_prompt_retry_reason": "prompt_builder_not_yet_parameterized",
+        }
         return first_result, attempt_errors, 1
     attempt_errors.append(
         {
+            "retry_type": "schema_repair_retry",
             "warnings": list(first_result.get("warnings") or []),
             "schema_validation": first_result.get("schema_validation") or {},
             "error": first_result.get("error"),
         }
     )
     second_result = _parse_page_visual_with_timeout(page_b64, timeout_seconds=timeout)
+    second_reason = _classify_vision_failure(second_result, 2, attempt_errors)
+    second_result["vision_call_result"] = _vision_call_result_payload(
+        result=second_result,
+        attempts=2,
+        attempt_errors=attempt_errors,
+    )
+    second_result["vision_retry_plan"] = {
+        "reduced_image_retry": "handled_by_page_fallback" if second_reason else "not_needed",
+        "schema_repair_retry": "success" if not second_reason else "failed",
+        "simplified_prompt_retry": "skipped",
+        "simplified_prompt_retry_reason": "prompt_builder_not_yet_parameterized",
+    }
     return second_result, attempt_errors, 2
 
 
@@ -2630,8 +2947,7 @@ def _visual_result_retryable(result: dict[str, Any]) -> bool:
 
 
 def _visual_result_failed(result: dict[str, Any]) -> bool:
-    warnings = set(str(item) for item in result.get("warnings") or [])
-    return bool(warnings & {"vision_page_timeout", "visual_model_failed"})
+    return _classify_vision_failure(result) is not None
 
 
 def _visual_page_timeout_seconds() -> float:

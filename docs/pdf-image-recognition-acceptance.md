@@ -11,6 +11,23 @@
 - `题本篇-1-8.pdf`
 - 路径：`/Users/apple/Downloads/题本篇-1-8.pdf`
 - 生成方式：从 `/Users/apple/Downloads/题本篇.pdf` 截取第 1 到第 8 页。
+- 角色：`main_positive_fixture`
+- 用途：验证完整上下文页段下是否能定位 source/material/evidence。
+- 验收口径：
+  - 页数必须为 8 页。
+  - 缩略图 sanity 必须确认 1-8 是题本页，不允许只看页数。
+  - 主样例不应继续出现 `partial_pdf_context` / `missing_previous_page_context`。
+  - 如果主样例仍然 0 题或无法定位 source/material，判主样例失败，不能退回“人工强制加入”兜底。
+
+候选页段仅用于 A/B 诊断：
+
+- `题本篇-9-14.pdf`
+- 路径：`/Users/apple/Downloads/题本篇-9-14.pdf`
+- 生成方式：
+  `qpdf "/Users/apple/Downloads/题本篇.pdf" --pages "/Users/apple/Downloads/题本篇.pdf" 9-14 -- "/Users/apple/Downloads/题本篇-9-14.pdf"`
+- 角色：`candidate_page_range_fixture`
+- 用途：确认 `zero_questions_extracted` 是否为页段特异问题，或是否影响扫描题本页整体。
+- 约束：不能静默替换主样例；只有人工明确提升时才可成为新的主样例。
 
 保留 partial context 负样例：
 
@@ -62,6 +79,45 @@
    - 观察解析完成并进入结果查看
 9. 对 `sample-题本篇-3-7.pdf` 运行 partial context 回归验收，确认它不能自动入卷、不能人工强制加入，且页面显示缺少材料/上下文原因。
 
+## 4.1 页段与回归命令矩阵
+
+默认命令必须覆盖主正样例和负向回归：
+
+```bash
+node --check scripts/check-pdf-fixtures.mjs
+node --check scripts/check-paper-review-recognition.mjs
+node scripts/check-pdf-fixtures.mjs
+node scripts/check-paper-review-recognition.mjs
+```
+
+分角色单跑：
+
+```bash
+FIXTURE_ROLE=main_positive_fixture node scripts/check-paper-review-recognition.mjs
+FIXTURE_ROLE=partial_pdf_context_negative_regression node scripts/check-paper-review-recognition.mjs
+```
+
+`scripts/check-pdf-fixtures.mjs` 必须输出：
+
+- `pdf-fixtures-check.json`
+- `fixture-page-range-diagnosis/COMPARE_REPORT.md`
+- `fixture-page-range-diagnosis/current-1-8/*.png`
+- `fixture-page-range-diagnosis/candidate-9-14/*.png`
+
+## 4.2 首个失败阶段判定
+
+PDF 解析链路 debug 必须按机器规则写出 `stage-counts.json` 和 `first-failed-stage.json`：
+
+- `visual_pages.json` 缺失，或 `failed_pages == all_pages`：`render_or_vision`
+- `visual_pages.json` 存在，但 `page_understanding.detected_question_numbers` 全空：`page_understanding`
+- `page_understanding` 有题号，但 `semantic_groups` 为空：`semantic_grouping`
+- `semantic_groups` 非空，但 `output_questions` 为空：`recrop_or_candidate_synthesis`
+- `output_questions` 非空，但 `final_preview_payload.questions` 为空：`backend_final_preview`
+- `final_preview_payload.questions` 非空，但 `paper-candidates` 为空：`backend_paper_candidates`
+- 只有最后剩 UI 层问题时才标记 `frontend_ui`
+
+`zero_questions_extracted` 不能被 UI 或人工强制加入掩盖。
+
 ## 5. 验收结果
 
 - 任务最终状态：`done`
@@ -99,4 +155,5 @@
 - 主样本 `题本篇-1-8.pdf` 是当前 PDF 解析/制卷页人工核对的默认主测试 PDF，用于验证完整上下文下是否能定位 source/material/evidence；主样例不应继续出现 `partial_pdf_context`，如果出现则主样例验收失败。
 - 小样本 `sample-题本篇-3-7.pdf` 保留为 partial context 负样例，用于验证缺少上一页、缺少材料组、缺少 `source_text_span`/`source_bbox` 或无法打开原卷定位时系统不会误放行。
 - partial context 负样例的正确行为是不可自动入卷、不可人工强制加入、显示缺失上下文，并要求补页或使用完整 PDF 重跑。
+- 当缺少上一页、缺少材料组、缺少 `source_text_span`/`source_bbox` 或无法打开原卷定位时，不允许人工强制加入；只能补页重跑或使用完整 PDF 重跑。
 - 建议下一步：如需进一步提高可观察性，可补充更多结构化调试产物展示与截图，但不影响当前验收结论。

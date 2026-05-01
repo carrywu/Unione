@@ -73,7 +73,7 @@ class RepairQuestionRequest(BaseModel):
 class DebugSmokeByUrlRequest(BaseModel):
     url: str
     task_id: str | None = None
-    pages: str = "9-14"
+    pages: str = os.getenv("PDF_DEBUG_SMOKE_PAGES", "1-8")
     clean_output: bool = False
     refresh_cache: bool = False
     retry_failed_pages_only: bool = False

@@ -388,7 +388,9 @@ export class PdfService {
       {
         url: task.file_url,
         task_id: task.id,
-        pages: typeof body.pages === 'string' ? body.pages : '9-14',
+        pages: typeof body.pages === 'string'
+          ? body.pages
+          : this.configService.get<string>('PDF_DEBUG_SMOKE_PAGES', '1-8'),
         clean_output: Boolean(body.clean_output),
         refresh_cache: Boolean(body.refresh_cache),
         retry_failed_pages_only: Boolean(body.retry_failed_pages_only),
@@ -448,9 +450,12 @@ export class PdfService {
     const debugPayload = await readLocalJson('ai-preaudit-debug.json');
     const finalPreviewPayload = await readLocalJson('final-preview-payload.json');
     const aiAuditResults = await readLocalJson('ai-audit-results.json');
+    const finalQuestions = await readLocalJson('final-questions.json');
     const pageUnderstanding = await readLocalJson('page-understanding.json');
     const semanticGroups = await readLocalJson('semantic-groups.json');
     const recropPlan = await readLocalJson('recrop-plan.json');
+    const stageCounts = await readLocalJson('stage-counts.json');
+    const firstFailedStage = await readLocalJson('first-failed-stage.json');
     if (!debugPayload && !finalPreviewPayload && !aiAuditResults) {
       throw new NotFoundException('AI 预审核调试产物不存在');
     }
@@ -463,17 +468,23 @@ export class PdfService {
       qwen_vl_call_count: Number(debugPayload?.qwen_vl_call_count_after || 0),
       final_verdict: debugPayload?.final_verdict || null,
       final_preview_payload: finalPreviewPayload || debugPayload?.final_preview_payload || null,
+      final_questions: finalQuestions || debugPayload?.final_questions_after_audit || [],
       ai_audit_results: aiAuditResults || debugPayload?.ai_audit_results || [],
       page_understanding: pageUnderstanding || debugPayload?.page_understanding || [],
       semantic_groups: semanticGroups || debugPayload?.semantic_groups || [],
       recrop_plan: recropPlan || debugPayload?.recrop_plan || [],
+      stage_counts: stageCounts || debugPayload?.stage_counts || null,
+      first_failed_stage: firstFailedStage || debugPayload?.first_failed_stage || null,
       artifact_refs: {
         ai_preaudit_debug: join(debugDir, 'ai-preaudit-debug.json'),
         final_preview_payload: join(debugDir, 'final-preview-payload.json'),
+        final_questions: join(debugDir, 'final-questions.json'),
         ai_audit_results: join(debugDir, 'ai-audit-results.json'),
         page_understanding: join(debugDir, 'page-understanding.json'),
         semantic_groups: join(debugDir, 'semantic-groups.json'),
         recrop_plan: join(debugDir, 'recrop-plan.json'),
+        stage_counts: join(debugDir, 'stage-counts.json'),
+        first_failed_stage: join(debugDir, 'first-failed-stage.json'),
       },
     };
   }
@@ -511,6 +522,30 @@ export class PdfService {
       ai_warning_count: questions.filter((item) => item.ai_audit_status === 'warning').length,
       ai_failed_count: questions.filter((item) => item.ai_audit_status === 'failed').length,
     };
+    const finalQuestionsCount = Array.isArray(debug.final_questions)
+      ? debug.final_questions.length
+      : Number(debug.stage_counts?.final_questions_count || 0);
+    const outputQuestionsCount = Number(debug.stage_counts?.output_questions_count || finalQuestionsCount || 0);
+    const diagnostics = {
+      stage_counts: debug.stage_counts || null,
+      first_failed_stage: debug.first_failed_stage || null,
+      invariants: [
+        outputQuestionsCount > 0 && !previewQuestions.length
+          ? {
+              code: 'backend_preview_drop_all',
+              severity: 'error',
+              message: 'kernel/output_questions 非空，但 final_preview_payload.questions 为空',
+            }
+          : null,
+        previewQuestions.length > 0 && !questions.length
+          ? {
+              code: 'backend_paper_candidates_empty',
+              severity: 'error',
+              message: 'final_preview_payload.questions 非空，但 paper-candidates 为空',
+            }
+          : null,
+      ].filter(Boolean),
+    };
     const payload = {
       taskId: task.id,
       bankId: task.bank_id,
@@ -519,6 +554,7 @@ export class PdfService {
       provider: this.firstNonEmptyProvider(debug),
       model: this.firstNonEmptyModel(debug),
       summary,
+      diagnostics,
       questions,
       artifact_refs: {
         ...debug.artifact_refs,
@@ -2057,6 +2093,12 @@ export class PdfService {
     const recropPlan = await readJson(
       kernelDebugDir ? join(kernelDebugDir, 'debug', 'recrop-plan.json') : null,
     );
+    const kernelStageCounts = await readJson(
+      kernelDebugDir ? join(kernelDebugDir, 'debug', 'stage-counts.json') : null,
+    );
+    const kernelFirstFailedStage = await readJson(
+      kernelDebugDir ? join(kernelDebugDir, 'debug', 'first-failed-stage.json') : null,
+    );
     const visualMergeCandidates = await readJson(
       kernelDebugDir
         ? join(kernelDebugDir, 'debug', 'visual_merge_candidates.json')
@@ -2148,6 +2190,27 @@ export class PdfService {
       bankId: task.bank_id,
       questions: [...finalQuestionPreviews, ...previewFallbacks],
     };
+    const stageCounts = {
+      ...(kernelStageCounts && typeof kernelStageCounts === 'object' ? kernelStageCounts : {}),
+      final_questions_count: finalQuestionsPayload.length,
+      final_preview_questions_count: finalPreviewPayload.questions.length,
+    };
+    const backendFinalPreviewDropAll =
+      Number(stageCounts.output_questions_count || finalQuestionsPayload.length || 0) > 0 &&
+      finalPreviewPayload.questions.length === 0;
+    const firstFailedStage = backendFinalPreviewDropAll
+      ? {
+          firstFailedStage: 'backend_final_preview',
+          reason: 'kernel/output_questions 非空，但 final_preview_payload.questions 为空',
+          stage_counts: stageCounts,
+        }
+      : kernelFirstFailedStage || {
+          firstFailedStage: finalPreviewPayload.questions.length ? null : 'backend_final_preview',
+          reason: finalPreviewPayload.questions.length
+            ? 'no backend final preview failure detected'
+            : 'final_preview_payload.questions is empty',
+          stage_counts: stageCounts,
+        };
     const aiAuditResults = finalQuestions.length
       ? finalQuestions.map((question) => {
           const optionsComplete = Boolean(question.option_a && question.option_b && question.option_c && question.option_d);
@@ -2264,6 +2327,8 @@ export class PdfService {
       })),
       final_questions_after_audit: finalQuestionsPayload,
       final_preview_payload: finalPreviewPayload,
+      stage_counts: stageCounts,
+      first_failed_stage: firstFailedStage,
       page_understanding: pageUnderstanding || payload.stats?.scanned_fallback_debug?.page_understanding || null,
       semantic_groups: semanticGroups || payload.stats?.scanned_fallback_debug?.semantic_groups || null,
       recrop_plan: recropPlan || payload.stats?.scanned_fallback_debug?.recrop_plan || null,
@@ -2322,6 +2387,8 @@ export class PdfService {
     await writeArtifact('final-questions.json', finalQuestionsPayload);
     await writeArtifact('final-preview-payload.json', finalPreviewPayload);
     await writeArtifact('ai-audit-results.json', aiAuditResults);
+    await writeArtifact('stage-counts.json', stageCounts);
+    await writeArtifact('first-failed-stage.json', firstFailedStage);
     if (qwenPromptPath) {
       await writeArtifact('qwen-vl-prompt.txt', qwenPrompt || '');
     } else if (qwenPrompt) {
