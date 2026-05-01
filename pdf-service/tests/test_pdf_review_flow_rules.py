@@ -4,7 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from debug_tools.export_visual_debug import build_layout, load_case, prepare_case_pdf, resolve_pdf_path
+from debug_tools.export_visual_debug import build_layout, load_case, prepare_case_pdf, render_report, resolve_pdf_path
 from debug_tools.visual_assertions import run_visual_assertions
 from models import PageContent, TextBlock
 from layout_models import ExerciseBlock, LayoutElement, QuestionCoreBlock, VisualBlock
@@ -478,6 +478,36 @@ class PdfReviewFlowRulesTest(unittest.TestCase):
         self._assert_visual_absorbed_text(questions_by_index[6], "p3-img1", "2023 年全国规模以上文化及相关产业企业相关指标情况", elements)
         self._assert_visual_absorbed_text(questions_by_index[7], "p4-img1", "2015~2018 年D 省软件及信息服务业营业额", elements)
         self._assert_visual_absorbed_text(questions_by_index[7], "p4-img1", "注：“1 季”表示第一季度数值，后同。", elements)
+
+    def test_visual_debug_report_includes_all_configured_questions_in_expansion_debug(self):
+        case = {
+            "name": "example_1_10",
+            "questions": {
+                "q8": {"index": 8, "expected_visuals": ["p5-img1"]},
+                "q9": {"index": 9, "expected_visuals": ["p5-img2", "p5-img3"]},
+                "q10": {"index": 10, "expected_visuals": []},
+            },
+        }
+        layout = {
+            "questions": [
+                {"index": 8, "source_page_start": 5, "source_bbox": [1, 2, 3, 4], "visual_ids": ["p5-img1"]},
+                {"index": 9, "source_page_start": 5, "source_bbox": [5, 6, 7, 8], "visual_ids": ["p5-img2", "p5-img3"]},
+                {"index": 10, "source_page_start": 6, "source_bbox": [9, 10, 11, 12], "visual_ids": []},
+            ],
+            "visuals": [
+                {"id": "p5-img1", "raw_bbox": [1, 1, 2, 2], "expanded_bbox": [1, 1, 3, 3]},
+                {"id": "p5-img2", "raw_bbox": [2, 2, 3, 3], "expanded_bbox": [2, 2, 4, 4]},
+                {"id": "p5-img3", "raw_bbox": [3, 3, 4, 4], "expanded_bbox": [3, 3, 5, 5]},
+            ],
+        }
+        assertions = {"passed": True, "failed_count": 0, "failures": [], "questions": []}
+
+        report = render_report(case=case, layout=layout, assertions=assertions, overlay_files=[])
+
+        self.assertIn("- q8:", report)
+        self.assertIn("- q9:", report)
+        self.assertIn("- q10:", report)
+        self.assertIn("p5-img3", report)
 
     def _assert_visual_absorbed_text(self, question: dict, visual_id: str, expected_text: str, elements: list[dict]):
         image = image_by_ref(question, visual_id)

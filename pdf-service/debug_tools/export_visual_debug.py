@@ -175,8 +175,6 @@ def render_report(
     visual_by_id = {visual.get("id"): visual for visual in layout.get("visuals") or []}
     questions_by_key = case.get("questions") or {}
     for q_key, expected in questions_by_key.items():
-        if int(expected.get("index") or str(q_key).lstrip("q") or 0) > 7:
-            continue
         lines.append(f"- {q_key}:")
         for visual_id in expected.get("expected_visuals") or []:
             visual = visual_by_id.get(visual_id) or {}

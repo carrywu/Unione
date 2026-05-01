@@ -576,7 +576,10 @@ export class PdfService {
     if (!sourceTaskId) throw new BadRequestException('source_task_id 必填');
     const candidates = await this.getPaperCandidates(sourceTaskId);
     const bodyQuestions = Array.isArray(body.questions)
-      ? (body.questions as Array<Record<string, any>>)
+      ? this.paperDraftQuestionsFromRequestedCandidates(
+          body.questions as Array<Record<string, any>>,
+          candidates.questions as Array<Record<string, any>>,
+        )
       : candidates.questions.filter((item: Record<string, any>) => item.can_add_to_paper);
     const paperId = randomUUID();
     const sections = this.normalizeDraftSections(body.sections, bodyQuestions);
@@ -605,12 +608,15 @@ export class PdfService {
 
   async updateDraftPaper(paperId: string, body: Record<string, unknown>) {
     const existing = await this.readDraftPaper(paperId);
-    const sections = this.normalizeDraftSections(
-      body.sections || existing.sections,
-      Array.isArray(body.questions) ? (body.questions as Array<Record<string, any>>) : existing.questions,
-    );
+    const requestedQuestions = Array.isArray(body.questions)
+      ? await this.paperDraftQuestionsFromExistingDraft(
+          existing,
+          body.questions as Array<Record<string, any>>,
+        )
+      : existing.questions;
+    const sections = this.normalizeDraftSections(body.sections || existing.sections, requestedQuestions);
     const questions = this.normalizeDraftQuestions(
-      Array.isArray(body.questions) ? (body.questions as Array<Record<string, any>>) : existing.questions,
+      requestedQuestions,
       sections[0]?.id || 'section-1',
     );
     const next = {
@@ -638,6 +644,79 @@ export class PdfService {
         questions: paper.questions || [],
       },
     };
+  }
+
+  private paperDraftQuestionsFromRequestedCandidates(
+    requestedQuestions: Array<Record<string, any>>,
+    canonicalCandidates: Array<Record<string, any>>,
+  ) {
+    const candidatesById = new Map<string, Record<string, any>>();
+    const candidatesByQuestionNo = new Map<string, Record<string, any>>();
+    const duplicateQuestionNos = new Set<string>();
+
+    canonicalCandidates.forEach((candidate) => {
+      const candidateId = this.safeDisplayText(candidate.candidate_id || candidate.id, '');
+      if (candidateId) candidatesById.set(candidateId, candidate);
+      if (candidate.question_no !== null && candidate.question_no !== undefined) {
+        const key = String(candidate.question_no);
+        if (candidatesByQuestionNo.has(key)) duplicateQuestionNos.add(key);
+        else candidatesByQuestionNo.set(key, candidate);
+      }
+    });
+    duplicateQuestionNos.forEach((key) => candidatesByQuestionNo.delete(key));
+
+    return requestedQuestions.map((requested, index) => {
+      const item = requested && typeof requested === 'object' ? requested : {};
+      const requestedId = this.safeDisplayText(item.candidate_id || item.id, '');
+      const questionNoKey = item.question_no !== null && item.question_no !== undefined
+        ? String(item.question_no)
+        : '';
+      const canonical =
+        (requestedId ? candidatesById.get(requestedId) : null) ||
+        (questionNoKey ? candidatesByQuestionNo.get(questionNoKey) : null);
+
+      if (!canonical) {
+        throw new BadRequestException(`候选题 ${requestedId || questionNoKey || index + 1} 不存在或不属于当前解析任务`);
+      }
+      if (!this.paperDraftCandidateCanBeAdded(canonical)) {
+        throw new BadRequestException(
+          `候选题 ${canonical.question_no ?? canonical.candidate_id ?? index + 1} 不可入卷：${
+            canonical.missingContextReason || canonical.cannot_add_reason || '缺少可核验 source evidence'
+          }`,
+        );
+      }
+
+      return {
+        ...canonical,
+        section_id: item.section_id || canonical.section_id,
+        score: item.score ?? canonical.score,
+        order: item.order ?? canonical.order,
+      };
+    });
+  }
+
+  private async paperDraftQuestionsFromExistingDraft(
+    existing: Record<string, any>,
+    requestedQuestions: Array<Record<string, any>>,
+  ) {
+    const sourceTaskId = this.safeDisplayText(existing.source_task_id || existing.taskId, '');
+    if (!sourceTaskId) throw new BadRequestException('试卷草稿缺少 source_task_id，无法校验候选题来源');
+    const candidates = await this.getPaperCandidates(sourceTaskId);
+    return this.paperDraftQuestionsFromRequestedCandidates(
+      requestedQuestions,
+      candidates.questions as Array<Record<string, any>>,
+    );
+  }
+
+  private paperDraftCandidateCanBeAdded(candidate: Record<string, any>) {
+    const sourcePageRefs = Array.isArray(candidate.source_page_refs) ? candidate.source_page_refs : [];
+    const hasSourceEvidence = Boolean(candidate.source_bbox && candidate.source_text_span);
+    return Boolean(
+      (candidate.can_add_to_paper || candidate.manualForceAddAllowed) &&
+        candidate.source_locator_available &&
+        sourcePageRefs.length > 0 &&
+        hasSourceEvidence,
+    );
   }
 
   private paperCandidateQuestionKey(questionNo: unknown, index: number) {
@@ -674,9 +753,7 @@ export class PdfService {
       : Array.isArray(question.images)
         ? question.images
         : [];
-    const sourcePageRefs = Array.isArray(question.source_page_refs)
-      ? question.source_page_refs
-      : [];
+    const sourcePageRefs = this.paperCandidateSourcePageRefs(question, semanticGroup);
     const sourceBbox = this.firstBbox(
       question.source_bbox,
       question.sourceBbox,
@@ -690,6 +767,12 @@ export class PdfService {
         semanticGroup?.stem_group?.source_text_span,
       '',
     ) || null;
+    const sourceLocatorAvailable = this.paperCandidateSourceLocatorAvailable(
+      task,
+      sourcePageRefs,
+      sourceBbox,
+      sourceTextSpan,
+    );
     let aiStatus = this.safeDisplayText(
       audit.ai_audit_status || question.ai_audit_status,
       'failed',
@@ -709,6 +792,7 @@ export class PdfService {
       sourcePageRefs,
       sourceBbox,
       sourceTextSpan,
+      sourceLocatorAvailable,
       semanticGroup,
     });
     sourceReview.riskFlags.forEach((flag) => {
@@ -791,7 +875,7 @@ export class PdfService {
       manualForceAddAllowed,
       missingContextReason: sourceReview.manualReviewable ? null : sourceReview.missingContextReason,
       recommendedAction: sourceReview.recommendedAction,
-      source_locator_available: false,
+      source_locator_available: sourceLocatorAvailable,
       source_artifacts_refs: {
         ...(question.source_artifacts_refs || {}),
         ...(debug.artifact_refs || {}),
@@ -835,12 +919,53 @@ export class PdfService {
     return null;
   }
 
+  private paperCandidateSourcePageRefs(question: Record<string, any>, semanticGroup: Record<string, any> | null) {
+    const direct = this.toNumberArray(
+      question.source_page_refs || question.sourcePageRefs || question.page_range || question.pageRange,
+    );
+    if (direct?.length) return direct;
+
+    const start = this.toOptionalNumber(
+      question.source_page_start ??
+        question.sourcePageStart ??
+        semanticGroup?.source_page_start ??
+        semanticGroup?.sourcePageStart ??
+        question.page_num ??
+        question.page ??
+        semanticGroup?.page_num ??
+        semanticGroup?.page,
+    );
+    if (!start || start < 1) return [];
+    const end = this.toOptionalNumber(
+      question.source_page_end ??
+        question.sourcePageEnd ??
+        semanticGroup?.source_page_end ??
+        semanticGroup?.sourcePageEnd,
+    ) || start;
+    if (end < start || end - start > 50) return [start];
+    return Array.from({ length: end - start + 1 }, (_unused, index) => start + index);
+  }
+
+  private paperCandidateSourceLocatorAvailable(
+    task: ParseTask,
+    sourcePageRefs: unknown[],
+    sourceBbox: number[] | null,
+    sourceTextSpan: string | null,
+  ) {
+    return Boolean(
+      this.safeDisplayText(task.file_url, '') &&
+        sourcePageRefs.length > 0 &&
+        (sourceBbox || sourceTextSpan),
+    );
+  }
+
   private paperCandidateManualReviewDecision(input: {
     riskFlags: string[];
     stem: string;
     sourcePageRefs: unknown[];
     sourceBbox: number[] | null;
     sourceTextSpan: string | null;
+    sourceLocatorAvailable: boolean;
     semanticGroup: Record<string, any> | null;
   }) {
     const riskText = input.riskFlags.join(' ');
@@ -848,21 +973,20 @@ export class PdfService {
     const hasMaterialEvidence = this.hasMaterialEvidence(input.semanticGroup);
     const hasSourcePage = input.sourcePageRefs.length > 0;
     const hasSourceEvidence = Boolean(input.sourceBbox || input.sourceTextSpan);
-    const sourceLocatorMissing = true;
+    const hasSourceTextSpan = Boolean(input.sourceTextSpan);
+    const sourceLocatorMissing = !input.sourceLocatorAvailable;
     const extraRiskFlags = new Set<string>();
 
     if (!hasSourcePage) extraRiskFlags.add('source_page_missing');
-    if (!hasSourceEvidence) extraRiskFlags.add('source_unverified');
-    extraRiskFlags.add('paper_review_original_pdf_locator_missing');
+    if (!hasSourceEvidence || !hasSourceTextSpan) extraRiskFlags.add('source_unverified');
+    if (!hasSourceTextSpan) extraRiskFlags.add('source_text_span_missing');
+    if (sourceLocatorMissing) extraRiskFlags.add('paper_review_original_pdf_locator_missing');
 
     const missingPreviousPage =
       /partial_pdf_context|missing_previous_page_context|question_cross_page/i.test(riskText);
     const questionNotFound = /question_not_found_in_pdf/i.test(riskText);
     const sourceUnverified =
-      /source_unverified|paper_review_original_pdf_locator_missing/i.test(riskText) ||
-      !hasSourcePage ||
-      !hasSourceEvidence ||
-      sourceLocatorMissing;
+      /source_unverified/i.test(riskText) || sourceLocatorMissing || !hasSourceTextSpan;
     const missingMaterial =
       materialDependent &&
       (!hasMaterialEvidence ||

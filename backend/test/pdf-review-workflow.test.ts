@@ -228,6 +228,8 @@ async function run() {
   await testMergeAdjacentQuestionImagesMarksSharedGroup();
   await testAiRepairReturnsProposalWithoutPersisting();
   await testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts();
+  await testPaperCandidatesRejectManualForceAddWhenSourceTextSpanMissing();
+  await testPaperDraftRejectsForgedManualForceAddWithoutSourceEvidence();
   await testPdfSavePersistsVisionAiCorrectionFields();
   await testPdfSavePersistsAiSolverCandidateFields();
   await testPdfSavePersistsAiPreauditFields();
@@ -448,18 +450,73 @@ async function testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts() {
               visual_assets: [{ url: 'chart.png', ref: 'p1-img1' }],
               visual_parse_status: 'success',
               source_page_refs: [1],
+              source_bbox: [10, 20, 220, 90],
+              source_text_span: '完整资料分析题干',
               risk_flags: [],
             },
             {
               question_no: 2,
-              stem: '需要人工修复的题干',
-              options: { A: '甲' },
-              visual_parse_status: 'failed',
+              stem: '需要人工复核的题干',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              visual_parse_status: 'success',
               source_page_refs: [2],
-              risk_flags: ['need_manual_fix'],
+              source_bbox: [12, 120, 230, 188],
+              source_text_span: '需要人工复核的题干',
+              risk_flags: [],
             },
           ],
         },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'semantic-groups.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            source_page_start: 1,
+            source_page_end: 1,
+            source_text_span: '完整资料分析题干',
+            stem_group: {
+              text: '完整资料分析题干',
+              bbox: [10, 20, 220, 90],
+              source_text_span: '完整资料分析题干',
+            },
+            options_group: {
+              blocks: [
+                { label: 'A', text: '甲', bbox: [10, 95, 80, 115] },
+                { label: 'B', text: '乙', bbox: [90, 95, 160, 115] },
+                { label: 'C', text: '丙', bbox: [10, 120, 80, 140] },
+                { label: 'D', text: '丁', bbox: [90, 120, 160, 140] },
+              ],
+            },
+            material_group: { id: 'material-1', bbox: [8, 8, 240, 180] },
+            visual_group: { blocks: [{ ref: 'p1-img1', bbox: [20, 150, 180, 260] }] },
+            title_group: { blocks: [{ text: '资料图', bbox: [20, 140, 180, 148] }] },
+          },
+          {
+            question_no: 2,
+            source_page_start: 2,
+            source_page_end: 2,
+            source_text_span: '需要人工复核的题干',
+            stem_group: {
+              text: '需要人工复核的题干',
+              bbox: [12, 120, 230, 188],
+              source_text_span: '需要人工复核的题干',
+            },
+            options_group: {
+              blocks: [
+                { label: 'A', text: '甲', bbox: [12, 195, 82, 215] },
+                { label: 'B', text: '乙', bbox: [92, 195, 162, 215] },
+                { label: 'C', text: '丙', bbox: [12, 220, 82, 240] },
+                { label: 'D', text: '丁', bbox: [92, 220, 162, 240] },
+              ],
+            },
+          },
+        ],
         null,
         2,
       ),
@@ -481,9 +538,11 @@ async function testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts() {
           },
           {
             question_no: 2,
-            ai_audit_status: 'failed',
-            ai_audit_summary: '选项缺失，不能自动入卷。',
-            answer_unknown_reason: '选项缺失，无法判断答案',
+            ai_audit_status: 'warning',
+            ai_audit_summary: '结构可核验，但需要人工确认答案解析后才能入卷。',
+            answer_suggestion: 'B',
+            answer_confidence: 0.62,
+            analysis_suggestion: '需人工核对原卷后确认。',
             risk_flags: ['need_manual_fix'],
           },
         ],
@@ -500,8 +559,15 @@ async function testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts() {
     assert.equal(candidates.summary.need_manual_fix_count, 1);
     assert.equal(candidates.questions[0].can_add_to_paper, true);
     assert.equal(candidates.questions[0].cannot_add_reason, null);
+    assert.equal(candidates.questions[0].manualReviewable, true);
+    assert.equal(candidates.questions[0].source_locator_available, true);
+    assert.deepEqual(candidates.questions[0].source_bbox, [10, 20, 220, 90]);
+    assert.equal(candidates.questions[0].source_text_span, '完整资料分析题干');
     assert.equal(candidates.questions[1].can_add_to_paper, false);
-    assert.match(candidates.questions[1].cannot_add_reason, /选项缺失/);
+    assert.equal(candidates.questions[1].manualReviewable, true);
+    assert.equal(candidates.questions[1].manualForceAddAllowed, true);
+    assert.equal(candidates.questions[1].source_locator_available, true);
+    assert.match(candidates.questions[1].cannot_add_reason, /AI 预审核 warning/);
 
     const autoDraft = await h.pdfService.createDraftPaper({
       source_task_id: 'task-1',
@@ -530,6 +596,172 @@ async function testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts() {
         rm(join(draftRoot, `${paperId}.json`), { force: true }),
       ),
     );
+  }
+}
+
+async function testPaperCandidatesRejectManualForceAddWhenSourceTextSpanMissing() {
+  const h = harness();
+  const debugDir = join(process.cwd(), 'debug', 'pdf-ai-preaudit', 'task-1');
+  const draftRoot = join(process.cwd(), 'debug', 'paper-drafts');
+
+  await rm(debugDir, { recursive: true, force: true });
+  await rm(draftRoot, { recursive: true, force: true });
+  await mkdir(debugDir, { recursive: true });
+
+  try {
+    await writeFile(
+      join(debugDir, 'ai-preaudit-debug.json'),
+      JSON.stringify({ qwen_vl_enabled: true, qwen_vl_call_count_after: 1 }, null, 2),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'final-preview-payload.json'),
+      JSON.stringify(
+        {
+          questions: [
+            {
+              question_no: 1,
+              stem: '普通常识题干',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              visual_parse_status: 'success',
+              source_page_refs: [1],
+              source_bbox: [10, 20, 220, 90],
+              risk_flags: [],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'ai-audit-results.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            ai_audit_status: 'warning',
+            ai_audit_summary: 'source bbox 存在，但缺少 source_text_span，不能强制入卷。',
+            answer_suggestion: 'A',
+            analysis_suggestion: '解析待人工核验。',
+            risk_flags: [],
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const candidates = await h.pdfService.getPaperCandidates('task-1');
+    assert.equal(candidates.questions.length, 1);
+    assert.equal(candidates.questions[0].source_locator_available, true);
+    assert.deepEqual(candidates.questions[0].source_page_refs, [1]);
+    assert.deepEqual(candidates.questions[0].source_bbox, [10, 20, 220, 90]);
+    assert.equal(candidates.questions[0].source_text_span, null);
+    assert.equal(candidates.questions[0].manualReviewable, false);
+    assert.equal(candidates.questions[0].manualForceAddAllowed, false);
+    assert.match(candidates.questions[0].cannot_add_reason, /source_text_span|source evidence|无法人工核验/);
+  } finally {
+    await rm(debugDir, { recursive: true, force: true });
+    await rm(draftRoot, { recursive: true, force: true });
+  }
+}
+
+async function testPaperDraftRejectsForgedManualForceAddWithoutSourceEvidence() {
+  const h = harness();
+  const debugDir = join(process.cwd(), 'debug', 'pdf-ai-preaudit', 'task-1');
+  const draftRoot = join(process.cwd(), 'debug', 'paper-drafts');
+
+  await rm(debugDir, { recursive: true, force: true });
+  await rm(draftRoot, { recursive: true, force: true });
+  await mkdir(debugDir, { recursive: true });
+
+  try {
+    await writeFile(
+      join(debugDir, 'ai-preaudit-debug.json'),
+      JSON.stringify({ qwen_vl_enabled: true, qwen_vl_call_count_after: 1 }, null, 2),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'final-preview-payload.json'),
+      JSON.stringify(
+        {
+          questions: [
+            {
+              question_no: 1,
+              stem: '缺少 source evidence 的题干',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              visual_parse_status: 'success',
+              source_page_refs: [],
+              risk_flags: [],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'ai-audit-results.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            ai_audit_status: 'warning',
+            ai_audit_summary: '需要人工核验，但 source evidence 缺失。',
+            answer_suggestion: 'A',
+            analysis_suggestion: '解析待人工核验。',
+            risk_flags: [],
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const candidates = await h.pdfService.getPaperCandidates('task-1');
+    assert.equal(candidates.questions.length, 1);
+    assert.equal(candidates.questions[0].manualReviewable, false);
+    assert.equal(candidates.questions[0].manualForceAddAllowed, false);
+
+    const forgedCandidate = {
+      ...candidates.questions[0],
+      can_add_to_paper: true,
+      manualReviewable: true,
+      manualForceAddAllowed: true,
+      source_locator_available: true,
+      source_page_refs: [1],
+    };
+
+    await assert.rejects(
+      () =>
+        h.pdfService.createDraftPaper({
+          source_task_id: 'task-1',
+          title: '伪造人工强制草稿',
+          questions: [forgedCandidate],
+        }),
+      /不可入卷|无法人工核验|source evidence|候选题/,
+    );
+
+    const emptyDraft = await h.pdfService.createDraftPaper({
+      source_task_id: 'task-1',
+      title: '空草稿',
+    });
+    assert.equal(emptyDraft.questions.length, 0);
+    await assert.rejects(
+      () =>
+        h.pdfService.updateDraftPaper(emptyDraft.paper_id, {
+          questions: [forgedCandidate],
+        }),
+      /不可入卷|无法人工核验|source evidence|候选题/,
+    );
+  } finally {
+    await rm(debugDir, { recursive: true, force: true });
+    await rm(draftRoot, { recursive: true, force: true });
   }
 }
 
