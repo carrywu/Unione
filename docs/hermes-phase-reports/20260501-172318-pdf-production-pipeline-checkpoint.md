@@ -86,7 +86,7 @@ Required checks:
 - git branch --show-current: hermes/pdf-production-pipeline
 - git status --short: modified PDF pipeline files plus untracked docs/report files; no sensitive large artifacts selected for commit
 - git remote -v: origin https://github.com/carrywu/Unione.git
-- cd pdf-service && .venv/bin/python -m unittest: exit 5, expected command behavior because default unittest discovery ran 0 tests
+- cd pdf-service && .venv/bin/python -m unittest: initially exit 5 because default unittest discovery ran 0 tests; fixed by adding pdf-service/tests/__init__.py and reran successfully, 84 tests OK
 - cd pdf-service && .venv/bin/python -m unittest discover -s tests -p 'test*.py': pass, 84 tests OK
 - python3 -m py_compile pdf-service/pipeline.py pdf-service/parser_kernel/routing.py pdf-service/parser_kernel/adapter.py pdf-service/models.py pdf-service/vision_ai/qwen_vl_provider.py pdf-service/vision_ai/enhancer.py pdf-service/vision_ai/schema.py pdf-service/vision_ai/prompt_builder.py pdf-service/ai_client.py: pass
 - cd backend && npm run build: pass
