@@ -31,7 +31,11 @@
           <el-empty description="未解析到题目，请查看解析日志/重试/人工框选" />
         </template>
         <el-table-column prop="index_num" label="题号" width="90" />
-        <el-table-column prop="content" label="题干" min-width="360" show-overflow-tooltip />
+        <el-table-column label="题干" min-width="360" show-overflow-tooltip>
+          <template #default="{ row }">
+            <MathText :text="row.content" fallback="题干未能可靠定位" />
+          </template>
+        </el-table-column>
         <el-table-column prop="type" label="类型" width="100" />
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
@@ -69,6 +73,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getTaskStatus, retryTask, type ParseTask } from '@/api/pdf';
 import { deleteQuestion, getQuestions, type Question } from '@/api/question';
+import MathText from '@/components/MathText.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 

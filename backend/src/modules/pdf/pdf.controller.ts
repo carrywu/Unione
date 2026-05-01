@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -93,6 +93,45 @@ export class PdfController {
       res.setHeader('Content-Type', artifact.contentType);
     }
     return artifact.data;
+  }
+
+  @Get('task/:taskId/ai-preaudit-debug')
+  @ApiOperation({ summary: '读取 PDF AI 预审核调试摘要' })
+  getAiPreauditDebug(@Param('taskId') taskId: string) {
+    return this.pdfService.getAiPreauditDebug(taskId);
+  }
+
+  @Get('task/:taskId/paper-candidates')
+  @ApiOperation({ summary: '读取解析任务制卷候选题' })
+  getPaperCandidates(@Param('taskId') taskId: string) {
+    return this.pdfService.getPaperCandidates(taskId);
+  }
+
+  @Post('papers/draft')
+  @ApiOperation({ summary: '创建试卷草稿' })
+  createDraftPaper(@Body() body: Record<string, unknown>) {
+    return this.pdfService.createDraftPaper(body);
+  }
+
+  @Get('papers/:paperId')
+  @ApiOperation({ summary: '读取试卷草稿' })
+  getDraftPaper(@Param('paperId') paperId: string) {
+    return this.pdfService.getDraftPaper(paperId);
+  }
+
+  @Put('papers/:paperId')
+  @ApiOperation({ summary: '更新试卷草稿' })
+  updateDraftPaper(
+    @Param('paperId') paperId: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.pdfService.updateDraftPaper(paperId, body);
+  }
+
+  @Get('papers/:paperId/preview')
+  @ApiOperation({ summary: '预览试卷草稿' })
+  previewDraftPaper(@Param('paperId') paperId: string) {
+    return this.pdfService.previewDraftPaper(paperId);
   }
 
   @Get('task/:taskId/debug/artifact')

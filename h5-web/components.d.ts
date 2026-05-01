@@ -10,6 +10,7 @@ declare module 'vue' {
     AppIcon: typeof import('./src/components/AppIcon.vue')['default']
     BottomNavBar: typeof import('./src/components/BottomNavBar.vue')['default']
     LoadingState: typeof import('./src/components/LoadingState.vue')['default']
+    MathText: typeof import('./src/components/MathText.vue')['default']
     NavBar: typeof import('./src/components/NavBar.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

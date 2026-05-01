@@ -183,11 +183,11 @@
                   {{ q.needs_review ? '待审核' : '正常' }}
                 </el-tag>
                 <span class="q-index">第{{ q.index }}题</span>
-                <p class="q-content">{{ q.content }}</p>
+                <p class="q-content"><MathText :text="q.content" fallback="题干未能可靠定位" /></p>
                 <div v-if="q.options" class="q-options">
-                  <span v-for="(value, key) in q.options" :key="key">{{ key }}. {{ value }} &nbsp;</span>
+                  <span v-for="(value, key) in q.options" :key="key">{{ key }}. <MathText :text="value" fallback="选项缺失" /> &nbsp;</span>
                 </div>
-                <div v-if="q.answer" class="q-answer">答案：{{ q.answer }}</div>
+                <div v-if="q.answer" class="q-answer">答案：<MathText :text="q.answer" /></div>
                 <div v-if="q.images?.length" class="image-row">
                   <el-image
                     v-for="(img, imgIndex) in q.images"
@@ -227,6 +227,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { getBanks, type Bank } from '@/api/bank';
 import { pdfServiceApi, type PdfServiceConfig, type PdfServiceStats, type PdfServiceStatus, type TestParseResult } from '@/api/pdf-service';
 import { getSystemConfigs, getSystemInfo, updateSystemConfig, type SystemConfig } from '@/api/system';
+import MathText from '@/components/MathText.vue';
 import PageHeader from '@/components/PageHeader.vue';
 
 interface PromptConfig {
@@ -631,4 +632,3 @@ h3 {
   max-height: 160px;
 }
 </style>
-

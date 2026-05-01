@@ -35,7 +35,7 @@
           <span class="material-icon"><AppIcon name="book" :size="16" /></span>
           <span class="material-label">材料阅读</span>
         </div>
-        <p class="material-text">{{ question.material.content }}</p>
+        <p class="material-text"><MathText :text="question.material.content" /></p>
         <img
           v-for="(image, index) in materialImages"
           :key="`material-${index}`"
@@ -54,7 +54,7 @@
             <span class="question-num">{{ quiz.currentIndex + 1 }} / {{ quiz.questions.length }}</span>
           </div>
         </div>
-        <h3 class="question-stem">{{ question.content }}</h3>
+        <h3 class="question-stem"><MathText :text="question.content" fallback="题干未能可靠定位" /></h3>
 
         <!-- Images -->
         <img
@@ -87,7 +87,7 @@
             @click="quiz.status === 'answering' && (selectedAnswer = option.value)"
           >
             <span class="option-letter" :class="optionLetterClass(option.value)">{{ option.value }}</span>
-            <span class="option-label">{{ option.label }}</span>
+            <span class="option-label"><MathText :text="option.label" fallback="选项缺失" /></span>
             <AppIcon
               v-if="quiz.status === 'submitted' && currentResult?.answer === option.value"
               class="option-icon option-icon-correct"
@@ -112,8 +112,8 @@
             <span>解析详情</span>
             <button class="analysis-note-btn" type="button" @pointerdown.prevent="openNotePanel" @click="openNotePanel">查看笔记</button>
           </div>
-          <p class="analysis-answer">正确答案：{{ answerLabel(currentResult?.answer || '') }}</p>
-          <p class="analysis-text">{{ currentResult?.analysis || '暂无解析' }}</p>
+          <p class="analysis-answer">正确答案：<MathText :text="answerLabel(currentResult?.answer || '')" fallback="未给出" /></p>
+          <p class="analysis-text"><MathText :text="currentResult?.analysis" fallback="暂无解析" /></p>
           <img
             v-for="(image, index) in analysisImages"
             :key="`analysis-image-${index}`"
@@ -197,6 +197,7 @@ import { showDialog, showImagePreview, showSuccessToast } from 'vant';
 import { submitAnswer } from '@/api/record';
 import LoadingState from '@/components/LoadingState.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import MathText from '@/components/MathText.vue';
 import { useCountdown } from '@/composables/useCountdown';
 import { useSync } from '@/composables/useSync';
 import { useQuizStore } from '@/stores/quiz';

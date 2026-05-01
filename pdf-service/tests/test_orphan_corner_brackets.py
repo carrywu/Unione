@@ -37,6 +37,29 @@ class OrphanCornerBracketCleanupTest(unittest.TestCase):
         self.assertIsNotNone(cleaned)
         self.assertEqual(cleaned["content"], "（2024 河北事业单位）煤炭进口2868 万吨。")
 
+    def test_validator_filters_visual_parse_placeholders_from_question_fields(self):
+        cleaned = _clean_question(
+            {
+                "index": 5,
+                "type": "single",
+                "content": "[page 5 visual parse unavailable]\n2017～2021 五年间重庆市城镇常住居民人均可支配收入与农村常住居民人均可支配收入之比最小的是：",
+                "option_a": "A. 2017 年",
+                "option_b": "[visual parse unavailable]",
+                "option_c": "C. 2020 年",
+                "option_d": "D. 2021 年",
+                "analysis": "visual parse unavailable",
+            }
+        )
+
+        self.assertIsNotNone(cleaned)
+        serialized = "\n".join(
+            str(cleaned.get(key) or "")
+            for key in ["content", "option_a", "option_b", "option_c", "option_d", "analysis"]
+        ).lower()
+        self.assertNotIn("visual parse unavailable", serialized)
+        self.assertNotIn("[page 5 visual parse", serialized)
+        self.assertIn("placeholder_filtered", cleaned["parse_warnings"])
+
 
 if __name__ == "__main__":
     unittest.main()

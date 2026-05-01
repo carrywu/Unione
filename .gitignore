@@ -30,6 +30,8 @@ test-results/
 .omx/
 .playwright-mcp/
 artifacts/
+debug/
+backend/debug/
 pdf-service/tmp/
 pdf-service/*.pdf
 *.log

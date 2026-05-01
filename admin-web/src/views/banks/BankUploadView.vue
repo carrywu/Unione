@@ -98,11 +98,19 @@
             </div>
             <el-table v-loading="resultLoading" :data="resultQuestions" row-key="id" border>
               <el-table-column prop="index_num" label="题号" width="80" />
-              <el-table-column prop="content" label="题干" min-width="280" show-overflow-tooltip />
+              <el-table-column label="题干" min-width="280" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <MathText :text="row.content" fallback="题干未能可靠定位" />
+                </template>
+              </el-table-column>
               <el-table-column prop="type" label="类型" width="90">
                 <template #default="{ row }">{{ row.type === 'judge' ? '判断' : '单选' }}</template>
               </el-table-column>
-              <el-table-column prop="answer" label="答案" width="80" />
+              <el-table-column label="答案" width="80">
+                <template #default="{ row }">
+                  <MathText :text="row.answer" fallback="-" />
+                </template>
+              </el-table-column>
               <el-table-column label="状态" width="120">
                 <template #default="{ row }">
                   <StatusTag :status="row.status" :needs-review="row.needs_review" />
@@ -136,6 +144,7 @@ import { parsePdf, getTaskStatus, type ParseTask } from '@/api/pdf';
 import { getQuestions, type Question } from '@/api/question';
 import { uploadFile } from '@/api/upload';
 import PageHeader from '@/components/PageHeader.vue';
+import MathText from '@/components/MathText.vue';
 import StatusTag from '@/components/StatusTag.vue';
 
 const route = useRoute();

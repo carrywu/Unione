@@ -1,4 +1,6 @@
 import * as assert from 'node:assert/strict';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import axios from 'axios';
 import { BankStatus } from '../src/modules/bank/entities/question-bank.entity';
 import { ParseTaskStatus } from '../src/modules/pdf/entities/parse-task.entity';
@@ -225,8 +227,10 @@ async function run() {
   await testQuestionImageOperationsOnlyTouchCurrentQuestion();
   await testMergeAdjacentQuestionImagesMarksSharedGroup();
   await testAiRepairReturnsProposalWithoutPersisting();
+  await testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts();
   await testPdfSavePersistsVisionAiCorrectionFields();
   await testPdfSavePersistsAiSolverCandidateFields();
+  await testPdfSavePersistsAiPreauditFields();
   await testAcceptAiAnswerRecordsAuditLog();
   await testAcceptAiAnalysisRecordsAuditLog();
   await testAcceptAiBothRecordsAuditLog();
@@ -408,6 +412,127 @@ async function testAiRepairReturnsProposalWithoutPersisting() {
   }
 }
 
+async function testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts() {
+  const h = harness();
+  const debugDir = join(process.cwd(), 'debug', 'pdf-ai-preaudit', 'task-1');
+  const draftRoot = join(process.cwd(), 'debug', 'paper-drafts');
+  const draftIds: string[] = [];
+
+  await rm(debugDir, { recursive: true, force: true });
+  await mkdir(debugDir, { recursive: true });
+
+  try {
+    await writeFile(
+      join(debugDir, 'ai-preaudit-debug.json'),
+      JSON.stringify(
+        {
+          qwen_vl_enabled: true,
+          qwen_vl_call_count_after: 2,
+          final_verdict: { total_count: 2, done_count: 2 },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'final-preview-payload.json'),
+      JSON.stringify(
+        {
+          questions: [
+            {
+              question_no: 1,
+              stem: '完整资料分析题干',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              preview_image_path: 'chart.png',
+              visual_assets: [{ url: 'chart.png', ref: 'p1-img1' }],
+              visual_parse_status: 'success',
+              source_page_refs: [1],
+              risk_flags: [],
+            },
+            {
+              question_no: 2,
+              stem: '需要人工修复的题干',
+              options: { A: '甲' },
+              visual_parse_status: 'failed',
+              source_page_refs: [2],
+              risk_flags: ['need_manual_fix'],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'ai-audit-results.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            ai_audit_status: 'passed',
+            ai_audit_verdict: '可通过',
+            ai_audit_summary: '结构完整，可进入试卷草稿。',
+            answer_suggestion: 'A',
+            answer_confidence: 0.91,
+            analysis_suggestion: '根据图表读取数据，选择 A。',
+            risk_flags: [],
+          },
+          {
+            question_no: 2,
+            ai_audit_status: 'failed',
+            ai_audit_summary: '选项缺失，不能自动入卷。',
+            answer_unknown_reason: '选项缺失，无法判断答案',
+            risk_flags: ['need_manual_fix'],
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const candidates = await h.pdfService.getPaperCandidates('task-1');
+
+    assert.equal(candidates.summary.total, 2);
+    assert.equal(candidates.summary.can_add_count, 1);
+    assert.equal(candidates.summary.need_manual_fix_count, 1);
+    assert.equal(candidates.questions[0].can_add_to_paper, true);
+    assert.equal(candidates.questions[0].cannot_add_reason, null);
+    assert.equal(candidates.questions[1].can_add_to_paper, false);
+    assert.match(candidates.questions[1].cannot_add_reason, /选项缺失/);
+
+    const autoDraft = await h.pdfService.createDraftPaper({
+      source_task_id: 'task-1',
+      title: '自动草稿',
+    });
+    draftIds.push(autoDraft.paper_id);
+    assert.equal(autoDraft.questions.length, 1);
+    assert.equal(autoDraft.score, 1);
+
+    const forcedDraft = await h.pdfService.createDraftPaper({
+      source_task_id: 'task-1',
+      title: '人工强制草稿',
+      questions: candidates.questions,
+    });
+    draftIds.push(forcedDraft.paper_id);
+    assert.equal(forcedDraft.questions.length, 2);
+    assert.equal(forcedDraft.score, 2);
+
+    const preview = await h.pdfService.previewDraftPaper(forcedDraft.paper_id);
+    assert.equal(preview.preview.question_count, 2);
+    assert.equal(preview.preview.total_score, 2);
+  } finally {
+    await rm(debugDir, { recursive: true, force: true });
+    await Promise.all(
+      draftIds.map((paperId) =>
+        rm(join(draftRoot, `${paperId}.json`), { force: true }),
+      ),
+    );
+  }
+}
+
 async function testPdfSavePersistsVisionAiCorrectionFields() {
   const h = harness();
   await (h.pdfService as any).saveQuestions(
@@ -502,6 +627,75 @@ async function testPdfSavePersistsAiSolverCandidateFields() {
   assert.equal(saved.ai_solver_recheck_result.selected_result, 'pro');
   assert.equal(saved.ai_answer_conflict, true);
   assert.equal(saved.needs_review, true);
+}
+
+async function testPdfSavePersistsAiPreauditFields() {
+  const h = harness();
+  await (h.pdfService as any).saveQuestions(
+    'task-1',
+    'bank-1',
+    [
+      {
+        index: 6,
+        type: 'single',
+        content: '2017～2021 五年间重庆市城镇常住居民人均可支配收入与农村常住居民人均可支配收入之比最小的是：',
+        options: { A: '2017 年', B: '2018 年', C: '2020 年', D: '2021 年' },
+        images: [
+          {
+            url: 'chart.png',
+            ref: 'p5-img1',
+            image_role: 'chart',
+            belongs_to_question: true,
+            linked_question_no: 6,
+            linked_by: 'ai',
+            link_reason: '图表标题和题干均指向重庆居民收入。',
+            visual_summary: '2017～2021年重庆市城镇与农村常住居民收入柱状图。',
+            visual_parse_status: 'success',
+            visual_confidence: 0.82,
+          },
+        ],
+        has_visual_context: true,
+        visual_parse_status: 'success',
+        visual_summary: '2017～2021年重庆市城镇与农村常住居民收入柱状图。',
+        visual_confidence: 0.82,
+        ai_candidate_answer: 'D',
+        ai_candidate_analysis: '逐年计算城镇/农村收入比，2021年最小，故选D。',
+        ai_answer_confidence: 0.76,
+        ai_audit_status: 'warning',
+        ai_audit_verdict: '需复核',
+        ai_audit_summary: 'AI 能理解题目和图表，但关键数值建议人工复核。',
+        ai_can_understand_question: true,
+        ai_can_solve_question: true,
+        ai_reviewed_before_human: true,
+        question_quality: {
+          stem_complete: true,
+          options_complete: true,
+          visual_context_complete: true,
+          answer_derivable: true,
+          analysis_derivable: true,
+          duplicate_suspected: false,
+          needs_review: true,
+          review_reasons: ['关键数值需人工复核'],
+        },
+        ai_risk_flags: ['图表数据识别不完整，建议人工复核'],
+        needs_review: true,
+      },
+    ],
+    new Map(),
+  );
+
+  const saved = h.questions.find((question) => question.index_num === 6) as any;
+  assert.equal(saved.visual_parse_status, 'success');
+  assert.equal(saved.has_visual_context, true);
+  assert.equal(saved.ai_audit_status, 'warning');
+  assert.equal(saved.ai_audit_verdict, '需复核');
+  assert.equal(saved.ai_reviewed_before_human, true);
+  assert.equal(saved.ai_can_understand_question, true);
+  assert.equal(saved.ai_can_solve_question, true);
+  assert.equal(saved.images[0].belongs_to_question, true);
+  assert.equal(saved.images[0].linked_by, 'ai');
+  assert.equal(saved.question_quality.stem_complete, true);
+  assert.deepEqual(saved.ai_risk_flags, ['图表数据识别不完整，建议人工复核']);
 }
 
 async function testAcceptAiAnswerRecordsAuditLog() {

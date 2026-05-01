@@ -223,6 +223,7 @@ def _to_parse_result(
     questions: list[Question] = []
     for fallback_index, raw_question in enumerate(result.get("questions", []), start=1):
         index = _safe_int(raw_question.get("index")) or fallback_index
+        raw_question = _with_ai_preaudit_defaults(raw_question)
         options = _normalize_options(raw_question)
         question_type = raw_question.get("type") or ("single" if options else "judge")
         if question_type == "material_sub":
@@ -271,6 +272,22 @@ def _to_parse_result(
                 ai_solver_recheck_result=raw_question.get("ai_solver_recheck_result"),
                 ai_solver_created_at=raw_question.get("ai_solver_created_at"),
                 ai_answer_conflict=raw_question.get("ai_answer_conflict"),
+                visual_summary=raw_question.get("visual_summary"),
+                visual_confidence=raw_question.get("visual_confidence"),
+                visual_parse_status=raw_question.get("visual_parse_status"),
+                visual_error=raw_question.get("visual_error"),
+                visual_risk_flags=raw_question.get("visual_risk_flags") or [],
+                has_visual_context=raw_question.get("has_visual_context"),
+                answer_unknown_reason=raw_question.get("answer_unknown_reason"),
+                analysis_unknown_reason=raw_question.get("analysis_unknown_reason"),
+                ai_audit_status=raw_question.get("ai_audit_status"),
+                ai_audit_verdict=raw_question.get("ai_audit_verdict"),
+                ai_audit_summary=raw_question.get("ai_audit_summary"),
+                ai_can_understand_question=raw_question.get("ai_can_understand_question"),
+                ai_can_solve_question=raw_question.get("ai_can_solve_question"),
+                ai_reviewed_before_human=raw_question.get("ai_reviewed_before_human"),
+                ai_review_error=raw_question.get("ai_review_error"),
+                question_quality=raw_question.get("question_quality"),
             )
         )
 
@@ -408,6 +425,7 @@ def _kernel_scanned_fallback_debug(
         "kernel_accepted_questions": int(final_result.get("stats", {}).get("total") or 0),
         "kernel_rejected_questions": len(final_result.get("rejected_candidates") or []),
         "kernel_debug_dir": kernel_result.get("debug_dir") or stats.get("debug_dir"),
+        "vision_ai": stats.get("vision_ai") or {},
         "legacy_text_strategy": None,
         "legacy_visual_fallback_called": False,
         "legacy_visual_fallback_questions": 0,
@@ -536,14 +554,122 @@ def _normalize_images(images: list[Any]) -> list[QuestionImage]:
                     child_visual_ids=image.get("child_visual_ids") or [],
                     assignment_confidence=image.get("assignment_confidence"),
                     ai_desc=image.get("ai_desc") or image.get("description"),
+                    visual_parse_status=image.get("visual_parse_status"),
+                    visual_summary=image.get("visual_summary"),
+                    visual_confidence=image.get("visual_confidence"),
+                    visual_error=image.get("visual_error"),
+                    belongs_to_question=image.get("belongs_to_question"),
+                    linked_question_no=_safe_int(image.get("linked_question_no")),
+                    linked_question_id=image.get("linked_question_id"),
+                    linked_by=image.get("linked_by"),
+                    link_reason=image.get("link_reason"),
                 )
             )
     return [image for image in normalized if image.base64 or image.url]
 
 
+def _with_ai_preaudit_defaults(raw_question: dict[str, Any]) -> dict[str, Any]:
+    question = dict(raw_question)
+    has_visual = bool(question.get("images") or question.get("visual_refs") or question.get("image_refs"))
+    risk_flags = [str(item) for item in question.get("ai_risk_flags") or [] if str(item)]
+
+    if has_visual and not question.get("visual_parse_status"):
+        visual_summaries: list[str] = []
+        visual_errors: list[str] = []
+        visual_confidences: list[float] = []
+        for image in question.get("images") or []:
+            if not isinstance(image, dict):
+                continue
+            if image.get("visual_summary"):
+                visual_summaries.append(str(image["visual_summary"]))
+            elif image.get("ai_desc") or image.get("caption"):
+                visual_summaries.append(str(image.get("ai_desc") or image.get("caption")))
+            if image.get("visual_error"):
+                visual_errors.append(str(image["visual_error"]))
+            confidence = _safe_float(image.get("visual_confidence") or image.get("assignment_confidence"))
+            if confidence is not None:
+                visual_confidences.append(confidence)
+        if visual_summaries:
+            question["visual_parse_status"] = "partial"
+            question.setdefault("visual_summary", "\n".join(_dedupe(visual_summaries)))
+        else:
+            question["visual_parse_status"] = "failed"
+            question.setdefault("visual_error", "视觉解析未返回结构化图表摘要")
+            risk_flags.append("视觉解析失败，需人工复核")
+        if visual_errors:
+            question["visual_error"] = "\n".join(_dedupe(visual_errors))
+        if visual_confidences:
+            question["visual_confidence"] = max(visual_confidences)
+    elif not has_visual:
+        question.setdefault("visual_parse_status", "skipped")
+
+    has_answer = bool(question.get("ai_candidate_answer"))
+    has_analysis = bool(question.get("ai_candidate_analysis"))
+    has_audit = bool(question.get("ai_audit_status"))
+    answer_confidence = _safe_float(question.get("ai_answer_confidence"))
+    if not has_audit:
+        if has_answer or has_analysis:
+            warning = bool(risk_flags or (answer_confidence is not None and answer_confidence < 0.7))
+            question["ai_audit_status"] = "warning" if warning else "passed"
+            question["ai_audit_verdict"] = "需复核" if warning else "可通过"
+            question["ai_audit_summary"] = question.get("ai_reasoning_summary") or "AI 已在入库前生成答案/解析建议。"
+            question["ai_can_understand_question"] = True
+            question["ai_can_solve_question"] = has_answer and has_analysis
+            question["ai_reviewed_before_human"] = True
+            if warning:
+                question["needs_review"] = True
+        else:
+            question["ai_audit_status"] = "failed" if has_visual else "skipped"
+            question["ai_audit_verdict"] = "需复核"
+            question["ai_audit_summary"] = "AI 预审核未生成答案或解析建议，需人工复核。"
+            question["ai_can_understand_question"] = False
+            question["ai_can_solve_question"] = False
+            question["ai_reviewed_before_human"] = True
+            question["answer_unknown_reason"] = question.get("answer_unknown_reason") or "AI 暂无法给出答案，需复核"
+            question["analysis_unknown_reason"] = question.get("analysis_unknown_reason") or "AI 暂无法生成解析，需复核"
+            question["needs_review"] = True
+            risk_flags.append("AI 预审核未完成，需人工复核")
+
+    if "question_quality" not in question or not isinstance(question.get("question_quality"), dict):
+        options = _normalize_options(question)
+        question["question_quality"] = {
+            "stem_complete": bool(str(question.get("content") or "").strip()),
+            "options_complete": len(options) >= 2,
+            "visual_context_complete": not has_visual or question.get("visual_parse_status") in {"success", "partial"},
+            "answer_derivable": bool(question.get("ai_candidate_answer")),
+            "analysis_derivable": bool(question.get("ai_candidate_analysis")),
+            "duplicate_suspected": False,
+            "needs_review": bool(question.get("needs_review")),
+            "review_reasons": _dedupe(risk_flags),
+        }
+    question["has_visual_context"] = has_visual
+    question["ai_risk_flags"] = _dedupe(risk_flags)
+    if question.get("ai_risk_flags") and "ai_preaudit_needs_review" not in (question.get("parse_warnings") or []):
+        question["parse_warnings"] = _dedupe([*(question.get("parse_warnings") or []), "ai_preaudit_needs_review"])
+    return question
+
+
+def _dedupe(values: list[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        item = str(value or "").strip()
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
 def _safe_int(value: Any) -> int | None:
     try:
         return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        return float(value)
     except (TypeError, ValueError):
         return None
 

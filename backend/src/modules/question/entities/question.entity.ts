@@ -188,6 +188,54 @@ export class Question {
   @Column({ name: 'ai_answer_conflict', default: false })
   ai_answer_conflict?: boolean;
 
+  @Column({ name: 'visual_summary', type: 'text', nullable: true })
+  visual_summary?: string;
+
+  @Column({ name: 'visual_confidence', type: 'float', nullable: true })
+  visual_confidence?: number;
+
+  @Column({ name: 'visual_parse_status', nullable: true })
+  visual_parse_status?: string;
+
+  @Column({ name: 'visual_error', type: 'text', nullable: true })
+  visual_error?: string;
+
+  @Column({ name: 'visual_risk_flags', type: 'json', nullable: true })
+  visual_risk_flags?: string[];
+
+  @Column({ name: 'has_visual_context', default: false })
+  has_visual_context?: boolean;
+
+  @Column({ name: 'answer_unknown_reason', type: 'text', nullable: true })
+  answer_unknown_reason?: string;
+
+  @Column({ name: 'analysis_unknown_reason', type: 'text', nullable: true })
+  analysis_unknown_reason?: string;
+
+  @Column({ name: 'ai_audit_status', nullable: true })
+  ai_audit_status?: string;
+
+  @Column({ name: 'ai_audit_verdict', nullable: true })
+  ai_audit_verdict?: string;
+
+  @Column({ name: 'ai_audit_summary', type: 'text', nullable: true })
+  ai_audit_summary?: string;
+
+  @Column({ name: 'ai_can_understand_question', default: false })
+  ai_can_understand_question?: boolean;
+
+  @Column({ name: 'ai_can_solve_question', default: false })
+  ai_can_solve_question?: boolean;
+
+  @Column({ name: 'ai_reviewed_before_human', default: false })
+  ai_reviewed_before_human?: boolean;
+
+  @Column({ name: 'ai_review_error', type: 'text', nullable: true })
+  ai_review_error?: string;
+
+  @Column({ name: 'question_quality', type: 'json', nullable: true })
+  question_quality?: Record<string, unknown>;
+
   @Column({
     name: 'review_status',
     type: 'enum',

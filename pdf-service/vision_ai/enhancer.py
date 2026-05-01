@@ -64,12 +64,21 @@ def enhance_questions_with_vision_ai(
             )
             response = provider.review_page(request)
             stats["called_pages"].append(page)
+            stats.setdefault("qwen_vl_raw_outputs", []).append(
+                {
+                    "page": response.page,
+                    "prompt": response.prompt,
+                    "request_payload": response.request_payload,
+                    "raw_response": response.raw_response,
+                },
+            )
             if response.warnings:
                 stats.setdefault("model_warnings", []).extend(response.warnings)
             _merge_response(
                 questions=enhanced,
                 response_page=response.page,
                 corrections=response.corrections,
+                question_reviews=response.question_reviews,
                 visual_payloads=visual_payloads,
                 provider_name=_provider_name(provider),
             )
@@ -107,6 +116,7 @@ def _merge_response(
     questions: list[dict[str, Any]],
     response_page: int,
     corrections: list[dict[str, Any]],
+    question_reviews: list[dict[str, Any]],
     visual_payloads: dict[str, dict[str, Any]],
     provider_name: str,
 ) -> None:
@@ -131,6 +141,14 @@ def _merge_response(
             provider_name=provider_name,
             status=status,
             confidence=confidence,
+        )
+    for review in question_reviews:
+        _apply_question_review(
+            questions=questions,
+            response_page=response_page,
+            review=review,
+            visual_payloads=visual_payloads,
+            provider_name=provider_name,
         )
 
 
@@ -188,6 +206,188 @@ def _record_correction(
     if entry["reason"]:
         existing = str(question.get("ai_review_notes") or "").strip()
         question["ai_review_notes"] = "\n".join(item for item in [existing, entry["reason"]] if item)
+
+
+def _apply_question_review(
+    *,
+    questions: list[dict[str, Any]],
+    response_page: int,
+    review: dict[str, Any],
+    visual_payloads: dict[str, dict[str, Any]],
+    provider_name: str,
+) -> None:
+    question = _find_question(questions, review.get("question_id") or review.get("id"))
+    if not question:
+        question = _find_question(questions, f"q{review.get('question_no') or review.get('index') or ''}")
+    if not question:
+        return
+
+    visuals = [item for item in review.get("visuals") or [] if isinstance(item, dict)]
+    visual_statuses: list[str] = []
+    visual_summaries: list[str] = []
+    visual_confidences: list[float] = []
+    visual_errors: list[str] = []
+    for visual in visuals:
+        _apply_visual_review(question, visual, visual_payloads, review)
+        summary = str(visual.get("visual_summary") or "").strip()
+        if summary:
+            visual_summaries.append(summary)
+        status = str(visual.get("visual_parse_status") or ("success" if summary else "")).strip()
+        if status:
+            visual_statuses.append(status)
+        confidence = _safe_float(visual.get("confidence") or visual.get("visual_confidence"), None)
+        if confidence is not None:
+            visual_confidences.append(confidence)
+        error = str(visual.get("visual_error") or "").strip()
+        if error:
+            visual_errors.append(error)
+
+    understanding = review.get("understanding") if isinstance(review.get("understanding"), dict) else {}
+    answer = review.get("answer_suggestion") if isinstance(review.get("answer_suggestion"), dict) else {}
+    analysis = review.get("analysis_suggestion") if isinstance(review.get("analysis_suggestion"), dict) else {}
+    audit = review.get("ai_audit") if isinstance(review.get("ai_audit"), dict) else {}
+    quality = review.get("question_quality") if isinstance(review.get("question_quality"), dict) else {}
+
+    candidate_answer = _normalize_candidate_answer(answer.get("answer"))
+    if candidate_answer:
+        question["ai_candidate_answer"] = candidate_answer
+    answer_confidence = _safe_float(answer.get("confidence"), None)
+    if answer_confidence is not None:
+        question["ai_answer_confidence"] = answer_confidence
+    answer_unknown_reason = str(answer.get("answer_unknown_reason") or "").strip()
+    if answer_unknown_reason:
+        question["answer_unknown_reason"] = answer_unknown_reason
+
+    analysis_text = str(analysis.get("text") or analysis.get("analysis") or "").strip()
+    if analysis_text:
+        question["ai_candidate_analysis"] = analysis_text
+    analysis_unknown_reason = str(analysis.get("analysis_unknown_reason") or "").strip()
+    if analysis_unknown_reason:
+        question["analysis_unknown_reason"] = analysis_unknown_reason
+
+    reasoning = str(answer.get("reasoning") or understanding.get("question_intent") or "").strip()
+    if reasoning:
+        question["ai_reasoning_summary"] = reasoning
+    question_type = str(review.get("question_type") or "").strip()
+    if question_type:
+        question["ai_knowledge_points"] = _dedupe([*(question.get("ai_knowledge_points") or []), question_type])
+
+    if visual_summaries:
+        question["visual_summary"] = "\n".join(_dedupe(visual_summaries))
+    if visual_confidences:
+        question["visual_confidence"] = max(visual_confidences)
+    if visual_errors:
+        question["visual_error"] = "\n".join(_dedupe(visual_errors))
+    if visual_statuses:
+        question["visual_parse_status"] = _aggregate_visual_status(visual_statuses)
+    elif visuals:
+        question["visual_parse_status"] = "partial"
+    question["has_visual_context"] = bool(visuals or question.get("images") or question.get("visual_refs"))
+
+    audit_status = _normalize_audit_status(audit.get("status"))
+    audit_verdict = str(audit.get("verdict") or _audit_verdict_for_status(audit_status)).strip()
+    question["ai_audit_status"] = audit_status
+    question["ai_audit_verdict"] = audit_verdict
+    question["ai_audit_summary"] = str(
+        audit.get("summary")
+        or audit.get("ai_audit_summary")
+        or answer.get("reasoning")
+        or analysis_text
+        or audit_verdict
+    ).strip()
+    can_answer = bool(understanding.get("can_answer_from_available_context"))
+    question["ai_can_understand_question"] = bool(understanding.get("question_intent") or can_answer or analysis_text)
+    question["ai_can_solve_question"] = bool(can_answer and (candidate_answer or answer_unknown_reason == ""))
+    question["ai_reviewed_before_human"] = True
+    question["ai_review_error"] = None
+    if quality:
+        question["question_quality"] = quality
+
+    risk_flags = [
+        *(question.get("ai_risk_flags") or []),
+        *[str(item) for item in audit.get("risk_flags") or []],
+        *[str(item) for item in audit.get("review_reasons") or []],
+        *[str(item) for item in quality.get("review_reasons") or []],
+    ]
+    missing_context = understanding.get("missing_context")
+    if isinstance(missing_context, list) and missing_context:
+        risk_flags.append("missing_context")
+    if answer_unknown_reason:
+        risk_flags.append(answer_unknown_reason)
+    if analysis_unknown_reason:
+        risk_flags.append(analysis_unknown_reason)
+    question["ai_risk_flags"] = _dedupe([str(item) for item in risk_flags if str(item).strip()])
+
+    confidence_candidates = [
+        _safe_float(question.get("ai_confidence"), 0.0),
+        _safe_float(question.get("ai_answer_confidence"), 0.0),
+        _safe_float(question.get("visual_confidence"), 0.0),
+    ]
+    question["ai_confidence"] = max(confidence_candidates)
+    question["ai_provider"] = provider_name
+    question.setdefault("ai_corrections", [])
+    question["ai_corrections"].append(
+        {
+            "provider": provider_name,
+            "page": response_page,
+            "confidence": question["ai_confidence"],
+            "action": "ai_preaudit",
+            "reason": question["ai_audit_summary"],
+            "status": "applied" if audit_status == "passed" else "suggested",
+            "updates": {"ai_audit_status": audit_status, "ai_audit_verdict": audit_verdict},
+        }
+    )
+
+    needs_review = bool(
+        audit.get("needs_review")
+        or quality.get("needs_review")
+        or question["ai_risk_flags"]
+        or audit_status in {"warning", "failed", "skipped"}
+        or not question["ai_can_solve_question"]
+    )
+    question["needs_review"] = bool(question.get("needs_review") or needs_review)
+    if question["needs_review"]:
+        _append_warning(question, "ai_preaudit_needs_review")
+
+
+def _apply_visual_review(
+    question: dict[str, Any],
+    visual: dict[str, Any],
+    visual_payloads: dict[str, dict[str, Any]],
+    review: dict[str, Any],
+) -> None:
+    visual_id = str(visual.get("visual_id") or visual.get("id") or visual.get("ref") or "").strip()
+    if visual_id and visual.get("belongs_to_question") is True and not _has_visual_ref(question, visual_id):
+        payload = visual_payloads.get(visual_id)
+        if payload:
+            question.setdefault("visual_refs", []).append(deepcopy(payload["visual_ref"]))
+            question.setdefault("images", []).append(deepcopy(payload["image"]))
+            question["image_refs"] = _dedupe([*(question.get("image_refs") or []), visual_id])
+
+    for collection_name in ["images", "visual_refs"]:
+        for item in question.get(collection_name) or []:
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("ref") or item.get("id") or "").strip()
+            if visual_id and item_id and item_id != visual_id:
+                continue
+            item["belongs_to_question"] = bool(visual.get("belongs_to_question"))
+            item["linked_question_no"] = review.get("question_no") or review.get("index") or question.get("index")
+            item["linked_question_id"] = question.get("id") or f"q{question.get('index') or question.get('index_num')}"
+            item["linked_by"] = visual.get("linked_by") or "ai"
+            item["link_reason"] = str(visual.get("link_reason") or "").strip()
+            item["image_role"] = visual.get("image_role") or item.get("image_role") or item.get("role") or "unknown"
+            item["visual_summary"] = str(visual.get("visual_summary") or item.get("visual_summary") or "").strip()
+            item["visual_parse_status"] = str(visual.get("visual_parse_status") or item.get("visual_parse_status") or ("success" if item["visual_summary"] else "partial")).strip()
+            item["visual_confidence"] = _safe_float(visual.get("confidence") or visual.get("visual_confidence"), item.get("visual_confidence"))
+            item["visual_error"] = visual.get("visual_error") or item.get("visual_error")
+
+
+def _has_visual_ref(question: dict[str, Any], visual_id: str) -> bool:
+    for item in [*(question.get("visual_refs") or []), *(question.get("images") or [])]:
+        if isinstance(item, dict) and str(item.get("id") or item.get("ref") or "") == visual_id:
+            return True
+    return False
 
 
 def _candidate_pages(questions: list[dict[str, Any]], page_elements: list[Any], visual_payloads: dict[str, dict[str, Any]]) -> set[int]:
@@ -313,6 +513,51 @@ def _append_warning(question: dict[str, Any], warning: str) -> None:
     if warning not in warnings:
         warnings.append(warning)
     question["parse_warnings"] = warnings
+
+
+def _normalize_candidate_answer(value: Any) -> str:
+    answer = str(value or "").strip().upper()
+    if answer in {"A", "B", "C", "D", "对", "错"}:
+        return answer
+    return ""
+
+
+def _normalize_audit_status(value: Any) -> str:
+    status = str(value or "").strip().lower()
+    return status if status in {"passed", "warning", "failed", "skipped"} else "warning"
+
+
+def _audit_verdict_for_status(status: str) -> str:
+    return {
+        "passed": "可通过",
+        "warning": "需复核",
+        "failed": "不建议入库",
+        "skipped": "需复核",
+    }.get(status, "需复核")
+
+
+def _aggregate_visual_status(statuses: list[str]) -> str:
+    normalized = {str(item or "").strip().lower() for item in statuses}
+    if "failed" in normalized:
+        return "failed" if normalized <= {"failed"} else "partial"
+    if "partial" in normalized:
+        return "partial"
+    if "success" in normalized:
+        return "success"
+    if "skipped" in normalized:
+        return "skipped"
+    return "partial"
+
+
+def _dedupe(values: list[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        item = str(value or "").strip()
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
 
 
 def _element_payload(item: Any) -> dict[str, Any]:

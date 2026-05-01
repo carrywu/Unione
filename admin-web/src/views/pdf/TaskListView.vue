@@ -44,9 +44,25 @@
               link
               type="primary"
               :disabled="row.status !== 'done'"
+              @click="openAiPreaudit(row)"
+            >
+              AI预审核
+            </el-button>
+            <el-button
+              link
+              type="primary"
+              :disabled="row.status !== 'done'"
               @click="openResult(row)"
             >
               查看结果
+            </el-button>
+            <el-button
+              link
+              type="success"
+              :disabled="row.status !== 'done' || row.task_type === 'answer_book'"
+              @click="openPaperReview(row)"
+            >
+              制卷核对
             </el-button>
             <el-button
               link
@@ -93,6 +109,51 @@
         <pre class="terminal"><code>{{ terminalText }}</code></pre>
       </div>
     </el-drawer>
+
+    <el-drawer v-model="aiDrawerVisible" title="AI预审核证据" size="680px">
+      <div v-if="aiDebugLoading" class="ai-debug-loading">加载中...</div>
+      <div v-else-if="aiDebugError" class="ai-debug-error">{{ aiDebugError }}</div>
+      <div v-else-if="aiDebug" class="ai-debug">
+        <el-alert
+          :title="aiDebugHeadline"
+          :type="aiDebugHasFailure ? 'warning' : 'success'"
+          show-icon
+          :closable="false"
+        />
+        <div class="ai-debug-grid">
+          <div>
+            <span>taskId</span>
+            <strong>{{ aiDebug.taskId }}</strong>
+          </div>
+          <div>
+            <span>bankId</span>
+            <strong>{{ aiDebug.bankId }}</strong>
+          </div>
+          <div>
+            <span>vision_ai</span>
+            <strong>{{ aiDebug.qwen_vl_enabled ? `called ${aiDebug.qwen_vl_call_count}` : 'not called' }}</strong>
+          </div>
+        </div>
+        <div v-for="row in aiPreviewRows" :key="row.key" class="ai-debug-card">
+          <div class="ai-debug-card-head">
+            <strong>{{ row.label }}</strong>
+            <el-tag :type="row.status === 'failed' ? 'danger' : row.status === 'warning' ? 'warning' : 'success'">
+              {{ row.statusText }}
+            </el-tag>
+            <el-tag v-if="row.needManualFix" type="warning">need_manual_fix</el-tag>
+          </div>
+          <p><span>题干</span><MathText :text="row.stem" fallback="题干未能可靠定位" /></p>
+          <p><span>图表</span>{{ row.visualSummary }}</p>
+          <p><span>预览</span>{{ row.preview }}</p>
+          <p><span>答案</span><MathText :text="row.answer" fallback="未给出答案建议" /></p>
+          <div class="risk-tags">
+            <el-tag v-for="flag in row.riskFlags" :key="flag" size="small" type="warning">
+              {{ flag }}
+            </el-tag>
+          </div>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -103,15 +164,19 @@ import { useRouter } from 'vue-router';
 import { getBanks, type Bank } from '@/api/bank';
 import {
   deleteTask,
+  getAiPreauditDebug,
   getTaskList,
   getTaskStatus,
   pauseTask,
   publishParseResult,
   retryTask,
+  type AiPreauditDebug,
   type ParseTask,
 } from '@/api/pdf';
 import { pdfServiceApi, type PdfServiceStats, type PdfServiceStatus } from '@/api/pdf-service';
+import MathText from '@/components/MathText.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import { mathTextToString } from '@/utils/mathText';
 
 const router = useRouter();
 const loading = ref(false);
@@ -123,6 +188,10 @@ const selectedTask = ref<ParseTask | null>(null);
 const pdfStatus = ref<Partial<PdfServiceStatus>>({});
 const pdfStats = ref<PdfServiceStats>({});
 const statusDrawerVisible = ref(false);
+const aiDrawerVisible = ref(false);
+const aiDebugLoading = ref(false);
+const aiDebugError = ref('');
+const aiDebug = ref<AiPreauditDebug | null>(null);
 const liveConnected = ref(false);
 const lastLiveRefreshAt = ref('');
 const terminalLines = ref<string[]>([]);
@@ -163,6 +232,45 @@ const terminalText = computed(() => {
   ].join('\n');
 });
 
+const aiPreviewRows = computed(() => {
+  const previewQuestions = aiDebug.value?.final_preview_payload?.questions || [];
+  const audits = aiDebug.value?.ai_audit_results || [];
+  return previewQuestions.map((question, index) => {
+    const audit = audits[index] || {};
+    const riskFlags = normalizeStringList(audit.risk_flags || question.risk_flags);
+    const status = String(audit.ai_audit_status || question.ai_audit_status || question.visual_parse_status || 'unknown');
+    const questionNo = question.question_no ?? audit.question_no;
+    const visualSummary = stringValue(question.visual_summary || audit.ai_audit_summary, '图表预览不可用：视觉模型未返回结构化结果');
+    const previewPath = stringValue(question.preview_image_path, '图表预览不可用：仅保留失败原因与源 artifact');
+    const answer = audit.answer_suggestion
+      ? String(audit.answer_suggestion)
+      : stringValue(audit.answer_unknown_reason, '未给出答案建议');
+    return {
+      key: `${questionNo ?? 'unknown'}-${index}`,
+      label: questionNo ? `第 ${questionNo} 题` : `未识别题号 · 页 ${sourcePagesText(question.source_page_refs)}`,
+      status,
+      statusText: auditStatusText(status),
+      needManualFix: Boolean(question.need_manual_fix || riskFlags.includes('need_manual_fix')),
+      stem: stringValue(question.stem, '题干未能可靠定位'),
+      visualSummary,
+      preview: previewPath,
+      answer,
+      riskFlags,
+    };
+  });
+});
+
+const aiDebugHasFailure = computed(() =>
+  aiPreviewRows.value.some((row) => row.status === 'failed' || row.needManualFix),
+);
+
+const aiDebugHeadline = computed(() => {
+  if (!aiDebug.value) return 'AI预审核暂无数据';
+  const rows = aiPreviewRows.value.length;
+  const failures = aiPreviewRows.value.filter((row) => row.status === 'failed' || row.needManualFix).length;
+  return `候选 ${rows} 条，需人工修复 ${failures} 条`;
+});
+
 async function fetchTasks() {
   loading.value = true;
   try {
@@ -183,6 +291,21 @@ async function openStatus(task: ParseTask) {
   appendTerminal(`connect task ${task.id}`);
   startLiveStatus();
   await refreshSelectedTask();
+}
+
+async function openAiPreaudit(task: ParseTask) {
+  if (!task.id) return;
+  aiDrawerVisible.value = true;
+  aiDebugLoading.value = true;
+  aiDebugError.value = '';
+  aiDebug.value = null;
+  try {
+    aiDebug.value = await getAiPreauditDebug(task.id);
+  } catch (error) {
+    aiDebugError.value = error instanceof Error ? error.message : 'AI预审核调试产物读取失败';
+  } finally {
+    aiDebugLoading.value = false;
+  }
 }
 
 async function refreshSelectedTask() {
@@ -223,6 +346,29 @@ function stopLiveStatus() {
 function appendTerminal(line: string) {
   terminalLines.value.push(`[${new Date().toLocaleTimeString()}] ${line}`);
   if (terminalLines.value.length > 120) terminalLines.value = terminalLines.value.slice(-120);
+}
+
+function stringValue(value: unknown, fallback: string) {
+  if (typeof value === 'string') return mathTextToString(value, fallback);
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return fallback;
+}
+
+function normalizeStringList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => stringValue(item, ''))
+    .filter(Boolean);
+}
+
+function sourcePagesText(value: unknown) {
+  if (!Array.isArray(value) || !value.length) return '未知';
+  return value.map((item) => stringValue(item, '')).filter(Boolean).join(', ') || '未知';
+}
+
+function auditStatusText(status: string) {
+  return { failed: 'failed', warning: 'warning', passed: 'passed', success: 'success' }[status] || status;
 }
 
 function formatTaskDelta(before: ParseTask, after: ParseTask) {
@@ -362,6 +508,11 @@ function openResult(task: ParseTask) {
   void router.push(`/banks/${task.bank_id}/questions?taskId=${task.id}`);
 }
 
+function openPaperReview(task: ParseTask) {
+  if (!task.id) return;
+  void router.push(`/pdf/tasks/${task.id}/paper-review`);
+}
+
 function formatTime(value?: string) {
   return value ? new Date(value).toLocaleString() : '-';
 }
@@ -436,6 +587,68 @@ onBeforeUnmount(() => {
   font-size: 13px;
   line-height: 1.7;
   white-space: pre-wrap;
+}
+
+.ai-debug,
+.ai-debug-card {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-debug-loading,
+.ai-debug-error {
+  color: #6b7280;
+}
+
+.ai-debug-error {
+  color: #b91c1c;
+}
+
+.ai-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ai-debug-grid div,
+.ai-debug-card {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ai-debug-grid span,
+.ai-debug-card p span {
+  display: block;
+  margin-bottom: 4px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.ai-debug-grid strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.ai-debug-card-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ai-debug-card p {
+  margin: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.risk-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .task-error {

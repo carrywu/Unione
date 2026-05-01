@@ -53,6 +53,7 @@ declare module 'vue' {
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     ElUpload: typeof import('element-plus/es')['ElUpload']
     ImagePreview: typeof import('./src/components/ImagePreview.vue')['default']
+    MathText: typeof import('./src/components/MathText.vue')['default']
     PageHeader: typeof import('./src/components/PageHeader.vue')['default']
     PdfLocator: typeof import('./src/components/PdfLocator.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

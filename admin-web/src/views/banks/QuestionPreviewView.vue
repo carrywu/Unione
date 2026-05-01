@@ -36,7 +36,7 @@
 
         <section v-if="question.material?.content || materialImages.length" class="preview-section">
           <h2>材料</h2>
-          <p v-if="question.material?.content" class="material-text">{{ question.material.content }}</p>
+          <p v-if="question.material?.content" class="material-text"><MathText :text="question.material.content" /></p>
           <ImageGallery
             v-if="materialImages.length"
             :images="materialImages"
@@ -307,6 +307,7 @@ import {
   type ReadabilityReviewResult,
 } from '@/api/question';
 import ImagePreview from '@/components/ImagePreview.vue';
+import MathText from '@/components/MathText.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import PdfLocator from '@/components/PdfLocator.vue';
 import StatusTag from '@/components/StatusTag.vue';

@@ -43,6 +43,15 @@ export interface Question {
     assignment_confidence?: number;
     same_visual_group_id?: string;
     child_visual_ids?: string[];
+    visual_parse_status?: 'success' | 'partial' | 'failed' | 'skipped' | string;
+    visual_summary?: string;
+    visual_confidence?: number;
+    visual_error?: string;
+    belongs_to_question?: boolean;
+    linked_question_no?: number;
+    linked_question_id?: string;
+    linked_by?: 'ai' | 'layout' | 'hybrid' | 'fallback' | string;
+    link_reason?: string;
   } | string>;
   ai_image_desc?: string;
   status: 'draft' | 'published';
@@ -87,6 +96,22 @@ export interface Question {
   ai_solver_recheck_result?: Record<string, unknown>;
   ai_solver_created_at?: string;
   ai_answer_conflict?: boolean;
+  visual_summary?: string;
+  visual_confidence?: number;
+  visual_parse_status?: 'success' | 'partial' | 'failed' | 'skipped' | string;
+  visual_error?: string;
+  visual_risk_flags?: string[];
+  has_visual_context?: boolean;
+  answer_unknown_reason?: string;
+  analysis_unknown_reason?: string;
+  ai_audit_status?: 'passed' | 'warning' | 'failed' | 'skipped' | string;
+  ai_audit_verdict?: string;
+  ai_audit_summary?: string;
+  ai_can_understand_question?: boolean;
+  ai_can_solve_question?: boolean;
+  ai_reviewed_before_human?: boolean;
+  ai_review_error?: string | null;
+  question_quality?: Record<string, unknown>;
   ai_action_logs?: QuestionAiActionLog[];
   material?: {
     id: string;

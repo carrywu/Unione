@@ -71,7 +71,7 @@
                   <span class="open-hint">{{ selected?.id === question.id ? '编辑中' : '编辑' }}</span>
                 </div>
               </div>
-              <div class="card-content">{{ questionBrief(question) }}</div>
+              <div class="card-content"><MathText :text="questionBrief(question)" fallback="题干未能可靠定位" /></div>
               <div class="card-foot">
                 <span v-if="question.needs_review" class="review-pill">需复查</span>
                 <span v-if="confidenceText(question)" class="meta-chip">{{ confidenceText(question) }}</span>
@@ -171,7 +171,7 @@
 
             <el-collapse v-if="selected.material?.content || normalizeMaterialImages(selected).length" class="material-collapse" model-value="material">
               <el-collapse-item title="材料内容 / 材料图片" name="material">
-                <div class="material-text">{{ selected.material?.content }}</div>
+                <div class="material-text"><MathText :text="selected.material?.content" fallback="材料内容缺失" /></div>
                 <div v-if="normalizeMaterialImages(selected).length" class="image-section material-images">
                   <div v-for="(image, index) in normalizeMaterialImages(selected)" :key="index" class="image-item">
                     <ImagePreview :src="image.src" />
@@ -260,6 +260,38 @@
               <el-input v-model="form.analysis" type="textarea" autosize @input="dirty = true" />
             </el-form-item>
 
+            <div v-if="aiPreauditPanel.visible" class="ai-preaudit-panel" :class="aiPreauditPanel.statusClass">
+              <div class="ai-preaudit-head">
+                <strong>AI 预审核：{{ aiPreauditPanel.verdict }}</strong>
+                <div>
+                  <el-tag size="small" :type="aiPreauditPanel.tagType" effect="plain">
+                    {{ aiPreauditPanel.statusText }}
+                  </el-tag>
+                  <el-tag v-if="aiPreauditPanel.confidenceText" size="small" type="info" effect="plain">
+                    {{ aiPreauditPanel.confidenceText }}
+                  </el-tag>
+                </div>
+              </div>
+              <div class="ai-preaudit-grid">
+                <span>理解题目</span>
+                <p>{{ aiPreauditPanel.understandText }}</p>
+                <span>可作答</span>
+                <p>{{ aiPreauditPanel.solveText }}</p>
+                <span>AI 建议答案</span>
+                <p><MathText :text="aiPreauditPanel.answerText" /></p>
+                <span>AI 解析建议</span>
+                <p><MathText :text="aiPreauditPanel.analysisText" /></p>
+                <span>图表摘要</span>
+                <p>{{ aiPreauditPanel.visualText }}</p>
+                <span v-if="aiPreauditPanel.riskFlags.length">风险提示</span>
+                <div v-if="aiPreauditPanel.riskFlags.length" class="ai-tag-row risk-row">
+                  <el-tag v-for="flag in aiPreauditPanel.riskFlags" :key="flag" size="small" type="warning" effect="plain">
+                    {{ flag }}
+                  </el-tag>
+                </div>
+              </div>
+            </div>
+
             <div v-if="aiSolverPanel.visible" class="ai-solver-panel" :class="{ conflict: aiSolverPanel.conflict, caution: aiSolverPanel.lowConfidence, ignored: aiSolverPanel.ignored }">
               <div class="ai-solver-head">
                 <strong>AI 候选解析</strong>
@@ -301,13 +333,13 @@
               <div class="ai-compact-summary">
                 <div class="answer-box official">
                   <span>当前答案</span>
-                  <strong>{{ aiSolverPanel.officialAnswer || '-' }}</strong>
+                  <strong><MathText :text="aiSolverPanel.officialAnswer" fallback="-" /></strong>
                 </div>
                 <div class="answer-box candidate">
                   <span>AI 候选答案</span>
-                  <strong>{{ aiSolverPanel.answer || '-' }}</strong>
+                  <strong><MathText :text="aiSolverPanel.answer" fallback="-" /></strong>
                 </div>
-                <p v-if="aiSolverPanel.summary" class="ai-summary">{{ aiSolverPanel.summary }}</p>
+                <p v-if="aiSolverPanel.summary" class="ai-summary"><MathText :text="aiSolverPanel.summary" /></p>
                 <div v-if="aiSolverPanel.riskFlags.length" class="ai-tag-row risk-row">
                   <el-tag v-for="item in aiSolverPanel.riskFlags" :key="item" size="small" type="warning" effect="plain">{{ item }}</el-tag>
                 </div>
@@ -326,7 +358,7 @@
               </div>
               <el-collapse v-if="aiSolverPanel.analysis" class="ai-analysis-collapse">
                 <el-collapse-item title="查看完整 AI 候选解析" name="analysis">
-                  <div class="ai-analysis-text">{{ aiSolverPanel.analysis }}</div>
+                  <div class="ai-analysis-text"><MathText :text="aiSolverPanel.analysis" /></div>
                 </el-collapse-item>
               </el-collapse>
               <div v-if="aiSolverPanel.latestAction" class="ai-audit-line">
@@ -382,7 +414,7 @@
         <div class="phone-screen">
           <section v-if="selected?.material?.content" class="phone-material">
             <div class="phone-section-label">材料阅读</div>
-            <p>{{ selected.material.content }}</p>
+            <p><MathText :text="selected.material.content" /></p>
             <img
               v-for="(image, index) in normalizeMaterialImages(selected)"
               :key="`preview-material-${index}`"
@@ -396,13 +428,18 @@
               <span>{{ form.type === 'judge' ? '判断' : '单选' }}</span>
               <span>第 {{ form.index_num || '-' }} 题</span>
             </div>
+            <div v-if="aiPreauditPanel.visible" class="phone-ai-audit">
+              <strong>AI 预审核：{{ aiPreauditPanel.verdict }}</strong>
+              <span><MathText :text="aiPreauditPanel.answerText" /></span>
+              <span>{{ aiPreauditPanel.visualText }}</span>
+            </div>
             <img
               v-for="(image, index) in imagesForPosition('above_stem')"
               :key="`preview-image-above-stem-${index}`"
               :src="image.src"
               :alt="image.caption || '题目图片'"
             />
-            <h3>{{ form.content || '暂无题干' }}</h3>
+            <h3><MathText :text="form.content" fallback="题干未能可靠定位" /></h3>
             <img
               v-for="(image, index) in imagesForPosition('below_stem')"
               :key="`preview-image-below-stem-${index}`"
@@ -425,7 +462,7 @@
                 }"
               >
                 <strong>{{ option.value }}</strong>
-                <span>{{ option.label }}</span>
+                <span><MathText :text="option.label" fallback="选项缺失" /></span>
               </button>
             </div>
             <img
@@ -437,8 +474,8 @@
 
             <div v-if="mobilePreviewMode === 'analysis'" class="phone-analysis">
               <div class="phone-section-label">解析详情</div>
-              <strong>正确答案：{{ answerPreviewLabel }}</strong>
-              <p>{{ form.analysis || '暂无解析' }}</p>
+              <strong>正确答案：<MathText :text="answerPreviewLabel" fallback="未设置" /></strong>
+              <p><MathText :text="form.analysis" fallback="暂无解析" /></p>
             </div>
           </section>
         </div>
@@ -476,8 +513,10 @@ import {
 } from '@/api/question';
 import { addHeaderFooterBlacklist } from '@/api/pdf';
 import ImagePreview from '@/components/ImagePreview.vue';
+import MathText from '@/components/MathText.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import { mathTextToString } from '@/utils/mathText';
 
 type TabName = 'all' | 'review' | 'published';
 
@@ -609,6 +648,45 @@ const aiSolverPanel = computed(() => {
     knowledgePoints,
     riskFlags,
     conflict: Boolean(form.ai_answer_conflict),
+  };
+});
+const aiPreauditPanel = computed(() => {
+  const status = String(form.ai_audit_status || '').trim();
+  const confidence = Number(form.ai_answer_confidence ?? form.visual_confidence ?? form.ai_confidence);
+  const riskFlags = [
+    ...stringArray(form.ai_risk_flags),
+    ...stringArray(form.visual_risk_flags),
+  ].map(cleanDisplayText).filter(Boolean);
+  const visualText = cleanDisplayText(
+    form.visual_summary
+      || imageVisualSummary(form.images)
+      || form.visual_error
+      || (form.has_visual_context ? '视觉解析失败，需人工复核' : '无图表依赖'),
+  );
+  return {
+    visible: Boolean(
+      status
+        || form.ai_reviewed_before_human
+        || form.ai_candidate_answer
+        || form.ai_candidate_analysis
+        || form.visual_parse_status
+        || form.has_visual_context,
+    ),
+    statusText: aiAuditStatusLabel(status),
+    verdict: cleanDisplayText(form.ai_audit_verdict || aiAuditStatusLabel(status)),
+    statusClass: `status-${status || 'skipped'}`,
+    tagType: aiAuditTagType(status),
+    confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
+    understandText: form.ai_can_understand_question ? 'AI 已理解题目' : 'AI 暂无法理解题目，需人工复核',
+    solveText: form.ai_can_solve_question ? 'AI 判断可作答' : 'AI 暂无法判断答案，需人工复核',
+    answerText: form.ai_candidate_answer
+      ? `AI 建议答案：${form.ai_candidate_answer}`
+      : cleanDisplayText(form.answer_unknown_reason || 'AI 暂无法给出答案，需复核'),
+    analysisText: form.ai_candidate_analysis
+      ? cleanDisplayText(form.ai_candidate_analysis)
+      : cleanDisplayText(form.analysis_unknown_reason || 'AI 暂无法生成解析，需复核'),
+    visualText,
+    riskFlags,
   };
 });
 
@@ -755,8 +833,35 @@ function stringArray(value: unknown) {
 }
 
 function questionBrief(question: Question) {
-  const content = String(question.content || '暂无题干').replace(/\s+/g, ' ').trim();
+  const content = cleanDisplayText(question.content || '暂无题干').replace(/\s+/g, ' ').trim();
   return content.length > 92 ? `${content.slice(0, 92)}...` : content;
+}
+
+function aiAuditStatusLabel(status: string) {
+  if (status === 'passed') return '通过';
+  if (status === 'warning') return '需复核';
+  if (status === 'failed') return '失败';
+  if (status === 'skipped') return '未完成，需复核';
+  return '未完成，需复核';
+}
+
+function aiAuditTagType(status: string) {
+  if (status === 'passed') return 'success';
+  if (status === 'failed') return 'danger';
+  if (status === 'warning') return 'warning';
+  return 'info';
+}
+
+function imageVisualSummary(images: unknown) {
+  if (!Array.isArray(images)) return '';
+  const summaries = images
+    .map((image) => {
+      if (!image || typeof image !== 'object') return '';
+      const record = image as Record<string, unknown>;
+      return cleanDisplayText(record.visual_summary || record.visual_error || record.ai_desc || record.caption || '');
+    })
+    .filter(Boolean);
+  return summaries[0] || '';
 }
 
 function questionSource(question: Question) {
@@ -805,13 +910,22 @@ function cloneImages(images: Question['images'] = []) {
 }
 
 function cleanQuestionText(value: unknown) {
-  return String(value || '')
+  return cleanDisplayText(value)
     .split(/\r?\n/)
     .filter((line) => !['【', '】'].includes(line.trim()))
     .join('\n')
     .trim()
     .replace(/^】+/, '')
     .replace(/【+$/, '')
+    .trim();
+}
+
+function cleanDisplayText(value: unknown) {
+  return mathTextToString(value, '')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\[?\s*(?:page\s*\d+\s*)?visual\s+parse\s+(?:unavailable|failed|error)[^\]\r\n]*\]?/gi, '').trim())
+    .filter((line) => line && !/^\[?\s*unavailable\s*\]?$/i.test(line))
+    .join('\n')
     .trim();
 }
 
@@ -1472,6 +1586,56 @@ onMounted(async () => {
   background: #f6f9ff;
 }
 
+.ai-preaudit-panel {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  background: #f0f9ff;
+}
+
+.ai-preaudit-panel.status-warning,
+.ai-preaudit-panel.status-failed,
+.ai-preaudit-panel.status-skipped {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.ai-preaudit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-preaudit-head > div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ai-preaudit-grid {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px 12px;
+}
+
+.ai-preaudit-grid span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.ai-preaudit-grid p {
+  margin: 0;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .ai-solver-panel.conflict {
   border-color: #fecaca;
   background: #fff7f7;
@@ -1787,6 +1951,23 @@ onMounted(async () => {
   color: #1f4ea8;
   font-size: 12px;
   font-weight: 650;
+}
+
+.phone-ai-audit {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  padding: 10px;
+  color: #7c2d12;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.phone-ai-audit strong {
+  color: #9a3412;
 }
 
 .phone-question h3 {

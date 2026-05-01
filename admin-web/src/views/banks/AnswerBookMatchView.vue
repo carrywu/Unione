@@ -130,10 +130,10 @@
                   <el-tag size="small" :type="row.parse_mode === 'image' ? 'warning' : 'info'">
                     {{ row.parse_mode === 'image' ? '图片' : '文字' }}
                   </el-tag>
-                  <strong v-if="row.answer">答案 {{ row.answer }}</strong>
+                  <strong v-if="row.answer">答案 <MathText :text="row.answer" /></strong>
                   <span>第 {{ row.source_page_num }} 页</span>
                 </div>
-                <p v-if="row.analysis_text" class="analysis-snippet">{{ row.analysis_text }}</p>
+                <p v-if="row.analysis_text" class="analysis-snippet"><MathText :text="row.analysis_text" /></p>
                 <ImagePreview v-if="row.analysis_image_url" class="analysis-preview" :src="row.analysis_image_url" />
               </div>
             </template>
@@ -145,7 +145,7 @@
                   <el-tag size="small" type="success">第 {{ row.matched_question.index_num }} 题</el-tag>
                   <span>置信度 {{ row.match_score ?? '-' }}</span>
                 </div>
-                <p>{{ row.matched_question.content }}</p>
+                <p><MathText :text="row.matched_question.content" fallback="题干未能可靠定位" /></p>
               </div>
               <el-empty v-else description="未绑定题目" :image-size="48" />
             </template>
@@ -202,6 +202,7 @@ import { getTaskStatus, type ParseTask } from '@/api/pdf';
 import { getQuestions } from '@/api/question';
 import { uploadFile } from '@/api/upload';
 import ImagePreview from '@/components/ImagePreview.vue';
+import MathText from '@/components/MathText.vue';
 import PageHeader from '@/components/PageHeader.vue';
 
 const route = useRoute();

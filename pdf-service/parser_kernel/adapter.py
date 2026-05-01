@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import base64
 import queue
 import re
 import tempfile
@@ -10,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import ai_client
+from ai_client import PAGE_PARSE_PROMPT
 import fitz
 from dotenv import load_dotenv
 from debug_writer import write_debug_bundle
@@ -24,7 +26,7 @@ from parser_kernel.types import MaterialGroup, QuestionGroup
 OPTION_RE = re.compile(r"^\s*([A-D])[．.、。]\s*(.+)$")
 VISUAL_PAGE_DPI = 110
 VISUAL_PAGE_MAX_SIDE = 1600
-DEFAULT_VISUAL_PAGE_TIMEOUT_SECONDS = 45.0
+DEFAULT_VISUAL_PAGE_TIMEOUT_SECONDS = 120.0
 VISUAL_BBOX_CLAMP_EPSILON = 1e-3
 
 load_dotenv()
@@ -96,10 +98,6 @@ def parse_extractor_with_kernel(
         if pdf_kind == "scanned_question_book"
         else _pages_from_extractor(extractor, total_pages)
     )
-    elements = normalize_pages(pages)
-    annotated = annotate_semantics(elements)
-    material_groups, question_groups = build_groups(annotated)
-    raw_questions = groups_to_raw_questions(pages, material_groups, question_groups)
     visual_links = getattr(
         extractor,
         "_parser_kernel_visual_links",
@@ -112,94 +110,53 @@ def parse_extractor_with_kernel(
             "question_material_group_ids": {},
             "question_link_warnings": {},
             "warnings": [],
+            "semantic_question_entries": [],
+            "semantic_pages": [],
+            "semantic_recrop_plans": [],
+            "page_understanding": [],
+            "visual_merge_candidates": [],
         },
     )
     parser_warnings = getattr(extractor, "_parser_kernel_warnings", [])
-    material_ids_by_text: dict[str, str] = {}
-    materials: list[dict[str, Any]] = []
-    questions: list[dict[str, Any]] = []
+    semantic_questions = visual_links.get("semantic_question_entries") or []
+    if semantic_questions:
+        questions, materials, raw_questions = _build_questions_from_semantic_payload(
+            extractor,
+            semantic_questions,
+            visual_links=visual_links,
+        )
+        elements = [page.dict() for page in pages]
+        annotated = []
+        material_groups = []
+        question_groups = []
+    else:
+        elements = normalize_pages(pages)
+        annotated = annotate_semantics(elements)
+        material_groups, question_groups = build_groups(annotated)
+        raw_questions = groups_to_raw_questions(pages, material_groups, question_groups)
+        questions, materials, raw_questions = _build_questions_from_layout_groups(
+            extractor=extractor,
+            visual_links=visual_links,
+            raw_questions=raw_questions,
+            material_ids_by_text={},
+            material_groups_by_id=visual_links.get("material_groups", {}),
+            material_group_ids_by_question=visual_links.get("question_material_group_ids", {}),
+            link_warnings=visual_links.get("question_link_warnings", {}),
+            element_pages=pages,
+        )
+
     link_warnings = visual_links.get("question_link_warnings", {})
     material_group_ids_by_question = visual_links.get("question_material_group_ids", {})
     material_groups_by_id = visual_links.get("material_groups", {})
+    vision_ai_calls = getattr(extractor, "_parser_kernel_vision_ai_calls", [])
+    vision_ai_stats = _build_vision_ai_stats(vision_ai_calls)
 
-    for raw in raw_questions:
-        content, options = _split_options(raw.text)
-        effective_material_id = visual_links.get("question_material_ids", {}).get(raw.index) or raw.material_id
-        effective_material_text = raw.material_text or visual_links.get("material_texts", {}).get(effective_material_id)
-        material_temp_id = None
-        if effective_material_text:
-            material_temp_id = material_ids_by_text.get(effective_material_text)
-            if material_temp_id is None:
-                material_temp_id = f"m_{len(materials) + 1}"
-                material_ids_by_text[effective_material_text] = material_temp_id
-                materials.append(
-                    {
-                        "temp_id": material_temp_id,
-                        "content": effective_material_text,
-                        "images": [],
-                    }
-                )
-            for material in materials:
-                if material["temp_id"] == material_temp_id:
-                    material["images"] = [
-                        _region_to_image(region, assignment_confidence=0.85)
-                        for region in visual_links.get("materials", {}).get(effective_material_id or "", [])
-                    ]
-                    break
-        linked_regions = list(raw.images)
-        if effective_material_id:
-            linked_regions.extend(visual_links.get("materials", {}).get(effective_material_id, []))
-        linked_regions.extend(visual_links.get("questions", {}).get(raw.index, []))
-        question_regions: list[Region] = []
-        for region in linked_regions:
-            if not _has_matching_region(question_regions, region):
-                question_regions.append(region)
-        question_images = [_region_to_image(region) for region in question_regions]
-        question_warnings = list(getattr(raw, "warnings", []) or [])
-        question_warnings.extend(link_warnings.get(raw.index, []))
-        material_group_id = material_group_ids_by_question.get(raw.index)
-        material_group = material_groups_by_id.get(material_group_id) if material_group_id else None
-        if material_group:
-            question_warnings.extend(material_group.get("warnings") or [])
-        if not content:
-            question_warnings.append("question_content_empty")
-        image_refs = [str(image.get("ref") or "") for image in question_images if image.get("ref")]
-        visual_refs = [_region_to_visual_ref(region) for region in question_regions]
-        source_bbox = _source_bbox_for_question(extractor, raw, visual_links)
-        questions.append(
-            {
-                "index": raw.index,
-                "type": "single" if options else "judge",
-                "content": content,
-                "option_a": options.get("A"),
-                "option_b": options.get("B"),
-                "option_c": options.get("C"),
-                "option_d": options.get("D"),
-                "options": options,
-                "answer": None,
-                "analysis": None,
-                "needs_review": True,
-                "material_text": effective_material_text,
-                "material_temp_id": material_temp_id,
-                "material_group_id": material_group_id,
-                "material_group_question_indexes": (material_group or {}).get("question_indexes") or [],
-                "material_group_confidence": (material_group or {}).get("confidence"),
-                "material_group_reason": (material_group or {}).get("link_reason"),
-                "shared_material": bool(material_group and len(material_group.get("question_indexes") or []) > 1),
-                "images": question_images,
-                "image_refs": image_refs,
-                "visual_refs": visual_refs,
-                "page_num": raw.page_num,
-                "page_range": [raw.page_num, raw.page_num],
-                "source_page_start": raw.page_num,
-                "source_page_end": raw.page_num,
-                "source_bbox": source_bbox,
-                "source_anchor_text": f"{raw.index}.",
-                "source_confidence": 0.7 if source_bbox else 0.4,
-                "source": "parser_kernel_scanned",
-                "parse_warnings": sorted(set(question_warnings)),
-            }
-        )
+    _inject_semantic_debug_payload(
+        debug_dir=debug_dir,
+        visual_pages=getattr(extractor, "_parser_kernel_visual_pages", []),
+        failed_pages=getattr(extractor, "_parser_kernel_failed_pages", []),
+        visual_links=visual_links,
+    )
 
     write_debug_bundle(
         debug_dir,
@@ -212,6 +169,10 @@ def parse_extractor_with_kernel(
         raw_questions=raw_questions,
         output_questions=questions,
         output_materials=materials,
+        page_understanding=visual_links.get("page_understanding", []),
+        semantic_groups=visual_links.get("semantic_question_entries", []),
+        recrop_plan=visual_links.get("semantic_recrop_plans", []),
+        visual_merge_candidates=visual_links.get("visual_merge_candidates", []),
         warnings={
             "pdf_kind": pdf_kind,
             "summary": _debug_counts(
@@ -244,6 +205,7 @@ def parse_extractor_with_kernel(
                 visuals_count=sum(len(page.regions) for page in pages),
             ),
             "debug_dir": debug_dir,
+            "vision_ai": vision_ai_stats,
         },
     }
 
@@ -267,6 +229,1513 @@ def _debug_counts(
         "materials_count": materials_count,
         "visuals_count": visuals_count,
     }
+
+
+def _build_vision_ai_stats(vision_ai_calls: list[dict[str, Any]]) -> dict[str, Any]:
+    called_pages: list[int] = []
+    qwen_vl_raw_outputs: list[dict[str, Any]] = []
+    providers: list[str] = []
+    models: list[str] = []
+    for call in vision_ai_calls:
+        page = _coerce_int(call.get("page"))
+        if page is not None:
+            called_pages.append(page)
+        provider = str(call.get("provider") or "").strip()
+        model = str(call.get("model") or "").strip()
+        if provider:
+            providers.append(provider)
+        if model:
+            models.append(model)
+        qwen_vl_raw_outputs.append(call)
+    return {
+        "enabled": bool(vision_ai_calls),
+        "called_pages": called_pages,
+        "calledPages": called_pages,
+        "qwen_vl_raw_outputs": qwen_vl_raw_outputs,
+        "qwen_vl_prompt": PAGE_PARSE_PROMPT,
+        "providers": list(dict.fromkeys(providers)),
+        "models": list(dict.fromkeys(models)),
+    }
+
+
+def _dict_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _debug_bbox(value: Any) -> list[float] | None:
+    return _coerce_visual_bbox(value)
+
+
+def _image_size_bbox(image_size: dict[str, Any] | None) -> list[float]:
+    width = _safe_float((image_size or {}).get("width")) or 1000.0
+    height = _safe_float((image_size or {}).get("height")) or 1000.0
+    return [0.0, 0.0, width, height]
+
+
+def _debug_block(
+    *,
+    page_no: int,
+    kind: str,
+    bbox: Any = None,
+    text: Any = None,
+    label: Any = None,
+    source: str | None = None,
+    uncertain: bool = False,
+    reason: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    block: dict[str, Any] = {
+        "page_no": page_no,
+        "kind": kind,
+        "bbox": _debug_bbox(bbox),
+        "text": str(text).strip() if text is not None else None,
+        "label": str(label).strip() if label is not None else None,
+        "source": source,
+        "uncertain": uncertain,
+        "reason": reason,
+    }
+    if extra:
+        block.update(extra)
+    return block
+
+
+def _question_no_from_entry(entry: dict[str, Any]) -> int | None:
+    for key in ["question_no", "index", "question_index", "no"]:
+        number = _coerce_int(entry.get(key))
+        if number is not None:
+            return number
+    return None
+
+
+def _page_numbers_from_entry(entry: dict[str, Any], fallback_page: int) -> list[int]:
+    pages = _coerce_int_list(entry.get("pages"))
+    if not pages:
+        page = _coerce_int(entry.get("page_num") or entry.get("page_no")) or fallback_page
+        pages = [page]
+    return sorted(set(pages))
+
+
+def _blocks_from_visual_group(page_no: int, group: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    group_id = group.get("group_id")
+    common = {
+        "group_id": group_id,
+        "confidence": group.get("confidence"),
+        "visual_summary": group.get("visual_summary"),
+        "is_fragmented_before_merge": bool(group.get("is_fragmented_before_merge")),
+    }
+    blocks = {
+        "visual": [
+            _debug_block(
+                page_no=page_no,
+                kind=str(group.get("type") or "visual"),
+                bbox=group.get("merged_bbox") or group.get("bbox"),
+                text=group.get("visual_summary"),
+                source="visual_group",
+                extra=common,
+            )
+        ],
+        "title": [],
+        "table_header": [],
+        "legend": [],
+        "note": [],
+    }
+    for field, kind, bucket in [
+        ("title_bbox", "chart_title", "title"),
+        ("table_header_bbox", "table_header", "table_header"),
+        ("legend_bbox", "legend", "legend"),
+        ("notes_bbox", "note", "note"),
+    ]:
+        if group.get(field):
+            blocks[bucket].append(
+                _debug_block(
+                    page_no=page_no,
+                    kind=kind,
+                    bbox=group.get(field),
+                    source="visual_group",
+                    extra={"group_id": group_id},
+                )
+            )
+    return blocks
+
+
+def _build_page_understanding_record(
+    *,
+    page_num: int,
+    visual_result: dict[str, Any],
+    source_image_path: str,
+    prompt_path: str,
+    raw_output_ref: str,
+    image_size: dict[str, Any] | None,
+) -> dict[str, Any]:
+    questions = _dict_items(visual_result.get("semantic_questions")) or _dict_items(visual_result.get("questions"))
+    detected_numbers = sorted(
+        {
+            number
+            for number in (_question_no_from_entry(question) for question in questions)
+            if number is not None
+        }
+    )
+    stem_blocks: list[dict[str, Any]] = []
+    option_blocks: list[dict[str, Any]] = []
+    visual_blocks: list[dict[str, Any]] = []
+    title_blocks: list[dict[str, Any]] = []
+    table_header_blocks: list[dict[str, Any]] = []
+    legend_blocks: list[dict[str, Any]] = []
+    note_blocks: list[dict[str, Any]] = []
+    suspected_cross_page_links: list[dict[str, Any]] = []
+
+    for question in questions:
+        question_no = _question_no_from_entry(question)
+        if question.get("stem_bbox") or question.get("bbox") or question.get("content"):
+            stem_blocks.append(
+                _debug_block(
+                    page_no=page_num,
+                    kind="stem",
+                    bbox=question.get("stem_bbox") or question.get("bbox"),
+                    text=question.get("content"),
+                    label=question_no,
+                    source="question",
+                    uncertain=not bool(question.get("stem_bbox")),
+                    reason=None if question.get("stem_bbox") else "stem_bbox_missing",
+                )
+            )
+        for option in _dict_items(question.get("options")):
+            option_blocks.append(
+                _debug_block(
+                    page_no=page_num,
+                    kind="option",
+                    bbox=option.get("bbox"),
+                    text=option.get("text"),
+                    label=option.get("label"),
+                    source="question.options",
+                    uncertain=not bool(option.get("bbox")),
+                    reason=None if option.get("bbox") else "option_bbox_missing",
+                )
+            )
+        for label in ["A", "B", "C", "D"]:
+            option_text = question.get(f"option_{label.lower()}")
+            if option_text and not any(block.get("label") == label for block in option_blocks):
+                option_blocks.append(
+                    _debug_block(
+                        page_no=page_num,
+                        kind="option",
+                        text=option_text,
+                        label=label,
+                        source="question.option_field",
+                        uncertain=True,
+                        reason="option_bbox_missing",
+                    )
+                )
+        if question.get("is_cross_page") or len(_page_numbers_from_entry(question, page_num)) > 1:
+            suspected_cross_page_links.append(
+                {
+                    "question_no": question_no,
+                    "pages": _page_numbers_from_entry(question, page_num),
+                    "reason": "model_marked_cross_page_or_multiple_pages",
+                }
+            )
+        for group in _dict_items(question.get("visual_groups")):
+            grouped = _blocks_from_visual_group(page_num, group)
+            visual_blocks.extend(grouped["visual"])
+            title_blocks.extend(grouped["title"])
+            table_header_blocks.extend(grouped["table_header"])
+            legend_blocks.extend(grouped["legend"])
+            note_blocks.extend(grouped["note"])
+
+    for visual in _dict_items(visual_result.get("visuals")):
+        visual_blocks.append(
+            _debug_block(
+                page_no=page_num,
+                kind=str(visual.get("kind") or "visual"),
+                bbox=visual.get("bbox"),
+                text=visual.get("caption"),
+                label=visual.get("question_index"),
+                source="page_visuals",
+                uncertain=not bool(visual.get("bbox")),
+                reason=None if visual.get("bbox") else "visual_bbox_missing",
+                extra={
+                    "group_id": visual.get("group_id"),
+                    "belongs_to_question": visual.get("belongs_to_question"),
+                },
+            )
+        )
+
+    uncertain_regions: list[dict[str, Any]] = []
+    failed = _visual_result_failed(visual_result)
+    warnings = [str(item) for item in visual_result.get("warnings") or []]
+    if failed:
+        fallback_block = _debug_block(
+            page_no=page_num,
+            kind="unknown_full_page_visual",
+            bbox=_image_size_bbox(image_size),
+            source="parser_fallback",
+            uncertain=True,
+            reason=visual_result.get("error") or "vision_ai_failed",
+        )
+        if not visual_blocks:
+            visual_blocks.append(fallback_block)
+        uncertain_regions.append(fallback_block)
+
+    page_analysis = visual_result.get("page_analysis") if isinstance(visual_result.get("page_analysis"), dict) else {}
+    if page_analysis.get("cross_page_needed"):
+        suspected_cross_page_links.append(
+            {
+                "question_no": None,
+                "pages": [page_num, page_num + 1],
+                "reason": "page_analysis_cross_page_needed",
+            }
+        )
+
+    return {
+        "page_no": page_num,
+        "provider": visual_result.get("_vision_provider"),
+        "model": visual_result.get("_vision_model"),
+        "source_image_path": source_image_path,
+        "prompt_path": prompt_path,
+        "raw_output_ref": raw_output_ref,
+        "detected_question_numbers": detected_numbers,
+        "stem_blocks": stem_blocks,
+        "option_blocks": option_blocks,
+        "visual_blocks": visual_blocks,
+        "chart_title_blocks": title_blocks,
+        "table_header_blocks": table_header_blocks,
+        "legend_blocks": legend_blocks,
+        "note_blocks": note_blocks,
+        "suspected_cross_page_links": suspected_cross_page_links,
+        "uncertain_regions": uncertain_regions,
+        "confidence": 0.0 if failed else float(page_analysis.get("confidence") or 0.6),
+        "reason": visual_result.get("error") or ("vision_ai_failed" if failed else "vision_ai_page_understanding"),
+        "page_warnings": warnings,
+        "page_analysis": page_analysis,
+        "schema_validation": visual_result.get("schema_validation") or {},
+    }
+
+
+def _group_text(blocks: list[dict[str, Any]]) -> str:
+    return "\n".join(str(block.get("text") or "").strip() for block in blocks if block.get("text")).strip()
+
+
+def _debug_group(blocks: list[dict[str, Any]], *, complete: bool | None = None) -> dict[str, Any]:
+    bboxes = [block.get("bbox") for block in blocks if block.get("bbox")]
+    return {
+        "blocks": blocks,
+        "text": _group_text(blocks),
+        "bbox": _union_visual_bboxes(bboxes),
+        "complete": complete,
+    }
+
+
+def _build_semantic_debug_groups(visual_links: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_entries = _dict_items(visual_links.get("semantic_question_entries"))
+    groups: list[dict[str, Any]] = []
+    if raw_entries:
+        for entry in raw_entries:
+            fallback_page = _coerce_int(entry.get("page_num") or entry.get("page_no")) or 1
+            pages = _page_numbers_from_entry(entry, fallback_page)
+            page_no = pages[0] if pages else fallback_page
+            stem_blocks = [
+                _debug_block(
+                    page_no=page_no,
+                    kind="stem",
+                    bbox=entry.get("stem_bbox") or entry.get("bbox"),
+                    text=entry.get("content"),
+                    label=_question_no_from_entry(entry),
+                    source="semantic_question",
+                    uncertain=not bool(entry.get("stem_bbox") or entry.get("bbox")),
+                    reason=None if entry.get("stem_bbox") or entry.get("bbox") else "stem_bbox_missing",
+                )
+            ]
+            option_blocks = [
+                _debug_block(
+                    page_no=page_no,
+                    kind="option",
+                    bbox=option.get("bbox"),
+                    text=option.get("text"),
+                    label=option.get("label"),
+                    source="semantic_question.options",
+                    uncertain=not bool(option.get("bbox")),
+                    reason=None if option.get("bbox") else "option_bbox_missing",
+                )
+                for option in _dict_items(entry.get("options"))
+            ]
+            visual_blocks: list[dict[str, Any]] = []
+            title_blocks: list[dict[str, Any]] = []
+            table_header_blocks: list[dict[str, Any]] = []
+            legend_blocks: list[dict[str, Any]] = []
+            note_blocks: list[dict[str, Any]] = []
+            for visual_group in _dict_items(entry.get("visual_groups")):
+                grouped = _blocks_from_visual_group(page_no, visual_group)
+                visual_blocks.extend(grouped["visual"])
+                title_blocks.extend(grouped["title"])
+                table_header_blocks.extend(grouped["table_header"])
+                legend_blocks.extend(grouped["legend"])
+                note_blocks.extend(grouped["note"])
+            content_quality = entry.get("content_quality") if isinstance(entry.get("content_quality"), dict) else {}
+            question_quality = entry.get("question_quality") if isinstance(entry.get("question_quality"), dict) else {}
+            risk_flags = list(
+                dict.fromkeys(
+                    [
+                        *[str(item) for item in content_quality.get("risk_flags") or []],
+                        *[str(item) for item in question_quality.get("review_reasons") or []],
+                    ]
+                )
+            )
+            uncertain = bool(content_quality.get("needs_review") or question_quality.get("needs_review"))
+            bboxes = [
+                block.get("bbox")
+                for block in [
+                    *stem_blocks,
+                    *option_blocks,
+                    *visual_blocks,
+                    *title_blocks,
+                    *table_header_blocks,
+                    *legend_blocks,
+                    *note_blocks,
+                ]
+                if block.get("bbox")
+            ]
+            groups.append(
+                {
+                    "question_no": _question_no_from_entry(entry),
+                    "source_page_start": min(pages) if pages else page_no,
+                    "source_page_end": max(pages) if pages else page_no,
+                    "stem_group": _debug_group(stem_blocks, complete=content_quality.get("stem_complete")),
+                    "options_group": _debug_group(option_blocks, complete=content_quality.get("options_complete")),
+                    "visual_group": _debug_group(visual_blocks, complete=content_quality.get("visual_complete")),
+                    "title_group": _debug_group(title_blocks, complete=bool(title_blocks)),
+                    "table_header_group": _debug_group(table_header_blocks, complete=bool(table_header_blocks)),
+                    "legend_group": _debug_group(legend_blocks, complete=bool(legend_blocks)),
+                    "notes_group": _debug_group(note_blocks, complete=bool(note_blocks)),
+                    "bbox_list": bboxes,
+                    "grouping_confidence": float(entry.get("confidence") or 0.6),
+                    "grouping_reason": "semantic_question_from_page_understanding",
+                    "risk_flags": risk_flags,
+                    "uncertain": uncertain,
+                }
+            )
+        return groups
+
+    for page in _dict_items(visual_links.get("page_understanding")):
+        page_no = _coerce_int(page.get("page_no") or page.get("page_num")) or 1
+        visual_blocks = _dict_items(page.get("visual_blocks"))
+        bboxes = [block.get("bbox") for block in visual_blocks if block.get("bbox")]
+        risk_flags = list(
+            dict.fromkeys(
+                [
+                    *[str(item) for item in page.get("page_warnings") or []],
+                    "question_number_unknown",
+                    "need_manual_fix",
+                ]
+            )
+        )
+        groups.append(
+            {
+                "question_no": None,
+                "source_page_start": page_no,
+                "source_page_end": page_no,
+                "stem_group": _debug_group(_dict_items(page.get("stem_blocks")), complete=False),
+                "options_group": _debug_group(_dict_items(page.get("option_blocks")), complete=False),
+                "visual_group": _debug_group(visual_blocks, complete=False),
+                "title_group": _debug_group(_dict_items(page.get("chart_title_blocks")), complete=False),
+                "table_header_group": _debug_group(_dict_items(page.get("table_header_blocks")), complete=False),
+                "legend_group": _debug_group(_dict_items(page.get("legend_blocks")), complete=False),
+                "notes_group": _debug_group(_dict_items(page.get("note_blocks")), complete=False),
+                "bbox_list": bboxes,
+                "grouping_confidence": 0.0,
+                "grouping_reason": page.get("reason") or "parser_fallback_uncertain_page_group",
+                "risk_flags": risk_flags,
+                "uncertain": True,
+            }
+        )
+    return groups
+
+
+def _collect_required_regions(group: dict[str, Any]) -> list[dict[str, Any]]:
+    regions: list[dict[str, Any]] = []
+    for field, kind in [
+        ("stem_group", "stem"),
+        ("options_group", "options"),
+        ("visual_group", "visual"),
+        ("title_group", "chart_title"),
+        ("table_header_group", "table_header"),
+        ("legend_group", "legend"),
+        ("notes_group", "notes"),
+    ]:
+        value = group.get(field) if isinstance(group.get(field), dict) else {}
+        for block in _dict_items(value.get("blocks")):
+            if block.get("bbox"):
+                regions.append({"kind": kind, "bbox": block.get("bbox"), "page_no": block.get("page_no")})
+    return regions
+
+
+def _build_recrop_debug_plan(semantic_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    plans: list[dict[str, Any]] = []
+    for group in semantic_groups:
+        required_regions = _collect_required_regions(group)
+        bboxes = [region.get("bbox") for region in required_regions if region.get("bbox")]
+        crop_bbox = _union_visual_bboxes(bboxes)
+        visual_group = group.get("visual_group") if isinstance(group.get("visual_group"), dict) else {}
+        title_group = group.get("title_group") if isinstance(group.get("title_group"), dict) else {}
+        table_header_group = group.get("table_header_group") if isinstance(group.get("table_header_group"), dict) else {}
+        visual_blocks = _dict_items(visual_group.get("blocks"))
+        has_visual = bool(visual_blocks)
+        has_title = bool(_dict_items(title_group.get("blocks")))
+        has_table_header = bool(_dict_items(table_header_group.get("blocks")))
+        risk_flags = [str(item) for item in group.get("risk_flags") or []]
+        if has_visual and not has_title:
+            risk_flags.append("chart_title_missing_or_unlocalized")
+        if has_visual and not has_table_header:
+            risk_flags.append("table_header_missing_or_unlocalized")
+        need_manual_fix = bool(group.get("uncertain") or not crop_bbox or (has_visual and (not has_title or not has_table_header)))
+        if need_manual_fix:
+            risk_flags.append("need_manual_fix")
+        source_start = int(group.get("source_page_start") or 1)
+        source_end = int(group.get("source_page_end") or source_start)
+        plans.append(
+            {
+                "question_no": group.get("question_no"),
+                "source_pages": list(range(source_start, source_end + 1)),
+                "crop_bbox": crop_bbox,
+                "required_include_regions": required_regions,
+                "padding_top": 24,
+                "padding_bottom": 24,
+                "padding_left": 24,
+                "padding_right": 24,
+                "must_keep_chart_title": has_visual,
+                "must_keep_table_header": has_visual,
+                "must_keep_legend": has_visual,
+                "must_keep_axis_labels": has_visual,
+                "must_keep_notes": has_visual,
+                "merge_visual_blocks": len(visual_blocks) > 1 or any(block.get("is_fragmented_before_merge") for block in visual_blocks),
+                "risk_flags": list(dict.fromkeys(risk_flags)),
+                "recrop_confidence": 0.0 if need_manual_fix else float(group.get("grouping_confidence") or 0.6),
+                "recrop_reason": group.get("grouping_reason") or ("need_manual_fix" if need_manual_fix else "semantic_group_union_bbox"),
+                "need_manual_fix": need_manual_fix,
+            }
+        )
+    return plans
+
+
+def _build_questions_from_semantic_payload(
+    extractor: Any,
+    semantic_questions: list[dict[str, Any]],
+    visual_links: dict[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    visual_links = visual_links or {}
+    question_map: dict[int, dict[str, Any]] = {}
+    all_raw_questions: list[dict[str, Any]] = []
+    materials_by_text: dict[str, str] = {}
+    materials: list[dict[str, Any]] = []
+    questions: list[dict[str, Any]] = []
+    seen_signatures: dict[str, int] = {}
+    semantic_visual_index: dict[int, list[dict[str, Any]]] = {}
+
+    for entry in semantic_questions:
+        if not isinstance(entry, dict):
+            continue
+        index = _coerce_int(entry.get("index") or entry.get("question_no"))
+        if index is None:
+            continue
+        question = question_map.setdefault(index, _empty_semantic_bucket(index))
+
+        if entry.get("content"):
+            question["content"] = _strip_placeholder_text(str(entry.get("content")))
+        question["question_type"] = str(entry.get("question_type") or question["question_type"]).strip() or question["question_type"]
+        question["pages"] = _merge_unique_ints(question.get("pages", []), entry.get("pages"))
+        question["is_cross_page"] = bool(question.get("is_cross_page") or entry.get("is_cross_page"))
+
+        direct_keys = ("option_a", "option_b", "option_c", "option_d")
+        for direct_key in direct_keys:
+            label = direct_key[-1].upper()
+            value = entry.get(direct_key)
+            if isinstance(value, str):
+                value = _strip_placeholder_text(value).strip()
+                if value:
+                    question["options"][label] = value
+
+        for option in entry.get("options") or []:
+            if not isinstance(option, dict):
+                continue
+            label = str(option.get("label") or "").strip().upper()
+            if label not in {"A", "B", "C", "D"}:
+                continue
+            text = _strip_placeholder_text(str(option.get("text") or option.get("content") or "")).strip()
+            if text:
+                question["options"][label] = text
+
+        for field in [
+            "content_quality",
+            "question_quality",
+            "capture_plan",
+            "understanding",
+            "answer_suggestion",
+            "analysis_suggestion",
+            "ai_audit",
+        ]:
+            question[field] = _merge_dict(question[field], _as_dict(entry.get(field)))
+
+        question["content_quality"]["needs_review"] = bool(
+            question["content_quality"].get("needs_review") or entry.get("content_quality", {}).get("needs_review")
+        )
+        question["question_quality"]["needs_review"] = bool(
+            question["question_quality"].get("needs_review") or entry.get("question_quality", {}).get("needs_review")
+        )
+
+        if not entry.get("visual_groups") and visual_links.get("questions"):
+            cached_regions = visual_links.get("questions", {}).get(index, [])
+            synthesized_visual_groups = _synthesize_visual_groups_from_regions(
+                extractor,
+                question_no=index,
+                regions=cached_regions,
+            )
+            if synthesized_visual_groups:
+                question["parse_warnings"].append("visual_groups_synthesized_from_region_cache")
+                semantic_visual_index[index] = synthesized_visual_groups
+
+        for visual_group in entry.get("visual_groups") or []:
+            if isinstance(visual_group, dict):
+                question["visual_groups"].append(visual_group)
+        for visual_group in semantic_visual_index.get(index) or []:
+            question["visual_groups"].append(visual_group)
+
+        material_ids = entry.get("material_temp_ids") or entry.get("material_temp_id")
+        for material_id in _coerce_str_list(material_ids):
+            if material_id and material_id not in question["material_temp_ids"]:
+                question["material_temp_ids"].append(material_id)
+
+        page_num = _coerce_int(entry.get("page_num"))
+        if page_num is None:
+            page_num = _coerce_int(entry.get("source_page_num")) or 1
+        if page_num is not None and page_num not in question["question_pages"]:
+            question["question_pages"].append(page_num)
+
+        question["question_regions"].append(
+            {
+                "page_num": page_num,
+                "stem_bbox": entry.get("stem_bbox"),
+                "options_bbox": entry.get("options_bbox"),
+                "capture_plan": entry.get("capture_plan"),
+                "risk_flags": _coerce_str_list(entry.get("risk_flags") or entry.get("risk_flags_new")),
+                "question_type": entry.get("question_type") or question["question_type"],
+                "content_quality": _as_dict(entry.get("content_quality")),
+                "question_quality": _as_dict(entry.get("question_quality")),
+            }
+        )
+
+        question["parse_warnings"].extend(_coerce_str_list(entry.get("parse_warnings")))
+        if _coerce_bool(entry.get("is_incomplete", False)):
+            question["parse_warnings"].append("question_incomplete_by_ai")
+
+        if not question["pages"] and page_num is not None:
+            question["pages"] = [page_num]
+
+        if entry.get("material_text"):
+            question["material_text"] = str(entry.get("material_text"))
+        for material_text in _coerce_str_list(entry.get("material_texts")):
+            all_raw_questions.append({"question_no": index, "material_text": material_text})
+
+        question["raw_entries"].append(entry)
+
+    for index in sorted(question_map):
+        question = question_map[index]
+        options = question["options"]
+
+        page_min = min(question["question_pages"]) if question["question_pages"] else index
+        page_max = max(question["question_pages"]) if question["question_pages"] else page_min
+        page_no = page_min
+        source_pages = sorted(set(question["pages"] or question["question_pages"] or [page_no]))
+
+        all_raw_questions.append(
+            {
+                "index": index,
+                "text": question["content"],
+                "page_num": page_no,
+                "y0": 0,
+                "y1": 0,
+            }
+        )
+
+        parse_warnings = list(dict.fromkeys(question["parse_warnings"]))
+        question_regions, visual_region_count = _build_semantic_question_regions(
+            extractor=extractor,
+            question_no=index,
+            entry=question,
+            parse_warnings=parse_warnings,
+        )
+
+        content_quality = question.get("content_quality") or {}
+        question_quality = question.get("question_quality") or {}
+        if not content_quality.get("stem_complete", True):
+            parse_warnings.append("semantic_stem_incomplete")
+        if not content_quality.get("options_complete", True):
+            parse_warnings.append("semantic_options_incomplete")
+        if not question_quality.get("visual_context_complete", True):
+            parse_warnings.append("semantic_visual_incomplete")
+        if question.get("is_cross_page"):
+            parse_warnings.append("question_cross_page")
+
+        answer_suggestion = _normalize_answer_suggestion(question.get("answer_suggestion") or {})
+        analysis_suggestion = _normalize_analysis_suggestion(question.get("analysis_suggestion") or {})
+        quality = question.get("question_quality") or {}
+        ai_audit = _merge_dict(
+            {
+                "status": "warning" if quality.get("needs_review") else "passed",
+                "verdict": "需复核" if quality.get("needs_review") else "可通过",
+                "summary": "",
+                "needs_review": bool(quality.get("needs_review")),
+                "risk_flags": [],
+                "review_reasons": [],
+            },
+            question.get("ai_audit") or {},
+        )
+
+        if quality.get("needs_review"):
+            parse_warnings.append("question_quality_review_required")
+
+        material_text = question.get("material_text")
+        material_temp_id: str | None = None
+        if material_text:
+            material_temp_id = materials_by_text.get(material_text)
+            if material_temp_id is None:
+                material_temp_id = f"m_{len(materials) + 1}"
+                materials_by_text[material_text] = material_temp_id
+                materials.append(
+                    {
+                        "temp_id": material_temp_id,
+                        "content": material_text,
+                        "images": [],
+                    }
+                )
+        if question["material_temp_ids"]:
+            material_temp_id = question["material_temp_ids"][0]
+
+        question["material_temp_ids"] = _coerce_unique(question["material_temp_ids"])
+
+        material_group = {
+            "question_no": index,
+            "question_indexes": [index],
+            "question_ids": [f"q{index:03d}"],
+            "warnings": list(dict.fromkeys(parse_warnings)),
+        }
+
+        visual_confidence = _safe_float(quality.get("visual_confidence"))
+        if visual_confidence is None:
+            visual_conf_vals = [
+                _safe_float(item.get("confidence")) for item in (question.get("visual_groups") or []) if isinstance(item, dict)
+            ]
+            visual_conf_vals = [value for value in visual_conf_vals if value is not None]
+            if visual_conf_vals:
+                visual_confidence = sum(visual_conf_vals) / len(visual_conf_vals)
+
+        question_type_raw = str(question.get("question_type") or "single").lower()
+        question_type = "judge" if ("judge" in question_type_raw or "判断" in question_type_raw) else "single"
+        has_visual_context = bool(question_regions)
+        source_bbox = _union_visual_bboxes([region.bbox for region in question_regions])
+
+        visuals_for_question = [_region_to_image(region, assignment_confidence=0.95) for region in question_regions]
+        visual_summary = _visual_summary_from_regions(
+            regions=question_regions,
+            fallback_groups=_coerce_str_list(question.get("visual_groups")) or question.get("visual_groups") or [],
+        )
+
+        risk_flags = _coerce_unique(
+            _coerce_str_list(quality.get("risk_flags"))
+            + _coerce_str_list(question["content_quality"].get("risk_flags"))
+            + _coerce_str_list(parse_warnings)
+        )
+
+        result = {
+            "index": index,
+            "type": question_type,
+            "content": question["content"],
+            "option_a": options.get("A"),
+            "option_b": options.get("B"),
+            "option_c": options.get("C"),
+            "option_d": options.get("D"),
+            "options": options,
+            "answer": answer_suggestion.get("answer"),
+            "analysis": analysis_suggestion.get("text"),
+            "needs_review": bool(parse_warnings),
+            "material_text": material_text,
+            "material_temp_id": material_temp_id,
+            "material_group_id": f"sg_{index}",
+            "material_group_question_indexes": [index],
+            "material_group_confidence": None,
+            "material_group_reason": "semantic_group_by_qwen_vl",
+            "shared_material": False,
+            "images": _dedupe_images(visuals_for_question),
+            "image_refs": [str(image.get("ref") or "") for image in visuals_for_question if image.get("ref")],
+            "visual_refs": [_region_to_visual_ref(region) for region in question_regions],
+            "page_num": page_no,
+            "page_range": [page_min, page_max],
+            "source_page_start": page_min,
+            "source_page_end": page_max,
+            "source_bbox": source_bbox,
+            "source_anchor_text": f"{index}.",
+            "source_confidence": 0.75 if has_visual_context else 0.45,
+            "source": "parser_kernel_semantic",
+            "parse_warnings": sorted(set(parse_warnings)),
+            "visual_summary": visual_summary,
+            "visual_confidence": visual_confidence,
+            "visual_parse_status": "success" if visual_region_count else "partial",
+            "visual_error": None if visual_region_count else "未检测到完整图表或图形",
+            "visual_risk_flags": risk_flags,
+            "has_visual_context": has_visual_context,
+            "answer_unknown_reason": answer_suggestion.get("answer_unknown_reason"),
+            "analysis_unknown_reason": analysis_suggestion.get("analysis_unknown_reason"),
+            "ai_audit_status": ai_audit.get("status") or "warning",
+            "ai_audit_verdict": ai_audit.get("verdict") or "需复核",
+            "ai_audit_summary": ai_audit.get("summary") or "",
+            "ai_can_understand_question": bool(
+                question["content"] and all(options.get(label) for label in ("A", "B", "C", "D"))
+            ),
+            "ai_can_solve_question": bool(answer_suggestion.get("answer") and answer_suggestion.get("answer") != "unknown"),
+            "ai_reviewed_before_human": True,
+            "ai_review_error": None,
+            "question_quality": quality,
+            "question_pages": source_pages,
+            "is_cross_page": question.get("is_cross_page", False),
+            "capture_plan": question.get("capture_plan"),
+            "understanding": question.get("understanding"),
+        }
+        result_signature = _question_signature(
+            question_text=result["content"],
+            options=options,
+            question_type=result["type"],
+            source_pages=source_pages,
+            has_visual_context=bool(question_regions),
+            image_count=len(visuals_for_question),
+        )
+        if result_signature:
+            duplicate_of = seen_signatures.get(result_signature)
+            if duplicate_of is not None:
+                parse_warnings.append(f"duplicate_question_signature_detected:{duplicate_of}")
+                quality["duplicate_suspected"] = True
+                if question["content"]:
+                    all_raw_questions.append({"index": index, "text": result["content"]})
+                continue
+            seen_signatures[result_signature] = index
+        result.update(material_group)
+        questions.append(result)
+        all_raw_questions.append({"index": index, "text": result["content"]})
+
+    return questions, materials, all_raw_questions
+
+
+def _build_questions_from_layout_groups(
+    extractor: Any,
+    visual_links: dict[str, Any],
+    raw_questions: list[RawQuestion],
+    material_ids_by_text: dict[str, str],
+    material_groups_by_id: dict[str, Any],
+    material_group_ids_by_question: dict[int, str],
+    link_warnings: dict[int, list[str]],
+    element_pages: list[PageContent] | None = None,  # noqa: ARG001
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    del element_pages
+    materials: list[dict[str, Any]] = []
+    questions: list[dict[str, Any]] = []
+    all_raw_questions: list[dict[str, Any]] = []
+
+    for raw in raw_questions:
+        all_raw_questions.append(
+            {
+                "index": raw.index,
+                "text": raw.text,
+                "page_num": raw.page_num,
+                "y0": raw.y0,
+                "y1": raw.y1,
+            }
+        )
+
+        content, options = _split_options(raw.text)
+        effective_material_id = visual_links.get("question_material_ids", {}).get(raw.index) or raw.material_id
+        effective_material_text = raw.material_text or visual_links.get("material_texts", {}).get(effective_material_id)
+        material_temp_id = None
+        if effective_material_text:
+            material_temp_id = material_ids_by_text.get(effective_material_text)
+            if material_temp_id is None:
+                material_temp_id = f"m_{len(materials) + 1}"
+                material_ids_by_text[effective_material_text] = material_temp_id
+                materials.append(
+                    {
+                        "temp_id": material_temp_id,
+                        "content": effective_material_text,
+                        "images": [],
+                    }
+                )
+            for material in materials:
+                if material["temp_id"] == material_temp_id:
+                    material["images"] = [
+                        _region_to_image(region, assignment_confidence=0.85)
+                        for region in visual_links.get("materials", {}).get(effective_material_id or "", [])
+                    ]
+                    break
+
+        linked_regions = list(raw.images)
+        if effective_material_id:
+            linked_regions.extend(visual_links.get("materials", {}).get(effective_material_id, []))
+        linked_regions.extend(visual_links.get("questions", {}).get(raw.index, []))
+
+        question_regions: list[Region] = []
+        for region in linked_regions:
+            if not _has_matching_region(question_regions, region):
+                question_regions.append(region)
+
+        question_warnings = list(getattr(raw, "warnings", []) or [])
+        question_warnings.extend(link_warnings.get(raw.index, []))
+        material_group_id = material_group_ids_by_question.get(raw.index)
+        material_group = material_groups_by_id.get(material_group_id) if material_group_id else None
+        if material_group:
+            question_warnings.extend(material_group.get("warnings") or [])
+
+        if not content:
+            question_warnings.append("question_content_empty")
+
+        source_bbox = _source_bbox_for_question(extractor, raw, visual_links)
+        question_images = [_region_to_image(region) for region in question_regions]
+        visual_refs = [_region_to_visual_ref(region) for region in question_regions]
+        image_refs = [str(image.get("ref") or "") for image in question_images if image.get("ref")]
+
+        questions.append(
+            {
+                "index": raw.index,
+                "type": "single" if options else "judge",
+                "content": content,
+                "option_a": options.get("A"),
+                "option_b": options.get("B"),
+                "option_c": options.get("C"),
+                "option_d": options.get("D"),
+                "options": options,
+                "answer": None,
+                "analysis": None,
+                "needs_review": True,
+                "material_text": effective_material_text,
+                "material_temp_id": material_temp_id,
+                "material_group_id": material_group_id,
+                "material_group_question_indexes": (material_group or {}).get("question_indexes") or [],
+                "material_group_confidence": (material_group or {}).get("confidence"),
+                "material_group_reason": (material_group or {}).get("link_reason"),
+                "shared_material": bool(material_group and len(material_group.get("question_indexes") or []) > 1),
+                "images": question_images,
+                "image_refs": image_refs,
+                "visual_refs": visual_refs,
+                "page_num": raw.page_num,
+                "page_range": [raw.page_num, raw.page_num],
+                "source_page_start": raw.page_num,
+                "source_page_end": raw.page_num,
+                "source_bbox": source_bbox,
+                "source_anchor_text": f"{raw.index}.",
+                "source_confidence": 0.7 if source_bbox else 0.4,
+                "source": "parser_kernel_scanned",
+                "parse_warnings": sorted(set(question_warnings)),
+                "visual_summary": None,
+                "visual_confidence": None,
+                "visual_parse_status": "partial" if question_images else "skipped",
+                "visual_error": None,
+                "visual_risk_flags": question_warnings,
+                "has_visual_context": bool(question_images),
+                "answer_unknown_reason": None,
+                "analysis_unknown_reason": None,
+                "ai_audit_status": "warning",
+                "ai_audit_verdict": "需复核",
+                "ai_audit_summary": "layout_fallback_result",
+                "ai_can_understand_question": bool(content and options),
+                "ai_can_solve_question": False,
+                "ai_reviewed_before_human": True,
+                "ai_review_error": None,
+                "question_quality": {
+                    "question_complete": bool(content and options),
+                    "visual_context_complete": bool(question_images),
+                    "needs_review": True,
+                    "risk_flags": question_warnings,
+                },
+            }
+        )
+
+    return questions, materials, all_raw_questions
+
+
+def _synthesize_visual_groups_from_regions(
+    extractor: Any,
+    question_no: int,
+    regions: list[Any],
+) -> list[dict[str, Any]]:
+    del extractor
+    grouped: dict[str, list[Any]] = {}
+    for region in regions:
+        if not isinstance(region, Region):
+            continue
+        if region.type not in {"chart", "table", "image", "visual", "diagram", "material"}:
+            continue
+        group_id = region.same_visual_group_id or f"{region.type}:{question_no}:{len(grouped)}"
+        grouped.setdefault(group_id, []).append(region)
+
+    if not grouped:
+        return []
+
+    result: list[dict[str, Any]] = []
+    for idx, (group_id, members) in enumerate(grouped.items(), start=1):
+        if not members:
+            continue
+        member_bboxes = [_coerce_visual_bbox(getattr(member, "bbox", None)) for member in members]
+        merged_bbox = _union_visual_bboxes(member_bboxes)
+        if not merged_bbox:
+            continue
+        first_type = str(members[0].type or "image").strip().lower() or "image"
+        region_type = "image"
+        if first_type == "chart":
+            region_type = "chart"
+        elif first_type == "table":
+            region_type = "table"
+        elif first_type == "diagram":
+            region_type = "diagram"
+        captions = [str(getattr(member, "caption", "") or "").strip() for member in members]
+        caption_text = next((item for item in captions if item), None)
+        title_included = bool(caption_text)
+        if not title_included and captions:
+            title_included = any("标题" in item for item in captions)
+
+        result.append(
+            {
+                "group_id": group_id if group_id else f"auto_vg_{question_no}_{idx}",
+                "type": region_type,
+                "member_blocks": [f"{idx}_{offset}" for offset, _ in enumerate(members)],
+                "merged_bbox": merged_bbox,
+                "title_included": title_included,
+                "legend_included": False,
+                "axis_included": False,
+                "table_header_included": False,
+                "is_fragmented_before_merge": len(members) > 1,
+                "belongs_to_question": True,
+                "link_reason": "synthesized_from_region_cache",
+                "visual_summary": str(caption_text) if caption_text else "",
+                "confidence": 0.7,
+                "same_visual_group_id": group_id,
+            }
+        )
+
+    return result
+
+
+def _build_semantic_question_regions(
+    extractor: Any,
+    question_no: int,
+    entry: dict[str, Any],
+    parse_warnings: list[str],
+) -> tuple[list[Region], int]:
+    regions: list[Region] = []
+    for region in entry.get("question_regions") or []:
+        if not isinstance(region, dict):
+            continue
+        page_no = _coerce_int(region.get("page_num")) or 1
+        page_index = max(page_no - 1, 0)
+        capture_plan = _as_dict(region.get("capture_plan") or entry.get("capture_plan"))
+        padding = _safe_float(capture_plan.get("padding")) or 12.0
+
+        stem_bbox = _coerce_visual_bbox(region.get("stem_bbox"))
+        if stem_bbox:
+            stem_region = _region_from_bbox(
+                extractor,
+                page_index,
+                _expand_bbox(stem_bbox, padding, extractor, page_index),
+                "question_stem",
+                warnings=parse_warnings,
+            )
+            if stem_region:
+                stem_region.type = "question_stem"
+                stem_region.assignment_confidence = 0.88
+                stem_region.visual_parse_status = "success"
+                stem_region.visual_summary = "question stem"
+                stem_region.visual_confidence = 0.88
+                stem_region.visual_error = None
+                stem_region.belongs_to_question = True
+                stem_region.linked_question_no = question_no
+                stem_region.linked_question_id = f"q{question_no:03d}"
+                stem_region.linked_by = "semantic_capture_plan"
+                stem_region.link_reason = "semantic-question-stem"
+                stem_region.visual_parse_input = {
+                    "source": "semantic_capture_plan",
+                    "page_num": page_no,
+                    "question_no": question_no,
+                }
+                regions.append(stem_region)
+
+        options_bbox = _coerce_visual_bbox(region.get("options_bbox"))
+        if options_bbox:
+            options_region = _region_from_bbox(
+                extractor,
+                page_index,
+                _expand_bbox(options_bbox, padding, extractor, page_index),
+                "question_options",
+                warnings=parse_warnings,
+            )
+            if options_region:
+                options_region.type = "question_options"
+                options_region.assignment_confidence = 0.86
+                options_region.visual_parse_status = "success"
+                options_region.visual_summary = "question options"
+                options_region.visual_confidence = 0.86
+                options_region.visual_error = None
+                options_region.belongs_to_question = True
+                options_region.linked_question_no = question_no
+                options_region.linked_question_id = f"q{question_no:03d}"
+                options_region.linked_by = "semantic_capture_plan"
+                options_region.link_reason = "semantic-question-options"
+                options_region.visual_parse_input = {
+                    "source": "semantic_capture_plan",
+                    "page_num": page_no,
+                    "question_no": question_no,
+                }
+                regions.append(options_region)
+
+    for visual_group in entry.get("visual_groups") or []:
+        if not isinstance(visual_group, dict):
+            continue
+        source_page_no = _coerce_int(visual_group.get("page_num")) or 1
+        page_index = max(source_page_no - 1, 0)
+        group_type = str(visual_group.get("type") or "image").strip().lower() or "image"
+        region_type = "image"
+        if group_type == "chart":
+            region_type = "chart"
+        elif group_type == "table":
+            region_type = "table"
+        elif group_type == "diagram":
+            region_type = "diagram"
+
+        group_bbox = _coerce_visual_bbox(visual_group.get("merged_bbox") or visual_group.get("bbox"))
+        if not group_bbox:
+            continue
+        context_bboxes = [
+            visual_group.get("title_bbox"),
+            visual_group.get("legend_bbox"),
+            visual_group.get("axis_bbox"),
+            visual_group.get("table_header_bbox"),
+            visual_group.get("notes_bbox"),
+        ]
+        union_bbox = _expand_with_related_bboxes(group_bbox, context_bboxes, extractor, page_index)
+        if union_bbox:
+            group_bbox = union_bbox
+        if visual_group.get("is_fragmented_before_merge"):
+            parse_warnings.append("visual_group_fragmented")
+        region_bbox = _expand_bbox(group_bbox, 16.0, extractor, page_index)
+        if not region_bbox:
+            continue
+        visual_region = _region_from_bbox(
+            extractor,
+            page_index,
+            region_bbox,
+            region_type,
+            warnings=parse_warnings,
+            caption=_strip_placeholder_text(str(visual_group.get("visual_summary") or "")),
+            same_visual_group_id=str(visual_group.get("group_id") or ""),
+        )
+        if visual_region:
+            visual_region.assignment_confidence = _safe_float(visual_group.get("confidence")) or 0.78
+            visual_region.visual_parse_status = "success"
+            visual_region.visual_summary = _strip_placeholder_text(str(visual_group.get("visual_summary") or ""))
+            visual_region.visual_confidence = _safe_float(visual_group.get("confidence"))
+            visual_region.visual_error = None
+            visual_region.belongs_to_question = bool(visual_group.get("belongs_to_question", True))
+            visual_region.linked_question_no = question_no
+            visual_region.linked_question_id = f"q{question_no:03d}"
+            visual_region.linked_by = "semantic_visual_group"
+            visual_region.link_reason = str(visual_group.get("link_reason") or "semantic-group")
+            visual_region.visual_parse_input = {
+                "source": "semantic_visual_group",
+                "page_num": source_page_no,
+                "question_no": question_no,
+                "group_id": visual_group.get("group_id"),
+            }
+            regions.append(visual_region)
+
+    return _dedupe_regions(regions), len([region for region in regions if region.type != "question_stem"])
+
+
+def _expand_bbox(
+    bbox: list[float],
+    padding: float,
+    extractor: Any,
+    page_index: int,
+) -> list[float]:
+    if not bbox:
+        return []
+    try:
+        left, top, right, bottom = [float(item) for item in bbox]
+    except (TypeError, ValueError):
+        return []
+    page_rect = _page_rect(extractor, page_index)
+    left = max(0.0, left - padding)
+    top = max(0.0, top - padding)
+    right = min(float(page_rect.width), right + padding)
+    bottom = min(float(page_rect.height), bottom + padding)
+    if right <= left or bottom <= top:
+        return []
+    return [left, top, right, bottom]
+
+
+def _expand_with_related_bboxes(
+    base_bbox: list[float],
+    related_bboxes: list[Any],
+    extractor: Any,
+    page_index: int,
+    default_padding: float = 8.0,
+) -> list[float]:
+    coerce = [ _coerce_visual_bbox(base_bbox) ]
+    for item in related_bboxes:
+        value = _coerce_visual_bbox(item)
+        if value and _bboxes_touch_or_close(base_bbox, value, extractor, page_index):
+            coerce.append(value)
+    merged = _union_visual_bboxes(coerce)
+    if not merged:
+        return base_bbox
+    if default_padding <= 0:
+        return merged
+    return _expand_bbox(merged, default_padding, extractor, page_index) or merged
+
+
+def _bboxes_touch_or_close(
+    base_bbox: list[float],
+    related_bbox: list[float],
+    extractor: Any,
+    page_index: int,
+) -> bool:
+    if not base_bbox or not related_bbox:
+        return False
+    try:
+        left1, top1, right1, bottom1 = [float(item) for item in base_bbox]
+        left2, top2, right2, bottom2 = [float(item) for item in related_bbox]
+    except (TypeError, ValueError):
+        return False
+
+    page_height = _visual_page_height(extractor, page_index)
+    page_width = _visual_page_width(extractor, page_index)
+    if page_height <= 0 or page_width <= 0:
+        return True
+
+    y_gap = max(0.0, min(top2, bottom2) - max(top1, bottom1))
+    x_gap = max(0.0, min(left2, right2) - max(left1, right1))
+    if x_gap > page_width * 0.04:
+        return False
+    return y_gap <= page_height * 0.12
+
+
+def _dedupe_regions(regions: list[Region]) -> list[Region]:
+    if not regions:
+        return []
+    unique: list[Region] = []
+    for region in regions:
+        if not _has_matching_region(unique, region):
+            unique.append(region)
+    return unique
+
+
+def _visual_summary_from_regions(
+    regions: list[Region],
+    fallback_groups: list[Any] | dict[str, Any] | None = None,
+) -> str | None:
+    summaries: list[str] = []
+    for region in regions:
+        if region.visual_summary:
+            summaries.append(str(region.visual_summary).strip())
+
+    if isinstance(fallback_groups, dict):
+        candidate = fallback_groups.get("visual_summary")
+        if isinstance(candidate, str) and candidate.strip():
+            summaries.append(candidate.strip())
+
+    if isinstance(fallback_groups, list):
+        for item in fallback_groups:
+            if not isinstance(item, dict):
+                continue
+            value = item.get("visual_summary")
+            if isinstance(value, str) and value.strip():
+                summaries.append(value.strip())
+
+    summaries = [item for item in summaries if item]
+    return summaries[0] if summaries else None
+
+
+def _normalize_answer_suggestion(value: Any) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "answer": None,
+        "confidence": None,
+        "reasoning": None,
+        "answer_unknown_reason": None,
+    }
+    if not isinstance(value, dict):
+        return result
+
+    answer = str(value.get("answer") or "").strip().upper()
+    if answer in {"A", "B", "C", "D"}:
+        result["answer"] = answer
+    result["confidence"] = _safe_float(value.get("confidence"))
+    if isinstance(value.get("reasoning"), str) and value.get("reasoning").strip():
+        result["reasoning"] = _strip_placeholder_text(str(value.get("reasoning")).strip())
+    if value.get("answer_unknown_reason"):
+        result["answer_unknown_reason"] = str(value.get("answer_unknown_reason"))
+    return result
+
+
+def _normalize_analysis_suggestion(value: Any) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "text": None,
+        "confidence": None,
+        "analysis_unknown_reason": None,
+    }
+    if not isinstance(value, dict):
+        return result
+    if isinstance(value.get("text"), str) and value.get("text").strip():
+        result["text"] = _strip_placeholder_text(str(value.get("text")).strip())
+    result["confidence"] = _safe_float(value.get("confidence"))
+    if value.get("analysis_unknown_reason"):
+        result["analysis_unknown_reason"] = str(value.get("analysis_unknown_reason"))
+    return result
+
+
+def _empty_semantic_bucket(index: int) -> dict[str, Any]:
+    del index
+    return {
+        "content": "",
+        "question_type": "single",
+        "pages": [],
+        "question_pages": [],
+        "options": {},
+        "material_temp_ids": [],
+        "question_regions": [],
+        "visual_groups": [],
+        "parse_warnings": [],
+        "raw_entries": [],
+        "material_text": None,
+        "is_cross_page": False,
+        "content_quality": {
+            "question_complete": False,
+            "visual_complete": False,
+            "stem_complete": False,
+            "options_complete": False,
+            "title_missing": True,
+            "stem_missing": False,
+            "options_missing": False,
+            "needs_review": True,
+            "risk_flags": [],
+            "review_reasons": [],
+        },
+        "question_quality": {
+            "stem_complete": False,
+            "options_complete": False,
+            "visual_context_complete": False,
+            "answer_derivable": False,
+            "analysis_derivable": False,
+            "duplicate_suspected": False,
+            "needs_review": True,
+            "risk_flags": [],
+            "review_reasons": [],
+        },
+        "capture_plan": {
+            "should_recrop": True,
+            "crop_targets": [],
+            "padding": 24,
+            "must_include": ["chart_title", "legend", "axis_labels", "table_header", "notes"],
+        },
+        "understanding": {
+            "question_intent": "",
+            "required_visual_evidence": "",
+            "can_answer_from_available_context": False,
+            "missing_context": [],
+        },
+        "answer_suggestion": {
+            "answer": None,
+            "confidence": None,
+            "reasoning": None,
+            "answer_unknown_reason": None,
+        },
+        "analysis_suggestion": {
+            "text": None,
+            "confidence": None,
+            "analysis_unknown_reason": None,
+        },
+        "ai_audit": {
+            "status": "warning",
+            "verdict": "需复核",
+            "summary": "",
+            "needs_review": True,
+            "risk_flags": [],
+            "review_reasons": [],
+        },
+    }
+
+
+def _coerce_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _coerce_int_list(value: Any) -> list[int]:
+    if isinstance(value, (int, float, str)):
+        parsed = _coerce_int(value)
+        return [parsed] if parsed is not None else []
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [item for item in (_coerce_int(v) for v in value) if item is not None]
+
+
+def _merge_unique_ints(values: list[int], extra: Any) -> list[int]:
+    result = list(values)
+    for item in _coerce_int_list(extra):
+        if item not in result:
+            result.append(item)
+    return result
+
+
+def _coerce_str_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [str(value).strip()] if str(value).strip() else []
+
+
+def _coerce_unique(values: list[Any]) -> list[Any]:
+    result: list[Any] = []
+    seen: set[Any] = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _question_signature(
+    question_text: str,
+    options: dict[str, str],
+    question_type: str,
+    source_pages: list[int],
+    has_visual_context: bool,
+    image_count: int,
+) -> str:
+    normalized_text = str(question_text or "").strip()
+    if not normalized_text:
+        return ""
+    normalized_options = [str(options.get(label) or "").strip() for label in ("A", "B", "C", "D")]
+    signature_payload = {
+        "type": str(question_type or "").strip().lower(),
+        "text": normalized_text.replace(" ", ""),
+        "options": normalized_options,
+        "pages": source_pages,
+        "has_visual_context": bool(has_visual_context),
+        "image_count": int(image_count),
+    }
+    return json.dumps(signature_payload, ensure_ascii=False, sort_keys=True)
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return {str(key): val for key, val in value.items()}
+    return {}
+
+
+def _merge_dict(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base or {})
+    for key, value in (overrides or {}).items():
+        if value is None:
+            continue
+        merged[key] = value
+    return merged
+
+
+def _strip_placeholder_text(text: str) -> str:
+    result = str(text or "")
+    result = re.sub(r"\[visual parse unavailable\]", "", result, flags=re.IGNORECASE)
+    result = re.sub(r"visual parse unavailable", "", result, flags=re.IGNORECASE)
+    result = re.sub(r"page\s*\d+\s*visual parse", "", result, flags=re.IGNORECASE)
+    result = re.sub(r"unavailable", "", result, flags=re.IGNORECASE)
+    return result.strip()
+
+
+def _dedupe_images(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for image in images:
+        ref = str(image.get("ref") or "")
+        if ref and ref in seen:
+            continue
+        if ref:
+            seen.add(ref)
+        result.append(image)
+    return result
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _inject_semantic_debug_payload(
+    *,
+    debug_dir: str,
+    visual_pages: list[dict[str, Any]],
+    failed_pages: list[int],
+    visual_links: dict[str, Any],
+) -> None:
+    try:
+        debug_root = Path(debug_dir) / "debug"
+        debug_root.mkdir(parents=True, exist_ok=True)
+        semantic_debug = {
+            "task_pages": len(visual_pages),
+            "failed_pages": failed_pages,
+            "semantic_question_count": len(visual_links.get("semantic_question_entries", [])),
+            "semantic_question_entries": visual_links.get("semantic_question_entries", []),
+            "semantic_recrop_plans": visual_links.get("semantic_recrop_plans", []),
+            "visual_merge_candidates": visual_links.get("visual_merge_candidates", []),
+            "page_understanding": visual_links.get("page_understanding", []),
+            "semantic_pages": visual_links.get("semantic_pages", []),
+        }
+        (debug_root / "semantic_debug_payload.json").write_text(
+            json.dumps(semantic_debug, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        semantic_groups_payload = _build_semantic_debug_groups(visual_links)
+        recrop_plan_payload = _build_recrop_debug_plan(semantic_groups_payload)
+        payload_groups = {
+            "page_understanding": visual_links.get("page_understanding", []),
+            "semantic_groups": semantic_groups_payload,
+            "recrop_plan": recrop_plan_payload,
+            "visual_merge_candidates": visual_links.get("visual_merge_candidates", []),
+        }
+        for name, payload in payload_groups.items():
+            (debug_root / f"{name}.json").write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        legacy_alias = {
+            "page-understanding.json": payload_groups["page_understanding"],
+            "semantic-groups.json": payload_groups["semantic_groups"],
+            "recrop-plan.json": payload_groups["recrop_plan"],
+        }
+        for alias_name, payload in legacy_alias.items():
+            (debug_root / alias_name).write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+    except Exception:
+        return
 
 
 def _pages_from_extractor(extractor: Any, total_pages: int) -> list[PageContent]:
@@ -361,7 +1830,12 @@ def _pages_from_visual_fallback(
     failed_pages: list[int] = []
     page_indexes = _visual_page_indexes(total_pages, debug_dir, retry_failed_pages_only)
     cache_dir = Path(debug_dir) / "debug" / "visual_page_cache"
+    vision_ai_dir = Path(debug_dir) / "debug" / "vision_ai_inputs"
     cache_dir.mkdir(parents=True, exist_ok=True)
+    vision_ai_dir.mkdir(parents=True, exist_ok=True)
+    common_prompt_path = vision_ai_dir / "page_parse_prompt.txt"
+    if not common_prompt_path.exists():
+        common_prompt_path.write_text(PAGE_PARSE_PROMPT, encoding="utf-8")
     visual_links: dict[str, Any] = {
         "materials": {},
         "questions": {},
@@ -374,6 +1848,12 @@ def _pages_from_visual_fallback(
         "question_material_group_ids": {},
         "question_link_warnings": {},
         "warnings": [],
+        "semantic_question_entries": [],
+        "semantic_pages": [],
+        "semantic_recrop_plans": [],
+        "visual_merge_candidates": [],
+        "vision_ai_calls": [],
+        "page_understanding": [],
     }
     parser_warnings: list[dict[str, Any]] = []
     for page_index in page_indexes:
@@ -390,7 +1870,141 @@ def _pages_from_visual_fallback(
             max_side=VISUAL_PAGE_MAX_SIDE,
         )
         _cache_visual_render_size(extractor, page_index, image_size)
-        visual_result, attempt_errors, attempts = _parse_page_visual_with_retry(page_b64)
+        visual_timeout = _visual_page_timeout_seconds()
+        page_num = page_index + 1
+        page_image_path = vision_ai_dir / f"page_{page_num}.png"
+        page_prompt_path = common_prompt_path
+        try:
+            page_image_data = base64.b64decode(page_b64)
+            page_image_path.write_bytes(page_image_data)
+        except Exception:
+            page_image_data = b""
+        visual_result, attempt_errors, attempts = _parse_page_visual_with_retry(
+            page_b64,
+            timeout_seconds=visual_timeout,
+        )
+        initial_page_image_path = page_image_path
+        initial_prompt_path = page_prompt_path
+        fallback_attempted = False
+        fallback_success = False
+        fallback_image_path: Path | None = None
+        fallback_prompt_path: Path | None = None
+        fallback_attempt_errors: list[dict[str, Any]] = []
+        fallback_attempt_count = 0
+        if _visual_result_failed(visual_result) and (
+            visual_result.get("error") or visual_result.get("schema_validation")
+        ):
+            compact_size = 1000
+            if compact_size < VISUAL_PAGE_MAX_SIDE:
+                try:
+                    compact_b64 = _get_page_screenshot(
+                        extractor,
+                        page_index,
+                        dpi=max(70, VISUAL_PAGE_DPI - 30),
+                        max_side=compact_size,
+                    )
+                    compact_prompt_path = vision_ai_dir / f"page_{page_num}_compact_prompt.txt"
+                except Exception:
+                    compact_b64 = ""
+                    compact_prompt_path = None
+                if compact_b64 and compact_prompt_path:
+                    fallback_attempted = True
+                    fallback_prompt_path = compact_prompt_path
+                    try:
+                        compact_image_data = base64.b64decode(compact_b64)
+                        compact_image_path = vision_ai_dir / f"page_{page_num}_compact.png"
+                        compact_image_path.write_bytes(compact_image_data)
+                    except Exception:
+                        compact_image_path = None
+                    fallback_image_path = compact_image_path
+                    fallback_result, fallback_errors, fallback_attempts = _parse_page_visual_with_retry(
+                        compact_b64,
+                        timeout_seconds=max(20.0, min(visual_timeout, 60.0)),
+                    )
+                    fallback_attempt_errors = fallback_errors
+                    fallback_attempt_count = fallback_attempts
+                    attempts += fallback_attempts
+                    attempt_errors.extend(fallback_errors)
+                    if not _visual_result_failed(fallback_result):
+                        fallback_success = True
+                        visual_result = fallback_result
+                        if compact_image_path is not None:
+                            page_image_path = compact_image_path
+                        page_prompt_path = compact_prompt_path
+
+        if not page_prompt_path.exists():
+            page_prompt_path.write_text(PAGE_PARSE_PROMPT, encoding="utf-8")
+        if fallback_success and fallback_prompt_path and not fallback_prompt_path.exists():
+            fallback_prompt_path.write_text(PAGE_PARSE_PROMPT, encoding="utf-8")
+        request_payload = {
+            "page": page_num,
+            "provider": visual_result.get("_vision_provider") or "qwen_vl",
+            "model": visual_result.get("_vision_model") or os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+            "timeout_seconds": visual_timeout,
+            "page_image_path": str(page_image_path),
+            "prompt_path": str(page_prompt_path),
+            "used_image_path": str(page_image_path),
+            "used_prompt_path": str(page_prompt_path),
+            "initial_page_image_path": str(initial_page_image_path),
+            "initial_prompt_path": str(initial_prompt_path),
+            "fallback_attempted": fallback_attempted,
+            "fallback_success": fallback_success,
+            "fallback_image_path": str(fallback_image_path) if fallback_image_path else None,
+            "fallback_prompt_path": str(fallback_prompt_path) if fallback_prompt_path else None,
+            "fallback_attempts": fallback_attempt_count,
+            "fallback_attempt_errors": fallback_attempt_errors,
+            "prompt_length": len(PAGE_PARSE_PROMPT),
+            "ocr_text_length": 0,
+        }
+        vision_call_record = {
+            "page": page_num,
+            "provider": visual_result.get("_vision_provider") or "qwen_vl",
+            "model": visual_result.get("_vision_model") or os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+            "timeout_seconds": visual_result.get("_vision_timeout_seconds") or visual_timeout,
+            "elapsed_ms": visual_result.get("_vision_elapsed_ms"),
+            "fallback_from": visual_result.get("_vision_fallback_from"),
+            "prompt_path": str(page_prompt_path),
+            "page_image_path": str(page_image_path),
+            "used_prompt_path": str(page_prompt_path),
+            "used_image_path": str(page_image_path),
+            "attempts": attempts,
+            "attempt_errors": attempt_errors,
+            "request_payload": request_payload,
+            "request_payload_redacted": dict(request_payload),
+            "raw_output": visual_result,
+            "parsed_json": {key: value for key, value in visual_result.items() if not key.startswith("_")},
+            "error_type": "visual_model_failed" if _visual_result_failed(visual_result) else None,
+            "error_message": visual_result.get("error"),
+        }
+        visual_links["vision_ai_calls"].append(vision_call_record)
+        visual_result["vision_ai"] = {
+            "page": page_num,
+            "provider": visual_result.get("_vision_provider") or "qwen_vl",
+            "model": visual_result.get("_vision_model") or os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+            "timeout_seconds": visual_result.get("_vision_timeout_seconds") or visual_timeout,
+            "elapsed_ms": visual_result.get("_vision_elapsed_ms"),
+            "fallback_from": visual_result.get("_vision_fallback_from"),
+            "prompt_path": str(page_prompt_path),
+            "page_image_path": str(page_image_path),
+            "used_prompt_path": str(page_prompt_path),
+            "used_image_path": str(page_image_path),
+            "attempts": attempts,
+            "attempt_errors": attempt_errors,
+            "request_payload": request_payload,
+            "request_payload_redacted": dict(request_payload),
+            "fallback_attempted": fallback_attempted,
+            "fallback_success": fallback_success,
+            "fallback_image_path": str(fallback_image_path) if fallback_image_path else None,
+            "fallback_prompt_path": str(fallback_prompt_path) if fallback_prompt_path else None,
+        }
+        raw_output_path = vision_ai_dir / f"page_{page_num}_raw_output.json"
+        try:
+            raw_output_path.write_text(
+                json.dumps(vision_result_to_debug_payload(visual_result, page_num), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
         blocks = []
         regions: list[Region] = []
         lines: list[str] = []
@@ -410,6 +2024,50 @@ def _pages_from_visual_fallback(
             "image_size": image_size,
             "base64_size": len(page_b64),
         }
+        page_analysis = visual_result.get("page_analysis") or {}
+        visual_links["page_understanding"].append(
+            _build_page_understanding_record(
+                page_num=page_num,
+                visual_result=visual_result,
+                source_image_path=str(page_image_path),
+                prompt_path=str(page_prompt_path),
+                raw_output_ref=str(raw_output_path),
+                image_size=image_size,
+            )
+        )
+        semantic_questions = visual_result.get("semantic_questions") or []
+        for semantic_entry in semantic_questions:
+            if not isinstance(semantic_entry, dict):
+                continue
+            semantic_entry = dict(semantic_entry)
+            semantic_entry.setdefault("pages", [])
+            if not semantic_entry["pages"]:
+                semantic_entry["pages"] = [page_index + 1]
+            visual_links["semantic_question_entries"].append(semantic_entry)
+            capture_plan = semantic_entry.get("capture_plan")
+            if isinstance(capture_plan, dict):
+                visual_links["semantic_recrop_plans"].append(
+                    {
+                        "page_num": page_index + 1,
+                        "question_no": semantic_entry.get("question_no") or semantic_entry.get("index"),
+                        "capture_plan": capture_plan,
+                        "crop_targets": capture_plan.get("crop_targets") or [],
+                    }
+                )
+        semantic_merge_candidates = visual_result.get("visual_merge_candidates") or []
+        for merge_candidate in semantic_merge_candidates:
+            if isinstance(merge_candidate, dict):
+                visual_links["visual_merge_candidates"].append(merge_candidate)
+
+        semantic_question_pages = visual_links.setdefault("semantic_question_pages", {})
+        for semantic_question_no in [
+            semantic_entry.get("index") for semantic_entry in semantic_questions if isinstance(semantic_entry, dict)
+        ]:
+            if semantic_question_no is None:
+                continue
+            pages_for_question = semantic_question_pages.setdefault(semantic_question_no, [])
+            if (page_index + 1) not in pages_for_question:
+                pages_for_question.append(page_index + 1)
         page_material_keys: dict[str, str] = {}
 
         for material in visual_result.get("materials", []) or []:
@@ -573,10 +2231,9 @@ def _pages_from_visual_fallback(
                 blocks.append({"bbox": [0.0, y, 1000.0, y + 10.0], "text": line})
                 y += 12.0
             if not fallback_lines:
-                lines.append(f"[page {page_index + 1} visual parse unavailable]")
-                blocks.append({"bbox": [0.0, 0.0, 1000.0, 10.0], "text": lines[-1]})
                 regions.append(_full_page_region(extractor, page_index))
                 page_warnings.append("visual_page_fallback_used")
+                page_warnings.append("visual_parse_failed")
         if _needs_page_fallback_region(page_warnings, visual_result):
             if not any(region.type == "page_fallback" for region in regions):
                 regions.append(_full_page_region(extractor, page_index))
@@ -608,7 +2265,59 @@ def _pages_from_visual_fallback(
     setattr(extractor, "_parser_kernel_visual_links", visual_links)
     setattr(extractor, "_parser_kernel_warnings", parser_warnings)
     setattr(extractor, "_parser_kernel_failed_pages", failed_pages)
+    setattr(extractor, "_parser_kernel_vision_ai_calls", visual_links.get("vision_ai_calls", []))
     return pages
+
+
+def vision_result_to_debug_payload(result: dict[str, Any], page: int) -> dict[str, Any]:
+    vision_ai = result.get("vision_ai") if isinstance(result.get("vision_ai"), dict) else {}
+    request_payload = vision_ai.get("request_payload") if isinstance(vision_ai.get("request_payload"), dict) else {}
+    request_payload_redacted = (
+        vision_ai.get("request_payload_redacted")
+        if isinstance(vision_ai.get("request_payload_redacted"), dict)
+        else dict(request_payload)
+    )
+    raw_output = result.get("raw_model_result") or result
+    used_image_path = (
+        vision_ai.get("used_image_path")
+        or vision_ai.get("page_image_path")
+        or request_payload.get("used_image_path")
+        or request_payload.get("page_image_path")
+    )
+    used_prompt_path = (
+        vision_ai.get("used_prompt_path")
+        or vision_ai.get("prompt_path")
+        or request_payload.get("used_prompt_path")
+        or request_payload.get("prompt_path")
+    )
+    return {
+        "page": page,
+        "provider": vision_ai.get("provider") or result.get("_vision_provider"),
+        "model": vision_ai.get("model") or result.get("_vision_model"),
+        "timeout_seconds": vision_ai.get("timeout_seconds") or result.get("_vision_timeout_seconds"),
+        "elapsed_ms": vision_ai.get("elapsed_ms") or result.get("_vision_elapsed_ms"),
+        "fallback_from": vision_ai.get("fallback_from") or result.get("_vision_fallback_from"),
+        "status": "failed" if _visual_result_failed(result) else "ok",
+        "attempts": vision_ai.get("attempts") if vision_ai.get("attempts") is not None else result.get("attempts"),
+        "attempt_errors": vision_ai.get("attempt_errors") or result.get("attempt_errors") or [],
+        "request_payload": request_payload,
+        "request_payload_redacted": request_payload_redacted,
+        "raw_output": raw_output,
+        "parsed_json": {key: value for key, value in result.items() if not key.startswith("_") and key != "raw_model_result"},
+        "used_image_path": used_image_path,
+        "used_prompt_path": used_prompt_path,
+        "warnings": result.get("warnings") or [],
+        "schema_validation": result.get("schema_validation") or {},
+        "error_type": "visual_model_failed" if _visual_result_failed(result) else None,
+        "error_message": result.get("error"),
+        "error": result.get("error"),
+        "raw_model_result": raw_output,
+        "page_analysis": result.get("page_analysis") or {},
+        "semantic_questions": result.get("semantic_questions") or [],
+        "visual_merge_candidates": result.get("visual_merge_candidates") or [],
+        "provider_attempts": result.get("_vision_provider_attempts") or [],
+        "vision_ai": vision_ai,
+    }
 
 
 def _attach_regions(question: QuestionGroup, pages: list[PageContent]) -> list[Region]:
@@ -853,12 +2562,18 @@ def _cache_visual_render_size(extractor: Any, page_index: int, image_size: dict[
     _visual_render_size_cache(extractor)[page_index] = image_size
 
 
-def _parse_page_visual_with_retry(page_b64: str) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
+def _parse_page_visual_with_retry(
+    page_b64: str,
+    timeout_seconds: float | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
     attempt_errors: list[dict[str, Any]] = []
-    first_result = _parse_page_visual_with_timeout(page_b64)
+    timeout = timeout_seconds or _visual_page_timeout_seconds()
+    first_result = _parse_page_visual_with_timeout(page_b64, timeout_seconds=timeout)
     if not _visual_result_retryable(first_result):
         return first_result, attempt_errors, 1
-
+    first_warnings = set(str(item) for item in first_result.get("warnings") or [])
+    if "visual_schema_invalid" not in first_warnings:
+        return first_result, attempt_errors, 1
     attempt_errors.append(
         {
             "warnings": list(first_result.get("warnings") or []),
@@ -866,7 +2581,7 @@ def _parse_page_visual_with_retry(page_b64: str) -> tuple[dict[str, Any], list[d
             "error": first_result.get("error"),
         }
     )
-    second_result = _parse_page_visual_with_timeout(page_b64)
+    second_result = _parse_page_visual_with_timeout(page_b64, timeout_seconds=timeout)
     return second_result, attempt_errors, 2
 
 
@@ -875,6 +2590,7 @@ def _parse_page_visual_with_timeout(
     timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     timeout = timeout_seconds or _visual_page_timeout_seconds()
+    chain_timeout = _visual_chain_timeout_seconds(timeout)
     result_queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
     error_queue: queue.Queue[Exception] = queue.Queue(maxsize=1)
 
@@ -886,10 +2602,10 @@ def _parse_page_visual_with_timeout(
 
     thread = threading.Thread(target=_runner, daemon=True)
     thread.start()
-    thread.join(timeout)
+    thread.join(chain_timeout)
 
     if thread.is_alive():
-        return _visual_timeout_result(timeout)
+        return _visual_timeout_result(chain_timeout)
 
     if not error_queue.empty():
         error = error_queue.get()
@@ -919,7 +2635,11 @@ def _visual_result_failed(result: dict[str, Any]) -> bool:
 
 
 def _visual_page_timeout_seconds() -> float:
-    raw = os.getenv("PDF_VISUAL_PAGE_TIMEOUT_SECONDS")
+    raw = (
+        os.getenv("VISION_AI_TIMEOUT_SECONDS")
+        or os.getenv("PDF_VISUAL_PAGE_TIMEOUT_SECONDS")
+        or os.getenv("PDF_VISUAL_OPENAI_TIMEOUT_SECONDS")
+    )
     if not raw:
         return DEFAULT_VISUAL_PAGE_TIMEOUT_SECONDS
     try:
@@ -927,6 +2647,16 @@ def _visual_page_timeout_seconds() -> float:
     except ValueError:
         return DEFAULT_VISUAL_PAGE_TIMEOUT_SECONDS
     return timeout if timeout > 0 else DEFAULT_VISUAL_PAGE_TIMEOUT_SECONDS
+
+
+def _visual_chain_timeout_seconds(provider_timeout_seconds: float) -> float:
+    fallback_enabled = bool(os.getenv("MIMO_API_KEY")) or bool(os.getenv("PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS")) or bool(
+        os.getenv("VISION_AI_PROVIDER_TIMEOUT_SECONDS")
+    )
+    provider_slots = 2 if fallback_enabled else 1
+    if os.getenv("VISION_AI_ENABLE_DASHSCOPE_SDK_FALLBACK", "").lower() in {"1", "true", "yes"}:
+        provider_slots += 1
+    return max(provider_timeout_seconds, provider_timeout_seconds * provider_slots + 10.0)
 
 
 def _visual_timeout_result(timeout_seconds: float) -> dict[str, Any]:
@@ -939,6 +2669,22 @@ def _visual_timeout_result(timeout_seconds: float) -> dict[str, Any]:
         "error": f"page_visual_timeout_after_{timeout_seconds:.1f}s",
         "schema_validation": {"timeout_seconds": timeout_seconds},
         "raw_model_result": {"error": "vision_page_timeout"},
+        "_vision_provider": "qwen_vl",
+        "_vision_model": os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+        "_vision_timeout_seconds": timeout_seconds,
+        "_vision_elapsed_ms": int(timeout_seconds * 1000),
+        "_vision_provider_attempts": [
+            {
+                "provider": "qwen_vl",
+                "model": os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+                "timeout_seconds": timeout_seconds,
+                "elapsed_ms": int(timeout_seconds * 1000),
+                "status": "failed",
+                "error_type": "timeout",
+                "error_message": f"page_visual_timeout_after_{timeout_seconds:.1f}s",
+                "fallback_from": None,
+            }
+        ],
     }
 
 
@@ -952,6 +2698,22 @@ def _visual_failure_result(message: str) -> dict[str, Any]:
         "error": message,
         "schema_validation": {"exception": message},
         "raw_model_result": {"error": message},
+        "_vision_provider": "qwen_vl",
+        "_vision_model": os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+        "_vision_timeout_seconds": _visual_page_timeout_seconds(),
+        "_vision_elapsed_ms": 0,
+        "_vision_provider_attempts": [
+            {
+                "provider": "qwen_vl",
+                "model": os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+                "timeout_seconds": _visual_page_timeout_seconds(),
+                "elapsed_ms": 0,
+                "status": "failed",
+                "error_type": "exception",
+                "error_message": message,
+                "fallback_from": None,
+            }
+        ],
     }
 
 

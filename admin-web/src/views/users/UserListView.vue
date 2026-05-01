@@ -101,7 +101,11 @@
         <el-table-column prop="created_at" label="时间" width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column prop="question.content" label="题目" min-width="260" show-overflow-tooltip />
+        <el-table-column label="题目" min-width="260" show-overflow-tooltip>
+          <template #default="{ row }">
+            <MathText :text="row.question?.content" fallback="题干未能可靠定位" />
+          </template>
+        </el-table-column>
         <el-table-column prop="user_answer" label="作答" width="80" />
         <el-table-column prop="is_correct" label="结果" width="80">
           <template #default="{ row }">
@@ -128,6 +132,7 @@ import {
   type AdminUser,
 } from '@/api/user';
 import PageHeader from '@/components/PageHeader.vue';
+import MathText from '@/components/MathText.vue';
 
 const loading = ref(false);
 const saving = ref(false);

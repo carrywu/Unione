@@ -19,6 +19,11 @@ JUDGE_KEYWORDS = [
 TOC_LINE_PATTERN = re.compile(r"^.{1,60}\.{4,}\s*\d+\s*$")
 HEADER_FOOTER_NOISE_RE = re.compile(r"(资料分析题库|夸夸刷|第七章)")
 QUESTION_ANCHOR_RE = re.compile(r"(?:【\s*)?例\s*\d+\s*】?")
+VISUAL_PLACEHOLDER_RE = re.compile(
+    r"\[?\s*(?:page\s*\d+\s*)?visual\s+parse\s+(?:unavailable|failed|error)[^\]\n\r]*\]?",
+    re.I,
+)
+UNAVAILABLE_LINE_RE = re.compile(r"^\s*\[?\s*unavailable\s*\]?\s*$", re.I)
 
 
 def validate_and_clean(
@@ -65,7 +70,9 @@ def _clean_question_with_meta(question: dict[str, Any]) -> tuple[dict[str, Any] 
     question = dict(question)
     original_content = (question.get("content") or "").strip()
     content = (question.get("content") or "").strip()
+    placeholder_filtered = _has_visual_placeholder(content) or _has_visual_placeholder(question.get("analysis"))
     content = re.sub(r"^\s*\d{1,3}[．.、]\s*", "", content)
+    content = _remove_visual_placeholders(content)
     content = _strip_orphan_corner_brackets(content)
 
     content_too_short = len(content) < 8
@@ -81,8 +88,13 @@ def _clean_question_with_meta(question: dict[str, Any]) -> tuple[dict[str, Any] 
         if not question.get(key) and options:
             question[key] = options.get(letter) or options.get(letter.lower())
         value = (question.get(key) or "").strip()
+        placeholder_filtered = placeholder_filtered or _has_visual_placeholder(value)
+        value = _remove_visual_placeholders(value)
         value = re.sub(r"^[ABCD][．.、。]\s*", "", value).strip()
         question[key] = value or None
+
+    if question.get("analysis"):
+        question["analysis"] = _remove_visual_placeholders(question.get("analysis"))
 
     has_options = any(question.get(key) for key in ["option_a", "option_b", "option_c", "option_d"])
     is_judge = any(keyword in content for keyword in JUDGE_KEYWORDS)
@@ -103,6 +115,9 @@ def _clean_question_with_meta(question: dict[str, Any]) -> tuple[dict[str, Any] 
         or answer_missing_in_answer_stage
     )
     parse_warnings = list(question.get("parse_warnings") or [])
+    if placeholder_filtered:
+        parse_warnings.append("placeholder_filtered")
+        question["needs_review"] = True
     if HEADER_FOOTER_NOISE_RE.search(content):
         parse_warnings.append("header_footer_blacklist_hit")
         question["needs_review"] = True
@@ -144,6 +159,21 @@ def _strip_orphan_corner_brackets(text: str) -> str:
     text = re.sub(r"^\s*】+", "", text).strip()
     text = re.sub(r"【+\s*$", "", text).strip()
     return text
+
+
+def _has_visual_placeholder(value: Any) -> bool:
+    text = str(value or "")
+    return bool(VISUAL_PLACEHOLDER_RE.search(text) or UNAVAILABLE_LINE_RE.search(text))
+
+
+def _remove_visual_placeholders(value: Any) -> str:
+    lines = []
+    for line in str(value or "").splitlines():
+        cleaned = VISUAL_PLACEHOLDER_RE.sub("", line).strip()
+        if not cleaned or UNAVAILABLE_LINE_RE.match(cleaned):
+            continue
+        lines.append(cleaned)
+    return "\n".join(lines).strip()
 
 
 def _safe_float(value: Any) -> float | None:

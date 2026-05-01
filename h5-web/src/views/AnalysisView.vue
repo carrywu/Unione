@@ -51,7 +51,7 @@
           </div>
 
           <!-- Question stem -->
-          <p class="card-stem">{{ item.question.content }}</p>
+          <p class="card-stem"><MathText :text="item.question.content" fallback="题干未能可靠定位" /></p>
           <div v-if="imagesFor(item.question, 'stem').length" class="card-images">
             <img
               v-for="(image, imageIndex) in imagesFor(item.question, 'stem')"
@@ -73,12 +73,16 @@
           <div :class="['answer-compare', item.isCorrect ? 'compare-correct' : 'compare-wrong']">
             <div class="compare-row">
               <span class="compare-label">你的答案</span>
-              <span :class="['compare-value', item.isCorrect ? 'text-correct' : 'text-wrong']">{{ item.userAnswer }}. {{ item.userAnswerLabel }}</span>
+              <span :class="['compare-value', item.isCorrect ? 'text-correct' : 'text-wrong']">
+                <span>{{ item.userAnswer }}. </span><MathText :text="item.userAnswerLabel" fallback="未作答" />
+              </span>
             </div>
             <div class="compare-divider" />
             <div class="compare-row compare-row-right">
               <span class="compare-label">正确答案</span>
-              <span class="compare-value text-primary">{{ item.answer }}. {{ item.answerLabel }}</span>
+              <span class="compare-value text-primary">
+                <span>{{ item.answer }}. </span><MathText :text="item.answerLabel" fallback="未给出" />
+              </span>
             </div>
           </div>
 
@@ -106,7 +110,7 @@
               :src="image"
               alt="解析图片"
             />
-            <p class="explanation-text">{{ item.analysis || '暂无文字解析' }}</p>
+            <p class="explanation-text"><MathText :text="item.analysis" fallback="暂无文字解析" /></p>
           </div>
 
           <!-- Knowledge Tags -->
@@ -157,6 +161,7 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { showSuccessToast } from 'vant';
 import { useQuizStore } from '@/stores/quiz';
+import MathText from '@/components/MathText.vue';
 import { normalizeImageSources, questionImagesFor, type QuestionImageSlot } from '@/utils/questionImages';
 import { getQuestionNote, saveQuestionNote } from '@/utils/questionNotes';
 

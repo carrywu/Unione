@@ -167,12 +167,14 @@
               >
                 <div class="queue-question-main">
                   <strong>{{ question.index_num }}.</strong>
-                  <span>{{ questionBrief(question) }}</span>
+                  <span><MathText :text="questionBrief(question)" fallback="题干未能可靠定位" /></span>
                 </div>
                 <div class="queue-ai-tags">
-                  <span v-if="!hasAiSuggestion(question)" class="queue-tag muted">无 AI 建议</span>
-                  <span v-if="question.answer" class="queue-tag">当前 {{ question.answer }}</span>
-                  <span v-if="question.ai_candidate_answer" class="queue-tag candidate">AI {{ question.ai_candidate_answer }}</span>
+                  <span class="queue-tag" :class="aiAuditTagClass(question)">
+                    AI 预审核：{{ aiAuditQueueLabel(question) }}
+                  </span>
+                  <span v-if="question.answer" class="queue-tag">当前 <MathText :text="question.answer" /></span>
+                  <span v-if="question.ai_candidate_answer" class="queue-tag candidate">AI <MathText :text="question.ai_candidate_answer" /></span>
                   <span v-if="aiConfidenceText(question)" class="queue-tag" :class="{ warning: isLowAiConfidence(question) }">{{ aiConfidenceText(question) }}</span>
                   <span v-if="question.ai_answer_conflict" class="queue-tag danger">答案冲突</span>
                   <span v-if="question.ai_solver_rechecked" class="queue-tag warning">Pro 复核</span>
@@ -188,9 +190,41 @@
           <div v-if="selectedQuestion?.answer || selectedQuestion?.analysis" class="current-answer-panel">
             <div>
               <span>当前答案</span>
-              <strong>{{ selectedQuestion?.answer || '-' }}</strong>
+              <strong><MathText :text="selectedQuestion?.answer" fallback="-" /></strong>
             </div>
-            <p v-if="selectedQuestion?.analysis">{{ selectedQuestion.analysis }}</p>
+            <p v-if="selectedQuestion?.analysis"><MathText :text="selectedQuestion.analysis" /></p>
+          </div>
+
+          <div v-if="aiPreaudit.visible" class="ai-preaudit-panel" :class="aiPreaudit.statusClass">
+            <div class="ai-preaudit-head">
+              <strong>AI 预审核：{{ aiPreaudit.verdict }}</strong>
+              <div>
+                <el-tag size="small" :type="aiPreaudit.tagType" effect="plain">
+                  {{ aiPreaudit.statusText }}
+                </el-tag>
+                <el-tag v-if="aiPreaudit.confidenceText" size="small" type="info" effect="plain">
+                  {{ aiPreaudit.confidenceText }}
+                </el-tag>
+              </div>
+            </div>
+            <div class="ai-preaudit-grid">
+              <span>理解题目</span>
+              <p>{{ aiPreaudit.understandText }}</p>
+              <span>可作答</span>
+              <p>{{ aiPreaudit.solveText }}</p>
+              <span>AI 建议答案</span>
+              <p><MathText :text="aiPreaudit.answerText" /></p>
+              <span>AI 解析建议</span>
+              <p><MathText :text="aiPreaudit.analysisText" /></p>
+              <span>图表摘要</span>
+              <p>{{ aiPreaudit.visualText }}</p>
+              <span v-if="aiPreaudit.riskFlags.length">风险提示</span>
+              <div v-if="aiPreaudit.riskFlags.length" class="ai-tag-row">
+                <el-tag v-for="flag in aiPreaudit.riskFlags" :key="flag" size="small" type="warning" effect="plain">
+                  {{ flag }}
+                </el-tag>
+              </div>
+            </div>
           </div>
 
           <div v-if="aiAssistance.visible" class="ai-assist-panel">
@@ -266,11 +300,11 @@
             <div class="ai-answer-compare">
               <div class="answer-box official">
                 <span>官方答案</span>
-                <strong>{{ aiSolverAssist.officialAnswer || '-' }}</strong>
+                <strong><MathText :text="aiSolverAssist.officialAnswer" fallback="-" /></strong>
               </div>
               <div class="answer-box candidate">
                 <span>AI 候选答案</span>
-                <strong>{{ aiSolverAssist.answer || '-' }}</strong>
+                <strong><MathText :text="aiSolverAssist.answer" fallback="-" /></strong>
               </div>
             </div>
             <div class="ai-solver-grid">
@@ -297,7 +331,7 @@
             </div>
             <el-collapse v-if="aiSolverAssist.analysis" class="ai-analysis-collapse">
               <el-collapse-item title="DeepSeek 候选解析" name="analysis">
-                <div class="ai-analysis-text">{{ aiSolverAssist.analysis }}</div>
+                <div class="ai-analysis-text"><MathText :text="aiSolverAssist.analysis" /></div>
               </el-collapse-item>
             </el-collapse>
             <div v-if="aiSolverAssist.latestAction" class="ai-audit-line">
@@ -414,7 +448,12 @@
                 <span>{{ selectedQuestion?.type === 'judge' ? '判断题' : '单选题' }} · 未匹配答案</span>
                 <strong>{{ selectedQuestion?.index_num || '-' }} / {{ questions.length || '-' }}</strong>
               </div>
-              <h2>{{ questionData.stem }}</h2>
+              <div v-if="aiPreaudit.visible" class="phone-ai-audit">
+                <strong>AI 预审核：{{ aiPreaudit.verdict }}</strong>
+                <span><MathText :text="aiPreaudit.answerText" /></span>
+                <span>{{ aiPreaudit.visualText }}</span>
+              </div>
+              <h2><MathText :text="questionData.stem" fallback="题干未能可靠定位" /></h2>
               <div v-if="imagesFor('stem').length" class="phone-images">
                 <img v-for="image in imagesFor('stem')" :key="image.id" :src="image.src" :alt="image.name" />
               </div>
@@ -428,7 +467,7 @@
                   class="phone-option"
                 >
                   <span>{{ option.key }}</span>
-                  <p>{{ option.text }}</p>
+                  <p><MathText :text="option.text" fallback="选项缺失" /></p>
                 </div>
               </div>
             </div>
@@ -448,7 +487,9 @@ import { ArrowLeft, Delete, DocumentChecked, Picture, Plus, Refresh, RefreshLeft
 import { getBanks, type Bank } from '@/api/bank';
 import { pdfProxyUrl } from '@/api/pdf';
 import { applyQuestionAiAction, getQuestion, getQuestions, updateQuestion, type Question, type QuestionAiAction } from '@/api/question';
+import MathText from '@/components/MathText.vue';
 import PdfLocator from '@/components/PdfLocator.vue';
+import { mathTextToString } from '@/utils/mathText';
 import { buildSourceHighlights, sourcePageForQuestion } from '@/utils/pdfHighlights';
 
 type OptionKey = 'A' | 'B' | 'C' | 'D';
@@ -465,6 +506,7 @@ interface QuestionImage {
   name: string;
   src: string;
   slot: ImageSlot;
+  meta?: Record<string, unknown>;
 }
 
 interface QuestionData {
@@ -556,6 +598,49 @@ const aiAssistance = computed(() => {
     confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
     notes: question?.ai_review_notes || '',
     corrections,
+  };
+});
+const aiPreaudit = computed(() => {
+  const question = selectedQuestion.value;
+  const status = String(question?.ai_audit_status || '').trim();
+  const confidence = Number(question?.ai_answer_confidence ?? question?.visual_confidence ?? question?.ai_confidence);
+  const riskFlags = aiRiskFlags(question);
+  const visualText = cleanDisplayText(
+    question?.visual_summary
+      || imageVisualSummary(question)
+      || question?.visual_error
+      || (question?.has_visual_context ? '视觉解析失败，需人工复核' : '无图表依赖'),
+  );
+  const answerText = question?.ai_candidate_answer
+    ? `AI 建议答案：${question.ai_candidate_answer}`
+    : cleanDisplayText(question?.answer_unknown_reason || 'AI 暂无法给出答案，需复核');
+  const analysisText = question?.ai_candidate_analysis
+    ? cleanDisplayText(question.ai_candidate_analysis)
+    : cleanDisplayText(question?.analysis_unknown_reason || 'AI 暂无法生成解析，需复核');
+  return {
+    visible: Boolean(
+      question
+        && (
+          status
+          || question.ai_reviewed_before_human
+          || question.ai_candidate_answer
+          || question.ai_candidate_analysis
+          || question.visual_parse_status
+          || question.has_visual_context
+        ),
+    ),
+    status,
+    statusText: aiAuditStatusLabel(status),
+    verdict: cleanDisplayText(question?.ai_audit_verdict || aiAuditStatusLabel(status)),
+    statusClass: `status-${status || 'skipped'}`,
+    tagType: aiAuditTagType(status),
+    confidenceText: Number.isFinite(confidence) ? `置信度 ${Math.round(confidence * 100)}%` : '',
+    understandText: question?.ai_can_understand_question ? 'AI 已理解题目' : 'AI 暂无法理解题目，需人工复核',
+    solveText: question?.ai_can_solve_question ? 'AI 判断可作答' : 'AI 暂无法判断答案，需人工复核',
+    answerText,
+    analysisText,
+    visualText,
+    riskFlags,
   };
 });
 const aiSolverAssist = computed(() => {
@@ -713,12 +798,21 @@ function hydrateQuestionData(question: Question | null) {
 }
 
 function cleanQuestionText(value: unknown) {
-  return String(value || '')
+  return cleanDisplayText(value)
     .split(/\r?\n/)
     .filter((line) => !['【', '】', '【】'].includes(line.trim()))
     .join('\n')
     .replace(/^[\s\r\n]*[【】]+[\s\r\n]*/g, '')
     .replace(/[\s\r\n]*[【】]+[\s\r\n]*$/g, '')
+    .trim();
+}
+
+function cleanDisplayText(value: unknown) {
+  return mathTextToString(value, '')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\[?\s*(?:page\s*\d+\s*)?visual\s+parse\s+(?:unavailable|failed|error)[^\]\r\n]*\]?/gi, '').trim())
+    .filter((line) => line && !/^\[?\s*unavailable\s*\]?$/i.test(line))
+    .join('\n')
     .trim();
 }
 
@@ -733,12 +827,19 @@ function normalizeQuestionImages(images: NonNullable<Question['images']>): Quest
           slot: 'stem' as ImageSlot,
         };
       }
+      const role = image.image_role || image.role || '';
+      const insertPosition = image.insert_position || '';
+      const slot: ImageSlot =
+        role === 'option_image' || insertPosition === 'above_options' || insertPosition === 'below_options'
+          ? 'options'
+          : 'stem';
       const src = image.url || (image.base64 ? `data:image/png;base64,${image.base64}` : '');
       return {
         id: image.ref || `image-${index}`,
         name: image.caption || image.ref || `题目图片 ${index + 1}`,
         src,
-        slot: 'stem' as ImageSlot,
+        slot,
+        meta: { ...image },
       };
     })
     .filter((image) => image.src);
@@ -776,7 +877,7 @@ function replaceQuestionInList(question: Question) {
 }
 
 function questionBrief(question: Question) {
-  const content = String(question.content || '暂无题干').replace(/\s+/g, ' ').trim();
+  const content = cleanDisplayText(question.content || '暂无题干').replace(/\s+/g, ' ').trim();
   return content.length > 72 ? `${content.slice(0, 72)}...` : content;
 }
 
@@ -786,8 +887,37 @@ function hasAiSuggestion(question: Question | null | undefined) {
       || question?.ai_candidate_analysis
       || question?.ai_review_notes
       || question?.ai_corrections?.length
-      || question?.ai_solver_provider,
+      || question?.ai_solver_provider
+      || question?.ai_audit_status
+      || question?.ai_reviewed_before_human
   );
+}
+
+function aiAuditQueueLabel(question: Question | null | undefined) {
+  return aiAuditStatusLabel(String(question?.ai_audit_status || ''));
+}
+
+function aiAuditStatusLabel(status: string) {
+  if (status === 'passed') return '通过';
+  if (status === 'warning') return '需复核';
+  if (status === 'failed') return '失败';
+  if (status === 'skipped') return '未完成，需复核';
+  return '未完成，需复核';
+}
+
+function aiAuditTagClass(question: Question | null | undefined) {
+  const status = String(question?.ai_audit_status || '');
+  if (status === 'passed') return 'candidate';
+  if (status === 'failed') return 'danger';
+  if (status === 'warning') return 'warning';
+  return 'muted';
+}
+
+function aiAuditTagType(status: string) {
+  if (status === 'passed') return 'success';
+  if (status === 'failed') return 'danger';
+  if (status === 'warning') return 'warning';
+  return 'info';
 }
 
 function latestAiAction(question: Question | null | undefined) {
@@ -799,7 +929,18 @@ function isAiIgnored(question: Question | null | undefined) {
 }
 
 function aiRiskFlags(question: Question | null | undefined) {
-  return Array.isArray(question?.ai_risk_flags) ? question.ai_risk_flags.map(String).filter(Boolean) : [];
+  return [
+    ...(Array.isArray(question?.ai_risk_flags) ? question.ai_risk_flags.map(String) : []),
+    ...(Array.isArray(question?.visual_risk_flags) ? question.visual_risk_flags.map(String) : []),
+  ].map(cleanDisplayText).filter(Boolean);
+}
+
+function imageVisualSummary(question: Question | null | undefined) {
+  const images = Array.isArray(question?.images) ? question?.images || [] : [];
+  const summaries = images
+    .map((image) => (typeof image === 'string' ? '' : cleanDisplayText(image.visual_summary || image.visual_error || image.ai_desc || image.caption || '')))
+    .filter(Boolean);
+  return summaries[0] || '';
 }
 
 function aiConfidenceText(question: Question | null | undefined) {
@@ -878,10 +1019,13 @@ function handleUndo() {
 
 function buildQuestionPayload(needsReview = selectedQuestion.value?.needs_review ?? true) {
   const images = questionData.images.map((image) => ({
+    ...(image.meta || {}),
     url: image.src,
     ref: image.id,
     caption: image.name,
     role: image.slot,
+    image_role: image.slot === 'options' ? 'option_image' : 'question_visual',
+    insert_position: image.slot === 'options' ? 'below_options' : 'below_stem',
   }));
   return {
     content: cleanQuestionText(questionData.stem),
@@ -1473,6 +1617,56 @@ h1 {
   padding: 10px 12px;
 }
 
+.ai-preaudit-panel {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 14px;
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  background: #f0f9ff;
+  padding: 12px;
+}
+
+.ai-preaudit-panel.status-warning,
+.ai-preaudit-panel.status-failed,
+.ai-preaudit-panel.status-skipped {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.ai-preaudit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-preaudit-head > div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ai-preaudit-grid {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px 12px;
+}
+
+.ai-preaudit-grid span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.ai-preaudit-grid p {
+  margin: 0;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .ai-assist-head {
   display: flex;
   align-items: center;
@@ -1884,6 +2078,23 @@ h1 {
 
 .phone-status strong {
   color: #2563eb;
+}
+
+.phone-ai-audit {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  padding: 10px;
+  color: #7c2d12;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.phone-ai-audit strong {
+  color: #9a3412;
 }
 
 .phone-screen h2 {

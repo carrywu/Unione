@@ -187,6 +187,93 @@ class VisionAIEnhancementTest(unittest.TestCase):
         self.assertEqual(q6["ai_corrections"][0]["status"], "applied")
         self.assertFalse(q6["needs_review"])
 
+    def test_page_preaudit_merges_visual_understanding_answer_analysis_and_audit_fields(self):
+        response = VisionAIResponse(
+            page=3,
+            corrections=[
+                {
+                    "question_id": "q6",
+                    "action": "update_visual_refs",
+                    "reason": "柱状图标题和题干均指向重庆居民收入对比，属于第6题。",
+                    "confidence": 0.93,
+                    "updates": {"visual_refs": ["p3-img1"], "need_review": True},
+                }
+            ],
+            question_reviews=[
+                {
+                    "question_id": "q6",
+                    "question_no": 6,
+                    "visuals": [
+                        {
+                            "visual_id": "p3-img1",
+                            "belongs_to_question": True,
+                            "image_role": "chart",
+                            "link_reason": "图表标题和题干都涉及2017～2021年重庆市城镇/农村居民收入。",
+                            "visual_summary": "2017～2021年重庆市城镇与农村常住居民人均可支配收入柱状图。",
+                            "confidence": 0.82,
+                        }
+                    ],
+                    "understanding": {
+                        "question_intent": "比较五年城镇/农村收入比最小的年份。",
+                        "can_answer_from_available_context": True,
+                    },
+                    "answer_suggestion": {
+                        "answer": "D",
+                        "confidence": 0.76,
+                        "reasoning": "根据图中各年两组收入相除，2021年比值最小。",
+                    },
+                    "analysis_suggestion": {
+                        "text": "分别计算2017～2021年城镇收入/农村收入，比值最小的是2021年，故选D。",
+                        "confidence": 0.74,
+                    },
+                    "ai_audit": {
+                        "status": "warning",
+                        "verdict": "需复核",
+                        "needs_review": True,
+                        "risk_flags": ["图表数据识别不完整，建议人工复核"],
+                        "review_reasons": ["关键数值需人工复核"],
+                    },
+                    "question_quality": {
+                        "stem_complete": True,
+                        "options_complete": True,
+                        "visual_context_complete": True,
+                        "answer_derivable": True,
+                        "analysis_derivable": True,
+                        "duplicate_suspected": False,
+                        "needs_review": True,
+                        "review_reasons": ["关键数值需人工复核"],
+                    },
+                }
+            ],
+        )
+        provider = FakeProvider(response=response)
+        with patch.dict(os.environ, {"ENABLE_VISION_AI": "true"}, clear=False):
+            result = enhance_questions_with_vision_ai(
+                pdf_path="",
+                output_dir="",
+                questions=q5_q6_questions(),
+                page_elements=page_elements(),
+                visual_payloads=visual_payloads(),
+                provider=provider,
+            )
+
+        q6 = result.questions[1]
+        self.assertEqual(q6["visual_parse_status"], "success")
+        self.assertIn("重庆市城镇与农村", q6["visual_summary"])
+        self.assertEqual(q6["ai_candidate_answer"], "D")
+        self.assertIn("故选D", q6["ai_candidate_analysis"])
+        self.assertEqual(q6["ai_answer_confidence"], 0.76)
+        self.assertEqual(q6["ai_audit_status"], "warning")
+        self.assertEqual(q6["ai_audit_verdict"], "需复核")
+        self.assertEqual(q6["ai_reviewed_before_human"], True)
+        self.assertEqual(q6["ai_can_understand_question"], True)
+        self.assertEqual(q6["ai_can_solve_question"], True)
+        self.assertIn("图表数据识别不完整，建议人工复核", q6["ai_risk_flags"])
+        self.assertEqual(q6["question_quality"]["stem_complete"], True)
+        self.assertEqual(q6["images"][0]["belongs_to_question"], True)
+        self.assertEqual(q6["images"][0]["image_role"], "chart")
+        self.assertIn("重庆市城镇", q6["images"][0]["visual_summary"])
+
     def test_medium_confidence_correction_is_suggestion_only(self):
         response = VisionAIResponse(
             page=3,

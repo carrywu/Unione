@@ -13,6 +13,17 @@ class Region(BaseModel):
     page: Optional[int] = None
     same_visual_group_id: Optional[str] = None
     assignment_confidence: Optional[float] = None
+    visual_parse_status: Optional[str] = None
+    visual_summary: Optional[str] = None
+    visual_confidence: Optional[float] = None
+    visual_error: Optional[str] = None
+    belongs_to_question: Optional[bool] = None
+    linked_question_no: Optional[int] = None
+    linked_question_id: Optional[str] = None
+    linked_by: Optional[str] = None
+    visual_role: Optional[str] = None
+    link_reason: Optional[str] = None
+    visual_parse_input: Optional[dict] = None
 
 
 class TextBlock(BaseModel):
@@ -56,6 +67,15 @@ class QuestionImage(BaseModel):
     child_visual_ids: List[str] = []
     assignment_confidence: Optional[float] = None
     ai_desc: Optional[str] = None
+    visual_parse_status: Optional[str] = None
+    visual_summary: Optional[str] = None
+    visual_confidence: Optional[float] = None
+    visual_error: Optional[str] = None
+    belongs_to_question: Optional[bool] = None
+    linked_question_no: Optional[int] = None
+    linked_question_id: Optional[str] = None
+    linked_by: Optional[str] = None
+    link_reason: Optional[str] = None
 
 
 class Question(BaseModel):
@@ -100,6 +120,22 @@ class Question(BaseModel):
     ai_solver_recheck_result: Optional[Dict[str, Any]] = None
     ai_solver_created_at: Optional[str] = None
     ai_answer_conflict: Optional[bool] = None
+    visual_summary: Optional[str] = None
+    visual_confidence: Optional[float] = None
+    visual_parse_status: Optional[str] = None
+    visual_error: Optional[str] = None
+    visual_risk_flags: List[str] = []
+    has_visual_context: Optional[bool] = None
+    answer_unknown_reason: Optional[str] = None
+    analysis_unknown_reason: Optional[str] = None
+    ai_audit_status: Optional[str] = None
+    ai_audit_verdict: Optional[str] = None
+    ai_audit_summary: Optional[str] = None
+    ai_can_understand_question: Optional[bool] = None
+    ai_can_solve_question: Optional[bool] = None
+    ai_reviewed_before_human: Optional[bool] = None
+    ai_review_error: Optional[str] = None
+    question_quality: Optional[Dict[str, Any]] = None
 
 
 class Material(BaseModel):

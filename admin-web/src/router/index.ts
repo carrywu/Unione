@@ -11,6 +11,7 @@ import QuestionPreviewView from '@/views/banks/QuestionPreviewView.vue';
 import AnswerBookMatchView from '@/views/banks/AnswerBookMatchView.vue';
 import UserListView from '@/views/users/UserListView.vue';
 import TaskListView from '@/views/pdf/TaskListView.vue';
+import PaperReviewView from '@/views/pdf/PaperReviewView.vue';
 import MaterialListView from '@/views/materials/MaterialListView.vue';
 import SystemView from '@/views/system/SystemView.vue';
 import ImmersiveWorkbench from '@/views/workbench/ImmersiveWorkbench.vue';
@@ -35,6 +36,7 @@ const router = createRouter({
         { path: 'banks/:id/questions/:questionId/preview', component: QuestionPreviewView, meta: { title: '题目预览' } },
         { path: 'materials', component: MaterialListView, meta: { title: '材料管理' } },
         { path: 'pdf/tasks', component: TaskListView, meta: { title: '解析任务' } },
+        { path: 'pdf/tasks/:taskId/paper-review', component: PaperReviewView, meta: { title: '制卷核对' } },
         { path: 'workbench', component: ImmersiveWorkbench, meta: { title: '沉浸式制卷' } },
         { path: 'users', component: UserListView, meta: { title: '用户管理' } },
         { path: 'system', component: SystemView, meta: { title: '系统设置' } },

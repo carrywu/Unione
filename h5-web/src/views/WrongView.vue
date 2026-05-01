@@ -49,7 +49,7 @@
           </div>
 
           <!-- Stem -->
-          <p class="mistake-stem">{{ record.question?.content || '题目加载中...' }}</p>
+          <p class="mistake-stem"><MathText :text="record.question?.content" fallback="题目加载中..." /></p>
           <div v-if="imagesFor(record.question, 'stem').length" class="mistake-images">
             <img
               v-for="(image, imageIndex) in imagesFor(record.question, 'stem')"
@@ -73,7 +73,9 @@
             <div class="answer-row answer-wrong">
               <AppIcon name="wrong" :size="18" />
               <div class="answer-row-text">
-                <span class="answer-row-opt">{{ record.user_answer }}. {{ optionLabel(record.question, record.user_answer) }}</span>
+                <span class="answer-row-opt">
+                  <span>{{ record.user_answer }}. </span><MathText :text="optionLabel(record.question, record.user_answer)" fallback="未作答" />
+                </span>
                 <p class="answer-row-label">你的答案</p>
               </div>
             </div>
@@ -81,7 +83,9 @@
             <div class="answer-row answer-right">
               <AppIcon name="check" :size="18" />
               <div class="answer-row-text">
-                <span class="answer-row-opt">{{ record.question?.answer }}. {{ optionLabel(record.question, record.question?.answer) }}</span>
+                <span class="answer-row-opt">
+                  <span>{{ record.question?.answer }}. </span><MathText :text="optionLabel(record.question, record.question?.answer)" fallback="未给出" />
+                </span>
                 <p class="answer-row-label">正确答案</p>
               </div>
             </div>
@@ -96,7 +100,7 @@
               <AppIcon name="spark" :size="16" />
               <span>解析</span>
             </div>
-            <p>{{ record.question.analysis || '暂无文字解析' }}</p>
+            <p><MathText :text="record.question.analysis" fallback="暂无文字解析" /></p>
             <div v-if="imagesFor(record.question, 'analysis').length" class="mistake-images analysis-images">
               <img
                 v-for="(image, imageIndex) in imagesFor(record.question, 'analysis')"
@@ -171,6 +175,7 @@ import { clearWrong, getWrong, getWrongPractice, getWrongStats, masterWrong } fr
 import LoadingState from '@/components/LoadingState.vue';
 import NavBar from '@/components/NavBar.vue';
 import AppIcon from '@/components/AppIcon.vue';
+import MathText from '@/components/MathText.vue';
 import { useQuizStore } from '@/stores/quiz';
 import { normalizeImageSources, questionImagesFor, type QuestionImageSlot } from '@/utils/questionImages';
 import { getQuestionNote, saveQuestionNote } from '@/utils/questionNotes';

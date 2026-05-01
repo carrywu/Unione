@@ -690,6 +690,22 @@ export class QuestionService {
       ai_solver_recheck_result: question.ai_solver_recheck_result || null,
       ai_solver_created_at: question.ai_solver_created_at || null,
       ai_answer_conflict: Boolean(question.ai_answer_conflict),
+      visual_summary: question.visual_summary || null,
+      visual_confidence: question.visual_confidence ?? null,
+      visual_parse_status: question.visual_parse_status || null,
+      visual_error: question.visual_error || null,
+      visual_risk_flags: question.visual_risk_flags || [],
+      has_visual_context: Boolean(question.has_visual_context),
+      answer_unknown_reason: question.answer_unknown_reason || null,
+      analysis_unknown_reason: question.analysis_unknown_reason || null,
+      ai_audit_status: question.ai_audit_status || null,
+      ai_audit_verdict: question.ai_audit_verdict || null,
+      ai_audit_summary: question.ai_audit_summary || null,
+      ai_can_understand_question: Boolean(question.ai_can_understand_question),
+      ai_can_solve_question: Boolean(question.ai_can_solve_question),
+      ai_reviewed_before_human: Boolean(question.ai_reviewed_before_human),
+      ai_review_error: question.ai_review_error || null,
+      question_quality: question.question_quality || null,
       parse_warnings: question.parse_warnings || [],
     };
   }
@@ -1021,7 +1037,17 @@ export class QuestionService {
   private cleanQuestionText(value: unknown) {
     return String(value || '')
       .split(/\r?\n/)
-      .filter((line) => !['【', '】', '【】'].includes(line.trim()))
+      .map((line) =>
+        line
+          .replace(/\[?\s*(?:page\s*\d+\s*)?visual\s+parse\s+(?:unavailable|failed|error)[^\]\r\n]*\]?/gi, '')
+          .trim(),
+      )
+      .filter(
+        (line) =>
+          line &&
+          !['【', '】', '【】'].includes(line.trim()) &&
+          !/^\[?\s*unavailable\s*\]?$/i.test(line),
+      )
       .join('\n')
       .trim()
       .replace(/^[\s\r\n]*[【】]+[\s\r\n]*/g, '')

@@ -8,7 +8,11 @@
         </el-select>
       </div>
       <el-table v-loading="loading" :data="materials" row-key="id">
-        <el-table-column prop="content" label="材料内容" min-width="360" show-overflow-tooltip />
+        <el-table-column label="材料内容" min-width="360" show-overflow-tooltip>
+          <template #default="{ row }">
+            <MathText :text="row.content" fallback="材料内容缺失" />
+          </template>
+        </el-table-column>
         <el-table-column prop="question_count" label="子题数" width="100" />
         <el-table-column prop="created_at" label="创建时间" width="190">
           <template #default="{ row }">{{ row.created_at ? new Date(row.created_at).toLocaleString() : '' }}</template>
@@ -37,6 +41,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { onMounted, reactive, ref } from 'vue';
 import { getBanks, type Bank } from '@/api/bank';
 import { deleteMaterial, getMaterials, updateMaterial, type Material } from '@/api/material';
+import MathText from '@/components/MathText.vue';
 import PageHeader from '@/components/PageHeader.vue';
 
 const loading = ref(false);

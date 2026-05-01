@@ -155,6 +155,34 @@ button:disabled {
   transform: scale(0.98);
 }
 
+.math-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.math-inline {
+  font-family:
+    "STIX Two Math", "Cambria Math", "Latin Modern Math", "Noto Sans Math",
+    "Apple Symbols", "Times New Roman", serif;
+  white-space: nowrap;
+}
+
+.math-var {
+  font-variant-numeric: lining-nums;
+}
+
+.math-var sub,
+.math-subscript {
+  font-size: 0.72em;
+  line-height: 0;
+  vertical-align: sub;
+}
+
+.math-operator {
+  display: inline-block;
+  padding: 0 0.18em;
+}
+
 .icon-tile {
   display: grid;
   width: 44px;

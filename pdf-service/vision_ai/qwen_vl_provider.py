@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import httpx
 from typing import Any
 
 from openai import OpenAI
@@ -39,7 +40,16 @@ class QwenVLProvider(VisionAIProvider):
         for _attempt in range(max(1, self.max_retries + 1)):
             try:
                 record_ai_call("qwen_vl")
-                client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=self.timeout_seconds)
+                http_client = httpx.Client(
+                    timeout=httpx.Timeout(self.timeout_seconds),
+                    trust_env=False,
+                )
+                client = OpenAI(
+                    api_key=self.api_key,
+                    base_url=self.base_url,
+                    timeout=self.timeout_seconds,
+                    http_client=http_client,
+                )
                 response = client.chat.completions.create(
                     model=self.model,
                     temperature=0,
@@ -57,7 +67,19 @@ class QwenVLProvider(VisionAIProvider):
                     ],
                 )
                 content = response.choices[0].message.content or "{}"
-                return VisionAIResponse.from_model_output(json.loads(_extract_json(content)), request.page)
+                response_payload = json.loads(_extract_json(content))
+                return VisionAIResponse.from_model_output(
+                    response_payload,
+                    request.page,
+                    prompt=prompt,
+                    request_payload={
+                        "page": request.page,
+                        "questions": request.questions,
+                        "visual_refs": request.visual_refs,
+                        "page_blocks_count": len(request.page_blocks),
+                        "ocr_text_length": len(request.ocr_text or ""),
+                    },
+                )
             except Exception as exc:
                 last_error = exc
                 record_ai_call("qwen_vl", str(exc))

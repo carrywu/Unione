@@ -54,6 +54,91 @@ export interface PublishParseResultResponse {
   total_count: number;
 }
 
+export interface AiPreauditDebug {
+  taskId: string;
+  bankId: string;
+  status: string;
+  debug_dir?: string;
+  qwen_vl_enabled: boolean;
+  qwen_vl_call_count: number;
+  final_verdict?: Record<string, unknown> | null;
+  final_preview_payload?: {
+    questions?: Array<Record<string, any>>;
+  } | null;
+  ai_audit_results?: Array<Record<string, any>>;
+  page_understanding?: Array<Record<string, any>>;
+  semantic_groups?: Array<Record<string, any>>;
+  recrop_plan?: Array<Record<string, any>>;
+  artifact_refs?: Record<string, string>;
+}
+
+export interface PaperCandidate {
+  candidate_id: string;
+  question_no?: number | string | null;
+  stem?: string | null;
+  options: Record<'A' | 'B' | 'C' | 'D', string>;
+  answer_suggestion?: string | null;
+  answer_confidence?: number | null;
+  answer_unknown_reason?: string | null;
+  analysis_suggestion?: string | null;
+  analysis_confidence?: number | null;
+  analysis_unknown_reason?: string | null;
+  visual_assets?: Array<Record<string, any>>;
+  preview_image_path?: string | null;
+  source_page_refs?: Array<number | string>;
+  source_bbox?: number[] | null;
+  source_text_span?: string | null;
+  visual_parse_status?: string;
+  ai_audit_status?: string;
+  ai_audit_verdict?: string | null;
+  ai_audit_summary?: string | null;
+  risk_flags?: string[];
+  need_manual_fix: boolean;
+  can_add_to_paper: boolean;
+  cannot_add_reason?: string | null;
+  manual_review_status?: string | null;
+  manualReviewable?: boolean;
+  manualForceAddAllowed?: boolean;
+  missingContextReason?: string | null;
+  recommendedAction?: string | null;
+  source_locator_available?: boolean;
+  source_artifacts_refs?: Record<string, string>;
+}
+
+export interface PaperCandidatesResponse {
+  taskId: string;
+  bankId: string;
+  status: string;
+  debug_dir?: string;
+  provider?: string | null;
+  model?: string | null;
+  summary: {
+    total: number;
+    can_add_count: number;
+    need_manual_fix_count: number;
+    ai_passed_count: number;
+    ai_warning_count: number;
+    ai_failed_count: number;
+  };
+  questions: PaperCandidate[];
+  artifact_refs?: Record<string, string>;
+}
+
+export interface DraftPaper {
+  paper_id: string;
+  title: string;
+  sections: Array<{ id: string; title: string; order: number }>;
+  questions: Array<Record<string, any>>;
+  score: number;
+  order: number;
+  source_task_id: string;
+  source_bank_id: string;
+  debug_dir?: string;
+  created_at: string;
+  updated_at?: string;
+  preview?: Record<string, any>;
+}
+
 export function parsePdf(bankId: string, fileUrl: string, fileName?: string) {
   return http.post<{ task_id: string }, { task_id: string }>('/admin/pdf/parse', {
     bank_id: bankId,
@@ -64,6 +149,30 @@ export function parsePdf(bankId: string, fileUrl: string, fileName?: string) {
 
 export function getTaskStatus(taskId: string) {
   return http.get<ParseTask, ParseTask>(`/admin/pdf/task/${taskId}`);
+}
+
+export function getAiPreauditDebug(taskId: string) {
+  return http.get<AiPreauditDebug, AiPreauditDebug>(`/admin/pdf/task/${taskId}/ai-preaudit-debug`);
+}
+
+export function getPaperCandidates(taskId: string) {
+  return http.get<PaperCandidatesResponse, PaperCandidatesResponse>(`/admin/pdf/task/${taskId}/paper-candidates`);
+}
+
+export function createDraftPaper(payload: Record<string, unknown>) {
+  return http.post<DraftPaper, DraftPaper>('/admin/pdf/papers/draft', payload);
+}
+
+export function getDraftPaper(paperId: string) {
+  return http.get<DraftPaper, DraftPaper>(`/admin/pdf/papers/${paperId}`);
+}
+
+export function updateDraftPaper(paperId: string, payload: Record<string, unknown>) {
+  return http.put<DraftPaper, DraftPaper>(`/admin/pdf/papers/${paperId}`, payload);
+}
+
+export function getDraftPaperPreview(paperId: string) {
+  return http.get<DraftPaper, DraftPaper>(`/admin/pdf/papers/${paperId}/preview`);
 }
 
 export function ocrPdfRegion(payload: OcrRegionPayload) {
