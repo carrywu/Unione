@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 import queue
 import re
 import threading
@@ -313,7 +314,44 @@ def _config_value(key: str, env_key: str | None = None, default: str | None = No
     return default
 
 
-DEFAULT_VISION_TIMEOUT_SECONDS = 120.0
+def current_config_value(
+    key: str,
+    env_key: str | None = None,
+    default: str | None = None,
+) -> str | None:
+    return _config_value(key, env_key, default)
+
+
+def current_config_present(key: str, env_key: str | None = None) -> bool:
+    value = _config_value(key, env_key)
+    return bool(str(value or "").strip())
+
+
+DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+DEFAULT_MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
+DEFAULT_ARK_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
+DEFAULT_ARK_RESPONSES_PATH = "/responses"
+DEFAULT_QWEN_VISION_MODEL = "qwen3-vl-plus"
+DEFAULT_MIMO_VISION_MODEL = "mimo-v2.5"
+DEFAULT_ARK_VISION_MODEL = "doubao-seed-1-6-vision-250815"
+VISION_PROVIDER_IDS = ("volcengine_ark_vl", "qwen_vl", "mimo_vl")
+PREFERRED_VISION_PROVIDER_ORDER = ("qwen_vl", "volcengine_ark_vl", "mimo_vl")
+
+DEFAULT_VISION_TIMEOUT_SECONDS = 180.0
+DEFAULT_VISION_SOFT_TIMEOUT_SECONDS = 10.0
+DEFAULT_VISION_PROVIDER_CACHE_TTL_SECONDS = 3600.0
+
+_VISION_PROVIDER_RUNTIME_LOCK = threading.Lock()
+_VISION_PROVIDER_STATE: dict[str, dict[str, Any]] = {
+    provider: {
+        "cooldown_until": 0.0,
+        "last_error_type": None,
+        "consecutive_timeouts": 0,
+        "config_signature": None,
+    }
+    for provider in VISION_PROVIDER_IDS
+}
+_VISION_PROVIDER_CACHE: dict[str, dict[str, Any]] = {}
 
 
 def _safe_positive_timeout(value: str | None, default: float) -> float:
@@ -326,19 +364,539 @@ def _safe_positive_timeout(value: str | None, default: float) -> float:
 
 def _vision_timeout_seconds(default: float = DEFAULT_VISION_TIMEOUT_SECONDS) -> float:
     return _safe_positive_timeout(
-        os.getenv("VISION_AI_TIMEOUT_SECONDS")
-        or os.getenv("PDF_VISUAL_OPENAI_TIMEOUT_SECONDS")
-        or os.getenv("PDF_VISUAL_PAGE_TIMEOUT_SECONDS"),
+        _config_value("vision_ai_timeout_seconds", "VISION_AI_TIMEOUT_SECONDS")
+        or _config_value(
+            "pdf_visual_openai_timeout_seconds",
+            "PDF_VISUAL_OPENAI_TIMEOUT_SECONDS",
+        )
+        or _config_value(
+            "pdf_visual_page_timeout_seconds",
+            "PDF_VISUAL_PAGE_TIMEOUT_SECONDS",
+        ),
         default,
     )
 
 
 def _vision_provider_timeout_seconds(default: float = DEFAULT_VISION_TIMEOUT_SECONDS) -> float:
     return _safe_positive_timeout(
-        os.getenv("VISION_AI_PROVIDER_TIMEOUT_SECONDS")
-        or os.getenv("PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS"),
+        _config_value(
+            "vision_ai_provider_timeout_seconds",
+            "VISION_AI_PROVIDER_TIMEOUT_SECONDS",
+        )
+        or _config_value(
+            "pdf_visual_provider_timeout_seconds",
+            "PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS",
+        ),
         default,
     )
+
+
+def _vision_soft_timeout_seconds(default: float = DEFAULT_VISION_SOFT_TIMEOUT_SECONDS) -> float:
+    raw = _config_value(
+        "vision_ai_soft_timeout_seconds",
+        "VISION_AI_SOFT_TIMEOUT_SECONDS",
+    )
+    if raw is None:
+        derived = min(12.0, max(8.0, _vision_provider_timeout_seconds() * 0.06))
+        return derived
+    return _safe_positive_timeout(raw, default)
+
+
+def _vision_provider_cache_ttl_seconds(default: float = DEFAULT_VISION_PROVIDER_CACHE_TTL_SECONDS) -> float:
+    return _safe_positive_timeout(
+        _config_value(
+            "vision_ai_provider_cache_ttl_seconds",
+            "VISION_AI_PROVIDER_CACHE_TTL_SECONDS",
+        ),
+        default,
+    )
+
+
+def _first_config_value(
+    *pairs: tuple[str, str | None],
+    default: str | None = None,
+) -> str | None:
+    for key, env_key in pairs:
+        value = _config_value(key, env_key)
+        if str(value or "").strip():
+            return str(value).strip()
+    return default
+
+
+def _normalize_openai_base_url(
+    *,
+    base_url: str | None = None,
+    chat_completions_url: str | None = None,
+    default_base_url: str | None = None,
+) -> str:
+    candidate = str(chat_completions_url or base_url or default_base_url or "").strip()
+    if not candidate:
+        return ""
+    normalized = candidate.rstrip("/")
+    if normalized.lower().endswith("/chat/completions"):
+        normalized = normalized[: -len("/chat/completions")]
+    if normalized.lower().endswith("/responses"):
+        normalized = normalized[: -len("/responses")]
+    return normalized.rstrip("/")
+
+
+def _normalize_path(path: str | None, default: str) -> str:
+    value = str(path or "").strip()
+    if not value:
+        return default
+    normalized = value if value.startswith("/") else f"/{value}"
+    return normalized.rstrip("/") or default
+
+
+def _mask_secret(secret: str | None) -> str | None:
+    value = str(secret or "").strip()
+    if not value:
+        return None
+    if len(value) <= 8:
+        return "***"
+    return f"{value[:4]}***{value[-4:]}"
+
+
+def _vision_provider_error_type(message: str | None, raw_type: str | None = None) -> str:
+    lowered = str(message or "").lower()
+    if "response_parse_failed" in lowered:
+        return "response_parse_failed"
+    if raw_type == "TimeoutError" or "timeout" in lowered or "timed out" in lowered:
+        return "timeout"
+    if (
+        "429" in lowered
+        or "quota" in lowered
+        or "rate limit" in lowered
+        or "too many requests" in lowered
+    ):
+        return "quota_exhausted"
+    if (
+        "401" in lowered
+        or "403" in lowered
+        or "unauthorized" in lowered
+        or "forbidden" in lowered
+        or "authentication" in lowered
+        or "invalid api key" in lowered
+        or "permission" in lowered
+    ):
+        return "auth_error"
+    if (
+        "modelnotopen" in lowered
+        or "not activated the model" in lowered
+        or "activate the model service" in lowered
+        or "model service" in lowered and "not open" in lowered
+    ):
+        return "model_not_open"
+    if (
+        "model_not_found" in lowered
+        or "model not found" in lowered
+        or "endpoint not found" in lowered
+        or "does not exist" in lowered
+    ):
+        return "model_not_found"
+    if (
+        "modality" in lowered
+        or "image input is not supported" in lowered
+        or "image_url" in lowered and "unsupported" in lowered
+        or "vision" in lowered and "not support" in lowered
+    ):
+        return "modality_not_supported"
+    if "400" in lowered or "bad request" in lowered or "invalid_request_error" in lowered:
+        return "bad_request"
+    if any(code in lowered for code in ["500", "502", "503", "504", "server error", "upstream"]):
+        return "server_error"
+    if raw_type == "missing_api_key":
+        return "auth_missing"
+    if raw_type == "model_missing":
+        return "model_missing"
+    if raw_type == "base_url_missing":
+        return "base_url_missing"
+    return "unknown_error"
+
+
+def _resolve_qwen_vl_config() -> dict[str, Any]:
+    api_key = _first_config_value(("dashscope_api_key", "DASHSCOPE_API_KEY"))
+    base_url = _normalize_openai_base_url(
+        base_url=_first_config_value(
+            ("dashscope_base_url", "DASHSCOPE_BASE_URL"),
+            default=DEFAULT_DASHSCOPE_BASE_URL,
+        ),
+        chat_completions_url=_first_config_value(
+            ("dashscope_chat_completions_url", "DASHSCOPE_CHAT_COMPLETIONS_URL"),
+        ),
+        default_base_url=DEFAULT_DASHSCOPE_BASE_URL,
+    )
+    model = _first_config_value(
+        ("visual_model", "AI_VISUAL_MODEL"),
+        default=DEFAULT_QWEN_VISION_MODEL,
+    )
+    missing: list[str] = []
+    if not api_key:
+        missing.append("missing_api_key")
+    if not base_url:
+        missing.append("base_url_missing")
+    if not model:
+        missing.append("model_missing")
+    return {
+        "provider": "qwen_vl",
+        "api_key": api_key,
+        "key_masked": _mask_secret(api_key),
+        "base_url": base_url,
+        "model": model or DEFAULT_QWEN_VISION_MODEL,
+        "default_headers": None,
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "supports_chat_completions": True,
+        "configured": not missing,
+        "missing": missing,
+    }
+
+
+def _resolve_mimo_vl_config() -> dict[str, Any]:
+    api_key = _first_config_value(("mimo_api_key", "MIMO_API_KEY"))
+    base_url = _normalize_openai_base_url(
+        base_url=_first_config_value(
+            ("mimo_base_url", "MIMO_BASE_URL"),
+            default=DEFAULT_MIMO_BASE_URL,
+        ),
+        chat_completions_url=_first_config_value(
+            ("mimo_chat_completions_url", "MIMO_CHAT_COMPLETIONS_URL"),
+        ),
+        default_base_url=DEFAULT_MIMO_BASE_URL,
+    )
+    model = (
+        _first_config_value(("mimo_vision_model", "MIMO_VISION_MODEL"))
+        or _first_config_value(("mimo_model", "MIMO_MODEL"))
+        or DEFAULT_MIMO_VISION_MODEL
+    )
+    missing: list[str] = []
+    if not api_key:
+        missing.append("missing_api_key")
+    if not base_url:
+        missing.append("base_url_missing")
+    if not model:
+        missing.append("model_missing")
+    return {
+        "provider": "mimo_vl",
+        "api_key": api_key,
+        "key_masked": _mask_secret(api_key),
+        "base_url": base_url,
+        "model": model or DEFAULT_MIMO_VISION_MODEL,
+        "default_headers": {"api-key": api_key} if api_key else None,
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "supports_chat_completions": True,
+        "configured": not missing,
+        "missing": missing,
+    }
+
+
+def _resolve_ark_vl_config() -> dict[str, Any]:
+    api_key = _first_config_value(
+        ("ark_api_key", "ARK_API_KEY"),
+        ("volcengine_ark_api_key", "VOLCENGINE_ARK_API_KEY"),
+        ("volc_ark_api_key", "VOLC_ARK_API_KEY"),
+    )
+    base_url = _normalize_openai_base_url(
+        base_url=_first_config_value(
+            ("ark_base_url", "ARK_BASE_URL"),
+            ("volcengine_ark_base_url", "VOLCENGINE_ARK_BASE_URL"),
+        ),
+        chat_completions_url=_first_config_value(
+            ("ark_chat_completions_url", "ARK_CHAT_COMPLETIONS_URL"),
+            ("volcengine_ark_chat_completions_url", "VOLCENGINE_ARK_CHAT_COMPLETIONS_URL"),
+        ),
+        default_base_url=DEFAULT_ARK_BASE_URL,
+    )
+    api_mode = (
+        _first_config_value(
+            ("ark_api_mode", "ARK_API_MODE"),
+            ("volcengine_ark_api_mode", "VOLCENGINE_ARK_API_MODE"),
+            default="responses",
+        )
+        or "responses"
+    ).strip().lower()
+    responses_path = _normalize_path(
+        _first_config_value(
+            ("ark_responses_path", "ARK_RESPONSES_PATH"),
+            ("volcengine_ark_responses_path", "VOLCENGINE_ARK_RESPONSES_PATH"),
+            default=DEFAULT_ARK_RESPONSES_PATH,
+        ),
+        DEFAULT_ARK_RESPONSES_PATH,
+    )
+    candidate_pairs = [
+        ("ark_endpoint_id", "ARK_ENDPOINT_ID"),
+        ("volcengine_ark_endpoint_id", "VOLCENGINE_ARK_ENDPOINT_ID"),
+        ("ark_vision_model", "ARK_VISION_MODEL"),
+        ("volcengine_ark_vision_model", "VOLCENGINE_ARK_VISION_MODEL"),
+        ("ark_model", "ARK_MODEL"),
+        ("volcengine_ark_model", "VOLCENGINE_ARK_MODEL"),
+    ]
+    candidate_models: list[dict[str, str]] = []
+    seen_models: set[str] = set()
+    for key, env_key in candidate_pairs:
+        value = str(_config_value(key, env_key) or "").strip()
+        if not value or value in seen_models:
+            continue
+        candidate_models.append(
+            {
+                "model": value,
+                "type": "endpoint_id" if "endpoint_id" in key else "model_name",
+                "source": env_key or key,
+            }
+        )
+        seen_models.add(value)
+    if DEFAULT_ARK_VISION_MODEL not in seen_models:
+        candidate_models.append(
+            {
+                "model": DEFAULT_ARK_VISION_MODEL,
+                "type": "model_name",
+                "source": "DEFAULT_ARK_VISION_MODEL",
+            }
+        )
+    model = candidate_models[0]["model"] if candidate_models else None
+    missing: list[str] = []
+    if not api_key:
+        missing.append("missing_api_key")
+    if not base_url:
+        missing.append("base_url_missing")
+    if not candidate_models:
+        missing.append("model_missing")
+    return {
+        "provider": "volcengine_ark_vl",
+        "api_key": api_key,
+        "key_masked": _mask_secret(api_key),
+        "base_url": base_url,
+        "model": model,
+        "model_candidates": candidate_models,
+        "successful_model": None,
+        "api_mode": api_mode,
+        "endpoint": responses_path,
+        "default_headers": None,
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "supports_chat_completions": False,
+        "supports_responses": api_mode == "responses",
+        "configured": not missing,
+        "missing": missing,
+    }
+
+
+def resolve_vision_provider_config(provider: str) -> dict[str, Any]:
+    if provider == "qwen_vl":
+        return _resolve_qwen_vl_config()
+    if provider == "mimo_vl":
+        return _resolve_mimo_vl_config()
+    if provider == "volcengine_ark_vl":
+        return _resolve_ark_vl_config()
+    raise KeyError(f"unknown vision provider: {provider}")
+
+
+def vision_provider_configs() -> dict[str, dict[str, Any]]:
+    return {
+        provider: resolve_vision_provider_config(provider)
+        for provider in VISION_PROVIDER_IDS
+    }
+
+
+def vision_provider_order() -> list[str]:
+    raw = (
+        _first_config_value(("vision_ai_provider_order", "VISION_AI_PROVIDER_ORDER"))
+        or _first_config_value(("pdf_visual_provider_order", "PDF_VISUAL_PROVIDER_ORDER"))
+    )
+    if raw:
+        ordered = [
+            item.strip()
+            for item in str(raw).split(",")
+            if item.strip() in VISION_PROVIDER_IDS
+        ]
+        if ordered:
+            return list(dict.fromkeys(ordered))
+    return list(VISION_PROVIDER_IDS)
+
+
+def configured_vision_provider_order() -> list[str]:
+    configs = vision_provider_configs()
+    return [
+        provider
+        for provider in ranked_vision_provider_order()
+        if configs.get(provider, {}).get("configured")
+    ]
+
+
+def ranked_vision_provider_order() -> list[str]:
+    requested = vision_provider_order()
+    preferred = [provider for provider in PREFERRED_VISION_PROVIDER_ORDER if provider in requested]
+    remainder = [provider for provider in requested if provider not in preferred]
+    return preferred + remainder
+
+
+def reset_vision_runtime_state() -> None:
+    with _VISION_PROVIDER_RUNTIME_LOCK:
+        for provider in VISION_PROVIDER_IDS:
+            state = _VISION_PROVIDER_STATE.setdefault(
+                provider,
+                {
+                    "cooldown_until": 0.0,
+                    "last_error_type": None,
+                    "consecutive_timeouts": 0,
+                    "config_signature": None,
+                },
+            )
+            state["cooldown_until"] = 0.0
+            state["last_error_type"] = None
+            state["consecutive_timeouts"] = 0
+            state["config_signature"] = None
+        _VISION_PROVIDER_CACHE.clear()
+
+
+def _provider_config_signature(provider_config: dict[str, Any]) -> str:
+    payload = {
+        "provider": provider_config.get("provider"),
+        "base_url": provider_config.get("base_url"),
+        "model": provider_config.get("model"),
+        "model_candidates": provider_config.get("model_candidates"),
+        "api_mode": provider_config.get("api_mode"),
+        "endpoint": provider_config.get("endpoint"),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _refresh_provider_runtime_state(configs: dict[str, dict[str, Any]]) -> None:
+    with _VISION_PROVIDER_RUNTIME_LOCK:
+        for provider, provider_config in configs.items():
+            state = _VISION_PROVIDER_STATE.setdefault(
+                provider,
+                {
+                    "cooldown_until": 0.0,
+                    "last_error_type": None,
+                    "consecutive_timeouts": 0,
+                    "config_signature": None,
+                },
+            )
+            signature = _provider_config_signature(provider_config)
+            if state.get("config_signature") != signature:
+                state["cooldown_until"] = 0.0
+                state["last_error_type"] = None
+                state["consecutive_timeouts"] = 0
+                state["config_signature"] = signature
+
+
+def _provider_in_cooldown(provider: str) -> bool:
+    with _VISION_PROVIDER_RUNTIME_LOCK:
+        state = _VISION_PROVIDER_STATE.setdefault(provider, {})
+        return float(state.get("cooldown_until") or 0.0) > time.time()
+
+
+def _provider_cooldown_attempt(
+    *,
+    provider_config: dict[str, Any],
+    timeout_seconds: float,
+    fallback_from: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "provider": provider_config["provider"],
+        "model": provider_config.get("model") or "",
+        "timeout_seconds": timeout_seconds,
+        "elapsed_ms": 0,
+        "status": "failed",
+        "error_type": "cooldown_active",
+        "error_message": f"{provider_config['provider']} cooldown_active",
+        "fallback_from": fallback_from,
+    }
+
+
+def _provider_cache_key(provider: str, provider_config: dict[str, Any], page_b64: str) -> str:
+    input_sha = hashlib.sha256(page_b64.encode("utf-8")).hexdigest()
+    prompt_sha = hashlib.sha256(PAGE_PARSE_PROMPT.encode("utf-8")).hexdigest()
+    model_key = provider_config.get("model") or provider_config.get("model_candidates") or ""
+    payload = {
+        "provider": provider,
+        "model": model_key,
+        "input_sha": input_sha,
+        "prompt_sha": prompt_sha,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _provider_cache_get(provider: str, provider_config: dict[str, Any], page_b64: str) -> dict[str, Any] | None:
+    key = _provider_cache_key(provider, provider_config, page_b64)
+    with _VISION_PROVIDER_RUNTIME_LOCK:
+        entry = _VISION_PROVIDER_CACHE.get(key)
+        if not entry:
+            return None
+        if float(entry.get("expires_at") or 0.0) <= time.time():
+            _VISION_PROVIDER_CACHE.pop(key, None)
+            return None
+        value = entry.get("result")
+    return json.loads(json.dumps(value)) if isinstance(value, dict) else None
+
+
+def _provider_cache_put(provider: str, provider_config: dict[str, Any], page_b64: str, result: dict[str, Any]) -> None:
+    key = _provider_cache_key(provider, provider_config, page_b64)
+    with _VISION_PROVIDER_RUNTIME_LOCK:
+        _VISION_PROVIDER_CACHE[key] = {
+            "expires_at": time.time() + _vision_provider_cache_ttl_seconds(),
+            "result": json.loads(json.dumps(result)),
+        }
+
+
+def _record_provider_outcome(provider: str, attempt: dict[str, Any]) -> None:
+    error_type = str(attempt.get("error_type") or "").strip()
+    status = str(attempt.get("status") or "").strip().lower()
+    with _VISION_PROVIDER_RUNTIME_LOCK:
+        state = _VISION_PROVIDER_STATE.setdefault(
+            provider,
+            {
+                "cooldown_until": 0.0,
+                "last_error_type": None,
+                "consecutive_timeouts": 0,
+                "config_signature": None,
+            },
+        )
+        if status == "ok":
+            state["last_error_type"] = None
+            state["consecutive_timeouts"] = 0
+            if provider != "volcengine_ark_vl":
+                state["cooldown_until"] = 0.0
+            return
+        state["last_error_type"] = error_type or None
+        if error_type == "timeout":
+            state["consecutive_timeouts"] = int(state.get("consecutive_timeouts") or 0) + 1
+            if provider == "qwen_vl" and state["consecutive_timeouts"] >= 3:
+                state["cooldown_until"] = time.time() + 600.0
+        else:
+            state["consecutive_timeouts"] = 0
+        if provider == "mimo_vl" and error_type == "quota_exhausted":
+            state["cooldown_until"] = time.time() + 3600.0
+        elif provider == "volcengine_ark_vl" and error_type in {"auth_error", "model_not_open"}:
+            state["cooldown_until"] = time.time() + 86400.0
+        elif provider == "volcengine_ark_vl" and error_type == "quota_exhausted":
+            state["cooldown_until"] = time.time() + 1800.0
+
+
+def _dashscope_sdk_fallback_enabled() -> bool:
+    raw = (os.getenv("VISION_AI_ENABLE_DASHSCOPE_SDK_FALLBACK") or "").strip().lower()
+    if not raw:
+        return True
+    return raw not in {"0", "false", "no", "off"}
+
+
+def dashscope_sdk_page_fallback_enabled(base_url: str | None = None) -> bool:
+    if not _dashscope_sdk_fallback_enabled():
+        return False
+    resolved = base_url
+    if resolved is None:
+        resolved = _config_value(
+            "dashscope_base_url",
+            "DASHSCOPE_BASE_URL",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        )
+    normalized = str(resolved or "").strip().lower()
+    if not normalized:
+        return True
+    return "dashscope.aliyuncs.com/compatible-mode" not in normalized
 
 
 def _call_with_timeout(callable_obj: Any, timeout_seconds: float) -> Any:
@@ -436,6 +994,167 @@ def _vision_call_messages(prompt: str, page_b64: str) -> list[dict[str, Any]]:
     ]
 
 
+def _data_url_for_page_b64(page_b64: str, mime_type: str = "image/png") -> str:
+    return f"data:{mime_type};base64,{page_b64}"
+
+
+def _ark_responses_input(prompt: str, image_url: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_image",
+                    "image_url": image_url,
+                },
+                {
+                    "type": "input_text",
+                    "text": prompt,
+                },
+            ],
+        }
+    ]
+
+
+def _object_get(value: Any, key: str) -> Any:
+    if isinstance(value, dict):
+        return value.get(key)
+    return getattr(value, key, None)
+
+
+def _response_to_jsonable(response: Any) -> Any:
+    if isinstance(response, (dict, list, str, int, float, bool)) or response is None:
+        return response
+    for method_name in ("model_dump", "to_dict", "dict"):
+        method = getattr(response, method_name, None)
+        if callable(method):
+            try:
+                return method(mode="json") if method_name == "model_dump" else method()
+            except TypeError:
+                return method()
+    return {"repr": repr(response)}
+
+
+def _response_summary(response: Any, limit: int = 400) -> dict[str, Any]:
+    jsonable = _response_to_jsonable(response)
+    text = json.dumps(jsonable, ensure_ascii=False) if not isinstance(jsonable, str) else jsonable
+    output_text = _responses_output_text(response)
+    return {
+        "output_text_preview": (output_text or "")[:limit],
+        "response_preview": text if len(text) <= limit else text[:limit] + "...",
+    }
+
+
+def _responses_output_text(response: Any) -> str | None:
+    direct_text = _object_get(response, "output_text")
+    if isinstance(direct_text, str) and direct_text.strip():
+        return direct_text.strip()
+
+    output = _object_get(response, "output") or []
+    texts: list[str] = []
+    for item in output if isinstance(output, list) else []:
+        contents = _object_get(item, "content") or []
+        for content in contents if isinstance(contents, list) else []:
+            text_value = _object_get(content, "text")
+            if isinstance(text_value, str) and text_value.strip():
+                texts.append(text_value.strip())
+                continue
+            nested_value = _object_get(text_value, "value")
+            if isinstance(nested_value, str) and nested_value.strip():
+                texts.append(nested_value.strip())
+    if texts:
+        return "\n".join(texts)
+    return None
+
+
+def _ark_responses_request(
+    *,
+    api_key: str,
+    base_url: str,
+    model: str,
+    input_payload: list[dict[str, Any]],
+    timeout: float | None = None,
+    responses_path: str = DEFAULT_ARK_RESPONSES_PATH,
+) -> Any:
+    url = f"{base_url.rstrip('/')}{_normalize_path(responses_path, DEFAULT_ARK_RESPONSES_PATH)}"
+    visual_timeout = _safe_positive_timeout(
+        os.getenv("PDF_VISUAL_OPENAI_TIMEOUT_SECONDS")
+        or os.getenv("VISION_AI_TIMEOUT_SECONDS")
+        or os.getenv("PDF_VISUAL_PAGE_TIMEOUT_SECONDS"),
+        float(timeout or DEFAULT_VISION_TIMEOUT_SECONDS),
+    )
+    try:
+        with httpx.Client(timeout=httpx.Timeout(visual_timeout), trust_env=False) as client:
+            response = client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "input": input_payload,
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as exc:
+        message = exc.response.text if exc.response is not None else str(exc)
+        raise RuntimeError(f"http_status_{exc.response.status_code if exc.response else 'unknown'}: {message}") from exc
+
+
+def _ark_responses_text(
+    *,
+    api_key: str,
+    base_url: str,
+    model: str,
+    prompt: str,
+    image_url: str,
+    timeout: float | None = None,
+    responses_path: str = DEFAULT_ARK_RESPONSES_PATH,
+) -> tuple[str, dict[str, Any]]:
+    response = _ark_responses_request(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        input_payload=_ark_responses_input(prompt, image_url),
+        timeout=timeout,
+        responses_path=responses_path,
+    )
+    output_text = _responses_output_text(response)
+    summary = _response_summary(response)
+    if not output_text:
+        raise RuntimeError(f"response_parse_failed: no output_text; {summary.get('response_preview') or 'empty_response'}")
+    return output_text, summary
+
+
+def _ark_responses_json(
+    *,
+    api_key: str,
+    base_url: str,
+    model: str,
+    prompt: str,
+    image_url: str,
+    timeout: float | None = None,
+    responses_path: str = DEFAULT_ARK_RESPONSES_PATH,
+) -> tuple[Any, dict[str, Any]]:
+    output_text, summary = _ark_responses_text(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        prompt=prompt,
+        image_url=image_url,
+        timeout=timeout,
+        responses_path=responses_path,
+    )
+    try:
+        return json.loads(_extract_json(output_text)), summary
+    except Exception as exc:
+        raise RuntimeError(
+            f"response_parse_failed: invalid_json: {exc}; output_text={output_text[:240]}"
+        ) from exc
+
+
 def _provider_failed(result: dict[str, Any]) -> bool:
     warnings = set(str(item) for item in result.get("warnings") or [])
     if warnings & {"visual_model_failed", "vision_page_timeout", "visual_schema_invalid"}:
@@ -453,8 +1172,9 @@ def _vision_attempt_payload(
     error_type: str | None = None,
     error_message: str | None = None,
     fallback_from: str | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "provider": provider,
         "model": model,
         "timeout_seconds": timeout_seconds,
@@ -464,6 +1184,9 @@ def _vision_attempt_payload(
         "error_message": error_message,
         "fallback_from": fallback_from,
     }
+    if extra:
+        payload.update(extra)
+    return payload
 
 
 def _annotate_vision_result(
@@ -527,14 +1250,15 @@ def _call_openai_vision_provider(
         return normalized, attempt
     except Exception as exc:
         record_ai_call(provider, str(exc))
+        error_message = str(exc)
         attempt = _vision_attempt_payload(
             provider=provider,
             model=model,
             timeout_seconds=timeout_seconds,
             started_at=started,
             status="failed",
-            error_type=type(exc).__name__,
-            error_message=str(exc),
+            error_type=_vision_provider_error_type(error_message, type(exc).__name__),
+            error_message=error_message,
             fallback_from=fallback_from,
         )
         return {
@@ -543,113 +1267,454 @@ def _call_openai_vision_provider(
             "questions": [],
             "visuals": [],
             "warnings": ["visual_model_failed"],
-            "error": str(exc),
-            "schema_validation": {"exception": str(exc)},
-            "raw_model_result": {"error": str(exc), "provider": provider, "model": model},
+            "error": error_message,
+            "schema_validation": {"exception": error_message},
+            "raw_model_result": {"error": error_message, "provider": provider, "model": model},
         }, attempt
+
+
+def _call_ark_vision_provider(
+    *,
+    provider: str,
+    api_key: str,
+    base_url: str,
+    model_candidates: list[dict[str, str]],
+    page_b64: str,
+    timeout_seconds: float,
+    responses_path: str,
+    fallback_from: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    started = time.perf_counter()
+    image_url = _data_url_for_page_b64(page_b64)
+    candidate_attempts: list[dict[str, Any]] = []
+    last_failure_result: dict[str, Any] | None = None
+    last_error_type: str | None = None
+    last_error_message: str | None = None
+
+    for candidate in model_candidates:
+        model = candidate.get("model") or ""
+        model_type = candidate.get("type") or "model_name"
+        if not model:
+            continue
+        record_ai_call(provider)
+        candidate_started = time.perf_counter()
+        try:
+            raw, response_summary = _call_with_timeout(
+                lambda: _ark_responses_json(
+                    api_key=api_key,
+                    base_url=base_url,
+                    model=model,
+                    prompt=PAGE_PARSE_PROMPT,
+                    image_url=image_url,
+                    timeout=timeout_seconds,
+                    responses_path=responses_path,
+                ),
+                timeout_seconds,
+            )
+            normalized = _normalize_page_visual_result(raw)
+            status = "failed" if _provider_failed(normalized) else "ok"
+            candidate_attempts.append(
+                {
+                    "model": model,
+                    "type": model_type,
+                    "status": status,
+                    "elapsed_ms": int((time.perf_counter() - candidate_started) * 1000),
+                    "error_type": "model_result_failed" if status == "failed" else None,
+                    "error_message": normalized.get("error") if status == "failed" else None,
+                    "response_summary": response_summary,
+                }
+            )
+            if status == "ok":
+                attempt = _vision_attempt_payload(
+                    provider=provider,
+                    model=model,
+                    timeout_seconds=timeout_seconds,
+                    started_at=started,
+                    status="ok",
+                    fallback_from=fallback_from,
+                    extra={
+                        "api_mode": "responses",
+                        "endpoint": responses_path,
+                        "model_type": model_type,
+                        "candidate_attempts": candidate_attempts,
+                        "response_summary": response_summary,
+                    },
+                )
+                return normalized, attempt
+            record_ai_call(provider, str(normalized.get("error") or "model_result_failed"))
+            last_failure_result = normalized
+            last_error_type = "model_result_failed"
+            last_error_message = str(normalized.get("error") or "model_result_failed")
+        except Exception as exc:
+            record_ai_call(provider, str(exc))
+            last_error_message = str(exc)
+            last_error_type = _vision_provider_error_type(last_error_message, type(exc).__name__)
+            candidate_attempts.append(
+                {
+                    "model": model,
+                    "type": model_type,
+                    "status": "failed",
+                    "elapsed_ms": int((time.perf_counter() - candidate_started) * 1000),
+                    "error_type": last_error_type,
+                    "error_message": last_error_message,
+                }
+            )
+
+    final_model = candidate_attempts[-1]["model"] if candidate_attempts else ""
+    attempt = _vision_attempt_payload(
+        provider=provider,
+        model=final_model,
+        timeout_seconds=timeout_seconds,
+        started_at=started,
+        status="failed",
+        error_type=last_error_type or "provider_not_configured",
+        error_message=last_error_message or "volcengine_ark_vl failed",
+        fallback_from=fallback_from,
+        extra={
+            "api_mode": "responses",
+            "endpoint": responses_path,
+            "candidate_attempts": candidate_attempts,
+        },
+    )
+    if last_failure_result is not None:
+        return last_failure_result, attempt
+    return {
+        "page_type": "unknown",
+        "materials": [],
+        "questions": [],
+        "visuals": [],
+        "warnings": ["visual_model_failed"],
+        "error": last_error_message or "volcengine_ark_vl failed",
+        "schema_validation": {"exception": last_error_message or "volcengine_ark_vl failed"},
+        "raw_model_result": {
+            "error": last_error_message or "volcengine_ark_vl failed",
+            "provider": provider,
+            "model": final_model,
+            "candidate_attempts": candidate_attempts,
+        },
+    }, attempt
+
+
+def _provider_missing_attempt(
+    *,
+    provider_config: dict[str, Any],
+    timeout_seconds: float,
+    fallback_from: str | None = None,
+) -> dict[str, Any]:
+    missing = list(provider_config.get("missing") or [])
+    error_type = missing[0] if missing else "provider_not_configured"
+    message_map = {
+        "missing_api_key": f"{provider_config['provider']} API key not configured",
+        "base_url_missing": f"{provider_config['provider']} base_url not configured",
+        "model_missing": f"{provider_config['provider']} model_or_endpoint not configured",
+    }
+    return {
+        "provider": provider_config["provider"],
+        "model": provider_config.get("model") or "",
+        "timeout_seconds": timeout_seconds,
+        "elapsed_ms": 0,
+        "status": "failed",
+        "error_type": _vision_provider_error_type(message_map.get(error_type), error_type),
+        "error_message": message_map.get(error_type, f"{provider_config['provider']} not configured"),
+        "fallback_from": fallback_from,
+    }
+
+
+def _provider_attempt_failure_summary(attempts: list[dict[str, Any]]) -> str:
+    failures = []
+    for attempt in attempts:
+        if str(attempt.get("status") or "").lower() == "ok":
+            continue
+        provider = str(attempt.get("provider") or "provider")
+        message = str(attempt.get("error_message") or attempt.get("error_type") or "failed").strip()
+        failures.append(f"{provider}: {message}")
+    return "; ".join(failures)
+
+
+def _call_vision_provider_with_cache(
+    *,
+    provider: str,
+    provider_config: dict[str, Any],
+    page_b64: str,
+    timeout_seconds: float,
+    fallback_from: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    cached = _provider_cache_get(provider, provider_config, page_b64)
+    if isinstance(cached, dict):
+        model = str(
+            cached.get("_vision_model")
+            or provider_config.get("model")
+            or provider
+        )
+        attempt = _vision_attempt_payload(
+            provider=provider,
+            model=model,
+            timeout_seconds=timeout_seconds,
+            started_at=time.perf_counter(),
+            status="ok" if not _provider_failed(cached) else "failed",
+            error_type="cache_hit_failed" if _provider_failed(cached) else None,
+            error_message=cached.get("error") if _provider_failed(cached) else None,
+            fallback_from=fallback_from,
+            extra={"cache_hit": True},
+        )
+        return cached, attempt
+
+    if provider == "volcengine_ark_vl":
+        result, attempt = _call_ark_vision_provider(
+            provider=provider,
+            api_key=provider_config["api_key"],
+            base_url=provider_config["base_url"],
+            model_candidates=list(provider_config.get("model_candidates") or []),
+            page_b64=page_b64,
+            timeout_seconds=timeout_seconds,
+            responses_path=str(provider_config.get("endpoint") or DEFAULT_ARK_RESPONSES_PATH),
+            fallback_from=fallback_from,
+        )
+    else:
+        result, attempt = _call_openai_vision_provider(
+            provider=provider,
+            api_key=provider_config["api_key"],
+            base_url=provider_config["base_url"],
+            model=provider_config["model"],
+            page_b64=page_b64,
+            timeout_seconds=timeout_seconds,
+            default_headers=provider_config.get("default_headers"),
+            fallback_from=fallback_from,
+        )
+    _record_provider_outcome(provider, attempt)
+    if not _provider_failed(result):
+        _provider_cache_put(provider, provider_config, page_b64, result)
+    return result, attempt
+
+
+def _start_provider_call(
+    *,
+    provider: str,
+    provider_config: dict[str, Any],
+    page_b64: str,
+    timeout_seconds: float,
+    fallback_from: str | None = None,
+) -> tuple[threading.Thread, queue.Queue[Any]]:
+    result_queue: queue.Queue[Any] = queue.Queue(maxsize=1)
+
+    def _runner() -> None:
+        try:
+            result_queue.put(
+                _call_vision_provider_with_cache(
+                    provider=provider,
+                    provider_config=provider_config,
+                    page_b64=page_b64,
+                    timeout_seconds=timeout_seconds,
+                    fallback_from=fallback_from,
+                )
+            )
+        except BaseException as exc:  # pragma: no cover - defensive wrapper
+            result_queue.put(
+                (
+                    failed_result := {
+                        "page_type": "unknown",
+                        "materials": [],
+                        "questions": [],
+                        "visuals": [],
+                        "warnings": ["visual_model_failed"],
+                        "error": str(exc),
+                        "schema_validation": {"exception": str(exc)},
+                        "raw_model_result": {"error": str(exc)},
+                    },
+                    _vision_attempt_payload(
+                        provider=provider,
+                        model=str(provider_config.get("model") or provider),
+                        timeout_seconds=timeout_seconds,
+                        started_at=time.perf_counter(),
+                        status="failed",
+                        error_type=_vision_provider_error_type(str(exc), type(exc).__name__),
+                        error_message=str(exc),
+                        fallback_from=fallback_from,
+                    ),
+                )
+            )
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    return thread, result_queue
 
 
 def parse_page_visual(page_b64: str) -> dict[str, Any]:
     """Full-page screenshot -> structured question JSON via Qwen-VL."""
     page_timeout_seconds = _vision_timeout_seconds()
     timeout_seconds = _vision_provider_timeout_seconds(page_timeout_seconds)
-    api_key = _config_value("dashscope_api_key", "DASHSCOPE_API_KEY")
-    if not api_key:
-        return {
-            "page_type": "unknown",
-            "materials": [],
-            "questions": [],
-            "visuals": [],
-            "warnings": ["visual_api_key_missing"],
-            "error": "DASHSCOPE_API_KEY not configured",
-            "_vision_provider": "qwen_vl",
-            "_vision_model": _config_value("visual_model", "AI_VISUAL_MODEL", "qwen-vl-max"),
-            "_vision_timeout_seconds": timeout_seconds,
-            "_vision_elapsed_ms": 0,
-            "_vision_provider_attempts": [
-                {
-                    "provider": "qwen_vl",
-                    "model": _config_value("visual_model", "AI_VISUAL_MODEL", "qwen-vl-max"),
-                    "timeout_seconds": timeout_seconds,
-                    "elapsed_ms": 0,
-                    "status": "failed",
-                    "error_type": "missing_api_key",
-                    "error_message": "DASHSCOPE_API_KEY not configured",
-                    "fallback_from": None,
-                }
-            ],
-        }
-
-    base_url = _config_value(
-        "dashscope_base_url",
-        "DASHSCOPE_BASE_URL",
-        "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    )
-    model = _config_value("visual_model", "AI_VISUAL_MODEL", "qwen-vl-max")
+    soft_timeout_seconds = min(timeout_seconds, _vision_soft_timeout_seconds())
     attempts: list[dict[str, Any]] = []
+    configs = vision_provider_configs()
+    _refresh_provider_runtime_state(configs)
+    provider_order = ranked_vision_provider_order()
+    last_fallback_from: str | None = None
+    qwen_attempted = False
+    qwen_config = configs["qwen_vl"]
+    available_providers: list[str] = []
 
-    if base_url:
-        primary_result, primary_attempt = _call_openai_vision_provider(
-            provider="qwen_vl",
-            api_key=api_key,
-            base_url=base_url,
-            model=model or "qwen-vl-max",
-            page_b64=page_b64,
-            timeout_seconds=timeout_seconds,
-        )
-        attempts.append(primary_attempt)
-        if not _provider_failed(primary_result):
-            return _annotate_vision_result(
-                primary_result,
-                provider="qwen_vl",
-                model=model or "qwen-vl-max",
-                timeout_seconds=timeout_seconds,
-                elapsed_ms=primary_attempt["elapsed_ms"],
-                attempts=attempts,
+    for provider in provider_order:
+        provider_config = configs.get(provider)
+        if not provider_config:
+            continue
+        if not provider_config.get("configured"):
+            attempts.append(
+                _provider_missing_attempt(
+                    provider_config=provider_config,
+                    timeout_seconds=timeout_seconds,
+                    fallback_from=last_fallback_from,
+                )
             )
-        sdk_fallback_error = primary_result.get("error") or primary_attempt.get("error_message") or ""
-    else:
-        sdk_fallback_error = ""
-
-    mimo_api_key = _config_value("mimo_api_key", "MIMO_API_KEY")
-    mimo_base_url = _config_value(
-        "mimo_base_url",
-        "MIMO_BASE_URL",
-        "https://token-plan-cn.xiaomimimo.com/v1",
-    )
-    mimo_model = (
-        _config_value("mimo_vision_model", "MIMO_VISION_MODEL")
-        or _config_value("mimo_model", "MIMO_MODEL")
-        or "mimo-v2.5"
-    )
-    if mimo_api_key and mimo_base_url:
-        fallback_result, fallback_attempt = _call_openai_vision_provider(
-            provider="mimo_vl",
-            api_key=mimo_api_key,
-            base_url=mimo_base_url,
-            model=mimo_model,
-            page_b64=page_b64,
-            timeout_seconds=timeout_seconds,
-            default_headers={"api-key": mimo_api_key},
-            fallback_from="qwen_vl",
-        )
-        attempts.append(fallback_attempt)
-        if not _provider_failed(fallback_result):
-            return _annotate_vision_result(
-                fallback_result,
-                provider="mimo_vl",
-                model=mimo_model,
-                timeout_seconds=timeout_seconds,
-                elapsed_ms=fallback_attempt["elapsed_ms"],
-                attempts=attempts,
-                fallback_from="qwen_vl",
+            last_fallback_from = provider
+            continue
+        if _provider_in_cooldown(provider):
+            attempts.append(
+                _provider_cooldown_attempt(
+                    provider_config=provider_config,
+                    timeout_seconds=timeout_seconds,
+                    fallback_from=last_fallback_from,
+                )
             )
-        sdk_fallback_error = (
-            f"OpenAI-compatible failed: {sdk_fallback_error}; "
-            f"MiMo fallback failed: {fallback_result.get('error') or fallback_attempt.get('error_message')}"
-        )
+            last_fallback_from = provider
+            continue
+        available_providers.append(provider)
 
-    if os.getenv("VISION_AI_ENABLE_DASHSCOPE_SDK_FALLBACK", "").lower() not in {"1", "true", "yes"}:
+    if available_providers:
+        primary = available_providers[0]
+        primary_config = configs[primary]
+        backup = available_providers[1] if len(available_providers) > 1 else None
+        used_providers: set[str] = set()
+
+        if primary == "qwen_vl":
+            qwen_attempted = True
+
+        if primary == "qwen_vl" and backup == "volcengine_ark_vl":
+            primary_thread, primary_queue = _start_provider_call(
+                provider=primary,
+                provider_config=primary_config,
+                page_b64=page_b64,
+                timeout_seconds=timeout_seconds,
+                fallback_from=last_fallback_from,
+            )
+            used_providers.add(primary)
+            primary_placeholder_index: int | None = None
+            primary_result: dict[str, Any] | None = None
+            primary_attempt: dict[str, Any] | None = None
+            try:
+                primary_result, primary_attempt = primary_queue.get(timeout=soft_timeout_seconds)
+            except queue.Empty:
+                primary_placeholder_index = len(attempts)
+                attempts.append(
+                    {
+                        "provider": primary,
+                        "model": primary_config.get("model") or DEFAULT_QWEN_VISION_MODEL,
+                        "timeout_seconds": timeout_seconds,
+                        "elapsed_ms": int(soft_timeout_seconds * 1000),
+                        "status": "failed",
+                        "error_type": "soft_timeout_hedged",
+                        "error_message": f"soft timeout exceeded after {soft_timeout_seconds:.1f}s; backup launched",
+                        "fallback_from": last_fallback_from,
+                    }
+                )
+                backup_thread, backup_queue = _start_provider_call(
+                    provider=backup,
+                    provider_config=configs[backup],
+                    page_b64=page_b64,
+                    timeout_seconds=timeout_seconds,
+                    fallback_from=primary,
+                )
+                used_providers.add(backup)
+                primary_done = False
+                backup_done = False
+                backup_result: dict[str, Any] | None = None
+                backup_attempt: dict[str, Any] | None = None
+                deadline = time.perf_counter() + timeout_seconds
+                while time.perf_counter() < deadline and not (primary_done and backup_done):
+                    if not primary_done:
+                        try:
+                            primary_result, primary_attempt = primary_queue.get_nowait()
+                            primary_done = True
+                            if primary_placeholder_index is not None and primary_attempt is not None:
+                                attempts[primary_placeholder_index] = primary_attempt
+                            if primary_result is not None and primary_attempt is not None and not _provider_failed(primary_result):
+                                return _annotate_vision_result(
+                                    primary_result,
+                                    provider=primary,
+                                    model=str(primary_attempt.get("model") or primary_config["model"]),
+                                    timeout_seconds=timeout_seconds,
+                                    elapsed_ms=primary_attempt["elapsed_ms"],
+                                    attempts=attempts,
+                                    fallback_from=last_fallback_from,
+                                )
+                        except queue.Empty:
+                            pass
+                    if not backup_done:
+                        try:
+                            backup_result, backup_attempt = backup_queue.get_nowait()
+                            backup_done = True
+                            attempts.append(backup_attempt)
+                            if backup_result is not None and not _provider_failed(backup_result):
+                                return _annotate_vision_result(
+                                    backup_result,
+                                    provider=backup,
+                                    model=str(backup_attempt.get("model") or configs[backup]["model"]),
+                                    timeout_seconds=timeout_seconds,
+                                    elapsed_ms=backup_attempt["elapsed_ms"],
+                                    attempts=attempts,
+                                    fallback_from=primary,
+                                )
+                        except queue.Empty:
+                            pass
+                    time.sleep(0.01)
+                if primary_done and primary_result is not None and primary_attempt is not None and _provider_failed(primary_result):
+                    last_fallback_from = primary
+                if backup_done and backup_result is not None and backup_attempt is not None and _provider_failed(backup_result):
+                    last_fallback_from = backup
+            else:
+                attempts.append(primary_attempt)
+                if not _provider_failed(primary_result):
+                    return _annotate_vision_result(
+                        primary_result,
+                        provider=primary,
+                        model=str(primary_attempt.get("model") or primary_config["model"]),
+                        timeout_seconds=timeout_seconds,
+                        elapsed_ms=primary_attempt["elapsed_ms"],
+                        attempts=attempts,
+                        fallback_from=last_fallback_from,
+                    )
+                last_fallback_from = primary
+
+        for provider in available_providers:
+            if provider in used_providers:
+                continue
+            provider_config = configs.get(provider)
+            if not provider_config:
+                continue
+            result, attempt = _call_vision_provider_with_cache(
+                provider=provider,
+                provider_config=provider_config,
+                page_b64=page_b64,
+                timeout_seconds=timeout_seconds,
+                fallback_from=last_fallback_from,
+            )
+            attempts.append(attempt)
+            if provider == "qwen_vl":
+                qwen_attempted = True
+            if not _provider_failed(result):
+                return _annotate_vision_result(
+                    result,
+                    provider=provider,
+                    model=str(attempt.get("model") or provider_config["model"]),
+                    timeout_seconds=timeout_seconds,
+                    elapsed_ms=attempt["elapsed_ms"],
+                    attempts=attempts,
+                    fallback_from=last_fallback_from,
+                )
+            last_fallback_from = provider
+
+    provider_failure_summary = _provider_attempt_failure_summary(attempts)
+
+    if not qwen_attempted or not qwen_config.get("configured"):
         return _annotate_vision_result(
             {
                 "page_type": "unknown",
@@ -657,25 +1722,46 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                 "questions": [],
                 "visuals": [],
                 "warnings": ["visual_model_failed"],
-                "error": sdk_fallback_error or "vision providers failed",
+                "error": provider_failure_summary or "vision providers failed",
                 "schema_validation": {"provider_attempts": attempts},
-                "raw_model_result": {"error": sdk_fallback_error or "vision providers failed"},
+                "raw_model_result": {"error": provider_failure_summary or "vision providers failed"},
             },
-            provider="mimo_vl" if any(item.get("provider") == "mimo_vl" for item in attempts) else "qwen_vl",
-            model=mimo_model if any(item.get("provider") == "mimo_vl" for item in attempts) else (model or "qwen-vl-max"),
+            provider=attempts[-1]["provider"] if attempts else "qwen_vl",
+            model=attempts[-1]["model"] if attempts else qwen_config.get("model") or DEFAULT_QWEN_VISION_MODEL,
             timeout_seconds=timeout_seconds,
             elapsed_ms=sum(int(item.get("elapsed_ms") or 0) for item in attempts),
             attempts=attempts,
-            fallback_from="qwen_vl" if any(item.get("provider") == "mimo_vl" for item in attempts) else None,
+            fallback_from=attempts[-1].get("fallback_from") if attempts else None,
         )
 
-    dashscope.api_key = api_key
+    qwen_base_url = str(qwen_config.get("base_url") or "")
+    if not dashscope_sdk_page_fallback_enabled(qwen_base_url):
+        return _annotate_vision_result(
+            {
+                "page_type": "unknown",
+                "materials": [],
+                "questions": [],
+                "visuals": [],
+                "warnings": ["visual_model_failed"],
+                "error": provider_failure_summary or "vision providers failed",
+                "schema_validation": {"provider_attempts": attempts},
+                "raw_model_result": {"error": provider_failure_summary or "vision providers failed"},
+            },
+            provider=attempts[-1]["provider"] if attempts else "qwen_vl",
+            model=attempts[-1]["model"] if attempts else qwen_config.get("model") or DEFAULT_QWEN_VISION_MODEL,
+            timeout_seconds=timeout_seconds,
+            elapsed_ms=sum(int(item.get("elapsed_ms") or 0) for item in attempts),
+            attempts=attempts,
+            fallback_from=attempts[-1].get("fallback_from") if attempts else None,
+        )
+
+    dashscope.api_key = qwen_config["api_key"]
     sdk_started = time.perf_counter()
     try:
         record_ai_call("qwen_vl")
         response = _call_with_timeout(
             lambda: dashscope.MultiModalConversation.call(
-                model=model or "qwen-vl-max",
+                model=qwen_config.get("model") or DEFAULT_QWEN_VISION_MODEL,
                 messages=[
                     {
                         "role": "user",
@@ -694,7 +1780,7 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
         normalized = _normalize_page_visual_result(raw)
         sdk_attempt = _vision_attempt_payload(
             provider="dashscope_sdk",
-            model=model or "qwen-vl-max",
+            model=qwen_config.get("model") or DEFAULT_QWEN_VISION_MODEL,
             timeout_seconds=timeout_seconds,
             started_at=sdk_started,
             status="failed" if _provider_failed(normalized) else "ok",
@@ -706,7 +1792,7 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
         return _annotate_vision_result(
             normalized,
             provider="dashscope_sdk",
-            model=model or "qwen-vl-max",
+            model=qwen_config.get("model") or DEFAULT_QWEN_VISION_MODEL,
             timeout_seconds=timeout_seconds,
             elapsed_ms=sdk_attempt["elapsed_ms"],
             attempts=attempts,
@@ -715,15 +1801,15 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
     except Exception as exc:
         record_ai_call("qwen_vl", str(exc))
         message = str(exc)
-        if sdk_fallback_error:
-            message = f"OpenAI-compatible failed: {sdk_fallback_error}; DashScope SDK failed: {message}"
+        if provider_failure_summary:
+            message = f"{provider_failure_summary}; DashScope SDK failed: {message}"
         sdk_attempt = _vision_attempt_payload(
             provider="dashscope_sdk",
-            model=model or "qwen-vl-max",
+            model=qwen_config.get("model") or DEFAULT_QWEN_VISION_MODEL,
             timeout_seconds=timeout_seconds,
             started_at=sdk_started,
             status="failed",
-            error_type=type(exc).__name__,
+            error_type=_vision_provider_error_type(message, type(exc).__name__),
             error_message=str(exc),
             fallback_from="qwen_vl",
         )
@@ -740,7 +1826,7 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                 "raw_model_result": {"error": message},
             },
             provider="qwen_vl",
-            model=model or "qwen-vl-max",
+            model=qwen_config.get("model") or DEFAULT_QWEN_VISION_MODEL,
             timeout_seconds=timeout_seconds,
             elapsed_ms=sum(int(item.get("elapsed_ms") or 0) for item in attempts),
             attempts=attempts,
@@ -1079,7 +2165,7 @@ def parse_answer_anchors_visual(page_b64: str) -> list[dict[str, Any]]:
         "DASHSCOPE_BASE_URL",
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
-    model = _config_value("visual_model", "AI_VISUAL_MODEL", "qwen-vl-max")
+    model = _config_value("visual_model", "AI_VISUAL_MODEL", DEFAULT_QWEN_VISION_MODEL)
 
     if base_url:
         try:
@@ -1087,7 +2173,7 @@ def parse_answer_anchors_visual(page_b64: str) -> list[dict[str, Any]]:
             result = _chat_completion_json(
                 api_key=api_key,
                 base_url=base_url,
-                model=model or "qwen-vl-max",
+                model=model or DEFAULT_QWEN_VISION_MODEL,
                 messages=[
                     {
                         "role": "user",
@@ -1112,7 +2198,7 @@ def parse_answer_anchors_visual(page_b64: str) -> list[dict[str, Any]]:
     try:
         record_ai_call("qwen_vl")
         response = dashscope.MultiModalConversation.call(
-            model=model or "qwen-vl-max",
+            model=model or DEFAULT_QWEN_VISION_MODEL,
             messages=[
                 {
                     "role": "user",
@@ -1176,7 +2262,7 @@ def ocr_region_visual(region_b64: str, mode: str) -> dict[str, Any]:
         "DASHSCOPE_BASE_URL",
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
-    model = _config_value("visual_model", "AI_VISUAL_MODEL", "qwen-vl-max")
+    model = _config_value("visual_model", "AI_VISUAL_MODEL", DEFAULT_QWEN_VISION_MODEL)
     prompt = OCR_REGION_PROMPT.replace("{mode}", mode)
 
     if base_url:
@@ -1185,7 +2271,7 @@ def ocr_region_visual(region_b64: str, mode: str) -> dict[str, Any]:
             result = _chat_completion_json(
                 api_key=api_key,
                 base_url=base_url,
-                model=model or "qwen-vl-max",
+                model=model or DEFAULT_QWEN_VISION_MODEL,
                 messages=[
                     {
                         "role": "user",
@@ -1210,7 +2296,7 @@ def ocr_region_visual(region_b64: str, mode: str) -> dict[str, Any]:
     try:
         record_ai_call("qwen_vl")
         response = dashscope.MultiModalConversation.call(
-            model=model or "qwen-vl-max",
+            model=model or DEFAULT_QWEN_VISION_MODEL,
             messages=[
                 {
                     "role": "user",
@@ -1538,7 +2624,7 @@ def describe_visual_element(img_b64: str, question_context: str = "") -> str:
         "DASHSCOPE_BASE_URL",
         "https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
-    model = _config_value("visual_model", "AI_VISUAL_MODEL", "qwen-vl-max")
+    model = _config_value("visual_model", "AI_VISUAL_MODEL", DEFAULT_QWEN_VISION_MODEL)
     context_hint = f"这道题的题干是：{question_context[:100]}" if question_context else ""
     prompt = f"""{context_hint}
 请描述这张图表：
@@ -1552,7 +2638,7 @@ def describe_visual_element(img_b64: str, question_context: str = "") -> str:
             result = _chat_completion_json(
                 api_key=api_key,
                 base_url=base_url,
-                model=model or "qwen-vl-max",
+                model=model or DEFAULT_QWEN_VISION_MODEL,
                 messages=[
                     {
                         "role": "user",
@@ -1577,7 +2663,7 @@ def describe_visual_element(img_b64: str, question_context: str = "") -> str:
     try:
         record_ai_call("qwen_vl")
         response = dashscope.MultiModalConversation.call(
-            model="qwen-vl-max",
+            model=DEFAULT_QWEN_VISION_MODEL,
             messages=[
                 {
                     "role": "user",
