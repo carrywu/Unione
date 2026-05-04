@@ -660,7 +660,7 @@ def _resolve_ark_vl_config() -> dict[str, Any]:
             }
         )
         seen_models.add(value)
-    if not candidate_models and DEFAULT_ARK_VISION_MODEL not in seen_models:
+    if DEFAULT_ARK_VISION_MODEL not in seen_models:
         candidate_models.append(
             {
                 "model": DEFAULT_ARK_VISION_MODEL,
@@ -1728,6 +1728,7 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                 used_providers.add(backup)
                 primary_done = False
                 backup_done = False
+                late_primary_success: tuple[dict[str, Any], dict[str, Any]] | None = None
                 backup_result: dict[str, Any] | None = None
                 backup_attempt: dict[str, Any] | None = None
                 while time.perf_counter() < page_deadline and not (primary_done and backup_done):
@@ -1755,18 +1756,24 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                             if primary_placeholder_index is not None and primary_attempt is not None:
                                 attempts[primary_placeholder_index] = primary_attempt
                             if primary_result is not None and primary_attempt is not None and not _provider_failed(primary_result):
-                                return _annotate_vision_result(
-                                    primary_result,
-                                    provider=primary,
-                                    model=str(primary_attempt.get("model") or primary_config["model"]),
-                                    timeout_seconds=timeout_seconds,
-                                    elapsed_ms=primary_attempt["elapsed_ms"],
-                                    attempts=attempts,
-                                    fallback_from=last_fallback_from,
-                                )
+                                late_primary_success = (primary_result, primary_attempt)
                         except queue.Empty:
                             pass
                     time.sleep(0.01)
+                if (
+                    late_primary_success is not None
+                    and (backup_attempt is None or _provider_failed(backup_result))
+                ):
+                    primary_result, primary_attempt = late_primary_success
+                    return _annotate_vision_result(
+                        primary_result,
+                        provider=primary,
+                        model=str(primary_attempt.get("model") or primary_config["model"]),
+                        timeout_seconds=timeout_seconds,
+                        elapsed_ms=primary_attempt["elapsed_ms"],
+                        attempts=attempts,
+                        fallback_from=last_fallback_from,
+                    )
                 if primary_done and primary_result is not None and primary_attempt is not None and _provider_failed(primary_result):
                     last_fallback_from = primary
                 if backup_done and backup_result is not None and backup_attempt is not None and _provider_failed(backup_result):

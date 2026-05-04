@@ -96,6 +96,10 @@ def run_visual_api_smoke(
         if retry_failed_pages_only:
             retried_page_indexes = cache.failed_page_indexes(page_indexes)
             cache.bypass_read_page_indexes.update(retried_page_indexes)
+            cache.mark_retained_cache_hits(
+                requested_page_indexes=page_indexes,
+                retried_page_indexes=retried_page_indexes,
+            )
         window_extractor = PageWindowExtractor(extractor, page_indexes, force_visual=force_visual)
         actual_page_limit = len(page_indexes)
         _write_page_screenshots(extractor, screenshot_dir, page_indexes)
@@ -356,6 +360,31 @@ class VisualPageCache:
             if isinstance(payload, dict) and _cache_payload_failed(payload):
                 failed.append(page_index)
         return failed
+
+    def mark_retained_cache_hits(
+        self,
+        *,
+        requested_page_indexes: list[int],
+        retried_page_indexes: list[int],
+    ) -> None:
+        retried = set(retried_page_indexes)
+        for page_index in requested_page_indexes:
+            if page_index in retried:
+                continue
+            payload = _read_json(self.path_for_page(page_index), {})
+            if not isinstance(payload, dict):
+                continue
+            visual_result = payload.get("visual_result")
+            if not isinstance(visual_result, dict) or _cache_payload_failed(payload):
+                continue
+            if page_index in self.events:
+                continue
+            self.cache_hits += 1
+            self.events[page_index] = {
+                "cache_hit": True,
+                "cache_key": self.key_for_page(page_index),
+                "cache_path": str(self.path_for_page(page_index)),
+            }
 
 
 def parse_page_spec(page_spec: str | int | None, *, total_pages: int) -> list[int]:
