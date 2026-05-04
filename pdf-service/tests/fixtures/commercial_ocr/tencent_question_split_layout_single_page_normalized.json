@@ -1,0 +1,94 @@
+{
+  "provider_name": "tencent_question_split_layout",
+  "provider_version": "fixture-tencent-layout-v1",
+  "provider_status": "ok",
+  "provider_latency_ms": 12,
+  "warnings": [],
+  "response": {
+    "Response": {
+      "QuestionInfo": [
+        {
+          "Angle": 0,
+          "Height": 1800,
+          "Width": 1200,
+          "ResultList": [
+            {
+              "Index": 17,
+              "GroupType": "multiple-choice",
+              "Text": "",
+              "Coord": [
+                {
+                  "LeftTop": {"X": 120, "Y": 400},
+                  "RightTop": {"X": 1080, "Y": 400},
+                  "RightBottom": {"X": 1080, "Y": 520},
+                  "LeftBottom": {"X": 120, "Y": 520}
+                }
+              ],
+              "Figure": [],
+              "Table": []
+            },
+            {
+              "Index": 18,
+              "GroupType": "multiple-choice",
+              "Text": "",
+              "Coord": [
+                {
+                  "LeftTop": {"X": 120, "Y": 610},
+                  "RightTop": {"X": 1080, "Y": 610},
+                  "RightBottom": {"X": 1080, "Y": 730},
+                  "LeftBottom": {"X": 120, "Y": 730}
+                }
+              ],
+              "Figure": [],
+              "Table": []
+            }
+          ]
+        }
+      ],
+      "RequestId": "fixture-layout-request-id"
+    }
+  },
+  "page_results": [
+    {
+      "page_no": 1,
+      "raw": {
+        "request_id": "fixture-layout-request-id",
+        "question_info_count": 1,
+        "layout_only": true
+      },
+      "warnings": [],
+      "figures": [],
+      "tables": [],
+      "blocks": [
+        {
+          "block_id": "tencent-layout-1-q17",
+          "provider_ref": "tencent_question_split_layout:question:17",
+          "page_no": 1,
+          "text": "",
+          "bbox": [120, 400, 1080, 520],
+          "block_type": "bbox_only",
+          "confidence": null,
+          "reading_order": 1,
+          "warnings": ["confidence_missing", "layout_only_block"],
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "tencent-layout-1-q18",
+          "provider_ref": "tencent_question_split_layout:question:18",
+          "page_no": 1,
+          "text": "",
+          "bbox": [120, 610, 1080, 730],
+          "block_type": "bbox_only",
+          "confidence": null,
+          "reading_order": 2,
+          "warnings": ["confidence_missing", "layout_only_block"],
+          "raw": {
+            "question_ref": "18"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "timeout": {
+    "provider_status": "error",
+    "provider_error": {
+      "code": "timeout",
+      "message": "provider timed out after 60000ms"
+    },
+    "warnings": ["provider_timeout"]
+  },
+  "auth_error": {
+    "provider_status": "error",
+    "provider_error": {
+      "code": "auth_error",
+      "message": "signature verification failed"
+    },
+    "warnings": ["provider_auth_error"]
+  },
+  "malformed_response": {
+    "provider_status": "error",
+    "provider_error": {
+      "code": "malformed_response",
+      "message": "missing Response.QuestionInfo"
+    },
+    "warnings": ["provider_malformed_response"]
+  },
+  "empty_question_result": {
+    "provider_status": "partial",
+    "provider_error": {
+      "code": "empty_question_result",
+      "message": "provider returned zero ResultList entries"
+    },
+    "warnings": ["provider_empty_question_result"]
+  }
+}

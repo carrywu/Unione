@@ -1,0 +1,255 @@
+{
+  "blocks": [
+    {
+      "block_id": "fixture-header-1",
+      "provider_ref": "fixture:page:1",
+      "page_no": 1,
+      "text": "2025 行测模拟卷",
+      "bbox": [40, 20, 300, 50],
+      "block_type": "header",
+      "confidence": 0.99,
+      "reading_order": 1
+    },
+    {
+      "block_id": "fixture-title-1",
+      "provider_ref": "fixture:page:1",
+      "page_no": 1,
+      "text": "资料分析",
+      "bbox": [60, 60, 220, 95],
+      "block_type": "title",
+      "confidence": 0.99,
+      "reading_order": 2
+    },
+    {
+      "block_id": "fixture-material-1",
+      "provider_ref": "fixture:material:17-20",
+      "page_no": 1,
+      "text": "根据以下资料，回答17-20题",
+      "bbox": [60, 110, 460, 145],
+      "block_type": "material_intro",
+      "confidence": 0.99,
+      "reading_order": 3
+    },
+    {
+      "block_id": "fixture-chart-1",
+      "provider_ref": "fixture:material:17-20",
+      "page_no": 1,
+      "text": "2024年主要城市数字经济规模",
+      "bbox": [80, 150, 720, 340],
+      "block_type": "chart",
+      "confidence": 0.96,
+      "reading_order": 4
+    },
+    {
+      "block_id": "fixture-table-1",
+      "provider_ref": "fixture:material:17-20",
+      "page_no": 1,
+      "text": "城市 规模 同比",
+      "bbox": [740, 150, 1320, 340],
+      "block_type": "table",
+      "confidence": 0.95,
+      "reading_order": 5
+    },
+    {
+      "block_id": "fixture-q17-no",
+      "provider_ref": "fixture:question:17",
+      "page_no": 1,
+      "text": "17",
+      "bbox": [60, 380, 100, 420],
+      "block_type": "question_no",
+      "confidence": 0.99,
+      "reading_order": 6
+    },
+    {
+      "block_id": "fixture-q17-stem",
+      "provider_ref": "fixture:question:17",
+      "page_no": 1,
+      "text": "17. 2024年甲市数字经济规模同比增长约为多少？",
+      "bbox": [110, 380, 1240, 440],
+      "block_type": "stem",
+      "confidence": 0.98,
+      "reading_order": 7
+    },
+    {
+      "block_id": "fixture-q17-option-a",
+      "provider_ref": "fixture:question:17",
+      "page_no": 1,
+      "text": "A. 8%",
+      "bbox": [130, 445, 260, 480],
+      "block_type": "option",
+      "confidence": 0.97,
+      "reading_order": 8,
+      "parent_block_id": "fixture-q17-stem"
+    },
+    {
+      "block_id": "fixture-q17-option-b",
+      "provider_ref": "fixture:question:17",
+      "page_no": 1,
+      "text": "B. 10%",
+      "bbox": [290, 445, 430, 480],
+      "block_type": "option",
+      "confidence": 0.97,
+      "reading_order": 9,
+      "parent_block_id": "fixture-q17-stem"
+    },
+    {
+      "block_id": "fixture-q17-answer",
+      "provider_ref": "fixture:question:17",
+      "page_no": 1,
+      "text": "B",
+      "bbox": [60, 380, 1240, 440],
+      "block_type": "answer",
+      "confidence": 0.95,
+      "reading_order": 10,
+      "parent_block_id": "fixture-q17-stem"
+    },
+    {
+      "block_id": "fixture-q17-analysis",
+      "provider_ref": "fixture:question:17",
+      "page_no": 1,
+      "text": "由材料可知，甲市同比增速约为10%。",
+      "bbox": [130, 485, 860, 535],
+      "block_type": "analysis",
+      "confidence": 0.93,
+      "reading_order": 11,
+      "parent_block_id": "fixture-q17-stem"
+    },
+    {
+      "block_id": "fixture-q18-no",
+      "provider_ref": "fixture:question:18",
+      "page_no": 1,
+      "text": "18",
+      "bbox": [60, 560, 100, 600],
+      "block_type": "question_no",
+      "confidence": 0.99,
+      "reading_order": 12
+    },
+    {
+      "block_id": "fixture-q18-stem",
+      "provider_ref": "fixture:question:18",
+      "page_no": 1,
+      "text": "18. 甲市规模占四市总规模的比重最接近以下哪项？",
+      "bbox": [110, 560, 1260, 620],
+      "block_type": "stem",
+      "confidence": 0.98,
+      "reading_order": 13
+    },
+    {
+      "block_id": "fixture-q18-option-a",
+      "provider_ref": "fixture:question:18",
+      "page_no": 1,
+      "text": "A. 18%",
+      "bbox": [130, 625, 260, 660],
+      "block_type": "option",
+      "confidence": 0.97,
+      "reading_order": 14,
+      "parent_block_id": "fixture-q18-stem"
+    },
+    {
+      "block_id": "fixture-q18-answer",
+      "provider_ref": "fixture:question:18",
+      "page_no": 1,
+      "text": "A",
+      "bbox": [110, 560, 1260, 620],
+      "block_type": "answer",
+      "confidence": 0.95,
+      "reading_order": 15,
+      "parent_block_id": "fixture-q18-stem"
+    },
+    {
+      "block_id": "fixture-q18-analysis",
+      "provider_ref": "fixture:question:18",
+      "page_no": 1,
+      "text": "甲市占比约为18%。",
+      "bbox": [130, 665, 760, 710],
+      "block_type": "analysis",
+      "confidence": 0.92,
+      "reading_order": 16,
+      "parent_block_id": "fixture-q18-stem"
+    },
+    {
+      "block_id": "fixture-q19-no",
+      "provider_ref": "fixture:question:19",
+      "page_no": 1,
+      "text": "19",
+      "bbox": [60, 735, 100, 775],
+      "block_type": "question_no",
+      "confidence": 0.99,
+      "reading_order": 17
+    },
+    {
+      "block_id": "fixture-q19-stem",
+      "provider_ref": "fixture:question:19",
+      "page_no": 1,
+      "text": "19. 四市中同比增速最高的是哪一市？",
+      "bbox": [110, 735, 1120, 795],
+      "block_type": "stem",
+      "confidence": 0.98,
+      "reading_order": 18
+    },
+    {
+      "block_id": "fixture-q19-option-a",
+      "provider_ref": "fixture:question:19",
+      "page_no": 1,
+      "text": "A. 甲市",
+      "bbox": [130, 800, 280, 835],
+      "block_type": "option",
+      "confidence": 0.97,
+      "reading_order": 19,
+      "parent_block_id": "fixture-q19-stem"
+    },
+    {
+      "block_id": "fixture-q19-answer",
+      "provider_ref": "fixture:question:19",
+      "page_no": 1,
+      "text": "D",
+      "bbox": [110, 735, 1120, 795],
+      "block_type": "answer",
+      "confidence": 0.95,
+      "reading_order": 20,
+      "parent_block_id": "fixture-q19-stem"
+    },
+    {
+      "block_id": "fixture-q19-analysis",
+      "provider_ref": "fixture:question:19",
+      "page_no": 1,
+      "text": "unknown",
+      "bbox": [130, 840, 560, 885],
+      "block_type": "analysis",
+      "confidence": 0.91,
+      "reading_order": 21,
+      "parent_block_id": "fixture-q19-stem"
+    },
+    {
+      "block_id": "fixture-q20-no",
+      "provider_ref": "fixture:question:20",
+      "page_no": 1,
+      "text": "20",
+      "bbox": [60, 910, 100, 950],
+      "block_type": "question_no",
+      "confidence": 0.99,
+      "reading_order": 22
+    },
+    {
+      "block_id": "fixture-q20-stem",
+      "provider_ref": "fixture:question:20",
+      "page_no": 1,
+      "text": "20. 若按同比增速排序，乙市位列第几？",
+      "bbox": [110, 910, 1110, 970],
+      "block_type": "stem",
+      "confidence": 0.98,
+      "reading_order": 23
+    },
+    {
+      "block_id": "fixture-q20-option-a",
+      "provider_ref": "fixture:question:20",
+      "page_no": 1,
+      "text": "A. 第1",
+      "bbox": [130, 975, 260, 1010],
+      "block_type": "option",
+      "confidence": 0.97,
+      "reading_order": 24,
+      "parent_block_id": "fixture-q20-stem"
+    }
+  ]
+}

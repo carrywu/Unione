@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
@@ -11,19 +10,16 @@ from typing import Any
 
 import httpx
 
-from commercial_ocr.types import (
-    NormalizedOCRBlock,
-    ProviderOCRRequest,
-    ProviderOCRResult,
-    ProviderPageResult,
-)
+from commercial_ocr.fixtures import provider_result_from_fixture
+from commercial_ocr.normalizer import normalize_baidu_page_result
+from commercial_ocr.types import NormalizedOCRBlock, ProviderOCRRequest, ProviderOCRResult, ProviderPageResult
 
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_BAIDU_ENDPOINT = "https://aip.baidubce.com/rest/2.0/ocr/v1/paper_cut_edu"
 DEFAULT_BAIDU_TOKEN_ENDPOINT = "https://aip.baidubce.com/oauth/2.0/token"
-DEFAULT_BAIDU_TIMEOUT_MS = 30000
+DEFAULT_BAIDU_TIMEOUT_MS = 60000
 
 
 class CommercialOCRProvider(ABC):
@@ -39,74 +35,78 @@ class CommercialOCRProvider(ABC):
         raise NotImplementedError
 
 
-class MockCommercialOCRProvider(CommercialOCRProvider):
-    provider_name = "mock_commercial_ocr"
-    provider_version = "mock-v1"
+class FixtureBackedMockProvider(CommercialOCRProvider):
+    fixture_name = ""
+
+    def __init__(
+        self,
+        *,
+        provider_name: str | None = None,
+        provider_version: str | None = None,
+        fixture_name: str | None = None,
+        provider_status: str | None = None,
+        provider_error: dict[str, Any] | None = None,
+        provider_latency_ms: int | None = None,
+    ) -> None:
+        if provider_name is not None:
+            self.provider_name = provider_name
+        if provider_version is not None:
+            self.provider_version = provider_version
+        if fixture_name is not None:
+            self.fixture_name = fixture_name
+        self._provider_status = provider_status
+        self._provider_error = provider_error
+        self._provider_latency_ms = provider_latency_ms
 
     def is_available(self) -> tuple[bool, list[str]]:
         return True, []
 
     def analyze_document(self, request: ProviderOCRRequest) -> ProviderOCRResult:
         started = time.perf_counter()
-        page_results: list[ProviderPageResult] = []
-        for page_no in request.page_numbers:
-            text = str(request.extractor.get_page_text(page_no - 1) or "").strip()
-            lines = [line.strip() for line in text.splitlines() if line.strip()]
-            if not lines:
-                lines = [f"Mock OCR page {page_no}"]
-            blocks = [
-                NormalizedOCRBlock(
-                    block_id=f"mock-{page_no}-{index}",
-                    provider_ref=f"mock:page:{page_no}",
-                    page_no=page_no,
-                    text=line,
-                    bbox=[0.0, float(index * 16), 1000.0, float(index * 16 + 12)],
-                    block_type=_guess_mock_block_type(line),
-                    confidence=0.99,
-                    reading_order=index,
-                    raw={"source": "page_text"},
-                )
-                for index, line in enumerate(lines, start=1)
-            ]
-            page_results.append(
-                ProviderPageResult(
-                    page_no=page_no,
-                    blocks=blocks,
-                    raw={"line_count": len(lines), "provider": self.provider_name},
-                )
-            )
-        return ProviderOCRResult(
-            provider_name=self.provider_name,
-            provider_version=self.provider_version,
+        status = self._provider_status or os.getenv(f"{_provider_env_prefix(self.provider_name)}_STATUS") or "ok"
+        latency_ms = self._provider_latency_ms
+        if latency_ms is None:
+            latency_ms = _positive_int(os.getenv(f"{_provider_env_prefix(self.provider_name)}_LATENCY_MS"), 8)
+        provider_error = self._provider_error or _provider_error_from_env(self.provider_name)
+        result = provider_result_from_fixture(
+            self.provider_name,
             source_document_id=request.source_document_id,
             task_id=request.task_id,
-            page_results=page_results,
-            provider_latency_ms=int((time.perf_counter() - started) * 1000),
-            provider_status="ok",
+            fixture_name=self.fixture_name,
+            provider_status=status,
+            provider_error=provider_error,
+            provider_latency_ms=latency_ms,
         )
+        if request.page_numbers:
+            result.page_results = _replicate_fixture_pages(result.page_results, request.page_numbers, self.provider_name)
+        if status != "ok":
+            result.page_results = [] if status == "error" else result.page_results
+            if result.provider_error is None:
+                result.provider_error = {
+                    "code": f"{self.provider_name}_mock_error",
+                    "message": f"mock provider {self.provider_name} forced into {status}",
+                }
+        result.provider_latency_ms = latency_ms or int((time.perf_counter() - started) * 1000)
+        result.raw_response_ref = str(Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "commercial_ocr" / self.fixture_name)
+        return result
 
 
-class TencentQuestionSplitProvider(CommercialOCRProvider):
-    provider_name = "tencent_question_split"
-    provider_version = "stub-v1"
+class MockCommercialOCRProvider(FixtureBackedMockProvider):
+    provider_name = "mock_commercial_ocr"
+    provider_version = "fixture-baidu-v1"
+    fixture_name = "baidu_paper_cut_edu_single_page_normalized.json"
 
-    def is_available(self) -> tuple[bool, list[str]]:
-        secret_id = str(os.getenv("TENCENT_SECRET_ID") or "").strip()
-        secret_key = str(os.getenv("TENCENT_SECRET_KEY") or "").strip()
-        if not secret_id or not secret_key:
-            return False, ["missing_tencent_secret_id_or_key", "provider_stub_not_implemented"]
-        return False, ["provider_stub_not_implemented"]
 
-    def analyze_document(self, request: ProviderOCRRequest) -> ProviderOCRResult:
-        return ProviderOCRResult(
-            provider_name=self.provider_name,
-            provider_version=self.provider_version,
-            source_document_id=request.source_document_id,
-            task_id=request.task_id,
-            provider_status="error",
-            provider_error={"code": "provider_stub_not_implemented", "message": "Tencent adapter is a stub in M1."},
-            warnings=["provider_stub_not_implemented"],
-        )
+class MockTencentQuestionSplitProvider(FixtureBackedMockProvider):
+    provider_name = "mock_tencent_question_split"
+    provider_version = "fixture-tencent-split-v1"
+    fixture_name = "tencent_question_split_single_page_normalized.json"
+
+
+class MockTencentQuestionSplitLayoutProvider(FixtureBackedMockProvider):
+    provider_name = "mock_tencent_question_split_layout"
+    provider_version = "fixture-tencent-layout-v1"
+    fixture_name = "tencent_question_split_layout_single_page_normalized.json"
 
 
 class BaiduPaperCutEduProvider(CommercialOCRProvider):
@@ -221,7 +221,7 @@ class BaiduPaperCutEduProvider(CommercialOCRProvider):
                     warnings=["provider_error_code_returned"],
                 )
 
-            page_result = self._normalize_page_result(page_no=page_no, response_json=response_json)
+            page_result = normalize_baidu_page_result(page_no=page_no, response_json=response_json, provider_name=self.provider_name)
             page_results.append(page_result)
             trace_payload["pages"].append(
                 {
@@ -249,6 +249,7 @@ class BaiduPaperCutEduProvider(CommercialOCRProvider):
             raw_response_ref=_write_trace_payload(request, trace_payload, suffix="success"),
             provider_latency_ms=elapsed_ms,
             provider_status="ok",
+            warnings=[warning for page in page_results for warning in page.warnings],
         )
 
     def _resolve_access_token(self) -> str | None:
@@ -283,148 +284,21 @@ class BaiduPaperCutEduProvider(CommercialOCRProvider):
             response.raise_for_status()
             return response.json()
 
-    def _normalize_page_result(self, *, page_no: int, response_json: dict[str, Any]) -> ProviderPageResult:
-        blocks: list[NormalizedOCRBlock] = []
-        figures: list[dict[str, Any]] = []
-        tables: list[dict[str, Any]] = []
-        reading_order = 1
-        for question_index, item in enumerate(response_json.get("qus_result") or [], start=1):
-            question_ref = str(item.get("question_id") or item.get("qus_id") or question_index)
-            question_bbox = _coerce_bbox(item.get("qus_location"))
-            confidence = _safe_float(item.get("qus_probability") or item.get("probability"))
-            element_items = item.get("qus_element") or []
-            if isinstance(element_items, list) and element_items:
-                for element_index, element in enumerate(element_items, start=1):
-                    normalized_blocks = self._normalize_question_element(
-                        page_no=page_no,
-                        question_ref=question_ref,
-                        element=element,
-                        fallback_bbox=question_bbox,
-                        fallback_confidence=confidence,
-                        reading_order_start=reading_order,
-                    )
-                    blocks.extend(normalized_blocks)
-                    reading_order += max(1, len(normalized_blocks))
-            else:
-                reading_order = _append_question_summary_blocks(
-                    page_no=page_no,
-                    question_ref=question_ref,
-                    item=item,
-                    blocks=blocks,
-                    fallback_bbox=question_bbox,
-                    fallback_confidence=confidence,
-                    reading_order=reading_order,
-                )
-
-            for page_figure in item.get("qus_figure") or []:
-                figure_bbox = _coerce_bbox(page_figure)
-                if not figure_bbox:
-                    continue
-                figure_block = NormalizedOCRBlock(
-                    block_id=f"baidu-{page_no}-{question_ref}-figure-{len(figures) + 1}",
-                    provider_ref=f"baidu:question:{question_ref}",
-                    page_no=page_no,
-                    text=str(item.get("figure_caption") or ""),
-                    bbox=figure_bbox,
-                    block_type="figure",
-                    confidence=confidence,
-                    reading_order=reading_order,
-                    raw={"kind": "qus_figure", "question_ref": question_ref},
-                )
-                reading_order += 1
-                blocks.append(figure_block)
-                figures.append({"bbox": figure_bbox, "question_ref": question_ref})
-
-        return ProviderPageResult(
-            page_no=page_no,
-            blocks=_sorted_blocks(blocks),
-            figures=figures,
-            tables=tables,
-            raw=response_json,
-            warnings=_warnings_from_baidu_response(response_json),
-        )
-
-    def _normalize_question_element(
-        self,
-        *,
-        page_no: int,
-        question_ref: str,
-        element: dict[str, Any],
-        fallback_bbox: list[float],
-        fallback_confidence: float | None,
-        reading_order_start: int,
-    ) -> list[NormalizedOCRBlock]:
-        block_type = _baidu_elem_type_to_block_type(element.get("type") or element.get("elem_type"))
-        words = element.get("elem_word") or element.get("words") or []
-        blocks: list[NormalizedOCRBlock] = []
-        if isinstance(words, list) and words:
-            reading_order = reading_order_start
-            for word_index, word in enumerate(words, start=1):
-                text = str(word.get("word") or word.get("text") or "").strip()
-                if not text:
-                    continue
-                blocks.append(
-                    NormalizedOCRBlock(
-                        block_id=f"baidu-{page_no}-{question_ref}-{block_type}-{word_index}",
-                        provider_ref=f"baidu:question:{question_ref}",
-                        page_no=page_no,
-                        text=text,
-                        bbox=_coerce_bbox(word.get("word_location") or word.get("location")) or list(fallback_bbox),
-                        block_type=block_type,
-                        confidence=_safe_float(element.get("elem_probability") or element.get("probability"))
-                        or fallback_confidence,
-                        reading_order=reading_order,
-                        raw={"element": element, "word": word},
-                        warnings=[] if _coerce_bbox(word.get("word_location") or word.get("location")) else ["bbox_missing"],
-                    )
-                )
-                reading_order += 1
-            return blocks
-
-        text_candidates = []
-        elem_text = element.get("elem_text")
-        if isinstance(elem_text, dict):
-            for key, value in elem_text.items():
-                if isinstance(value, str) and value.strip():
-                    text_candidates.append((key, value.strip()))
-        elif isinstance(elem_text, str) and elem_text.strip():
-            text_candidates.append(("elem_text", elem_text.strip()))
-
-        reading_order = reading_order_start
-        for key, text in text_candidates:
-            blocks.append(
-                NormalizedOCRBlock(
-                    block_id=f"baidu-{page_no}-{question_ref}-{block_type}-{key}",
-                    provider_ref=f"baidu:question:{question_ref}",
-                    page_no=page_no,
-                    text=text,
-                    bbox=_coerce_bbox(element.get("elem_location") or element.get("location")) or list(fallback_bbox),
-                    block_type=_baidu_text_key_override(key, default=block_type),
-                    confidence=_safe_float(element.get("elem_probability") or element.get("probability"))
-                    or fallback_confidence,
-                    reading_order=reading_order,
-                    raw={"element": element},
-                    warnings=[] if _coerce_bbox(element.get("elem_location") or element.get("location")) else ["bbox_missing"],
-                )
-            )
-            reading_order += 1
-        return blocks
-
 
 def provider_registry() -> dict[str, CommercialOCRProvider]:
+    from commercial_ocr.tencent_provider import TencentQuestionSplitLayoutProvider, TencentQuestionSplitProvider
+
     return {
         "mock_commercial_ocr": MockCommercialOCRProvider(),
+        "mock_tencent_question_split": MockTencentQuestionSplitProvider(),
+        "mock_tencent_question_split_layout": MockTencentQuestionSplitLayoutProvider(),
         "baidu_paper_cut_edu": BaiduPaperCutEduProvider(),
         "tencent_question_split": TencentQuestionSplitProvider(),
+        "tencent_question_split_layout": TencentQuestionSplitLayoutProvider(),
     }
 
 
-def _write_trace_payload(
-    request: ProviderOCRRequest,
-    payload: dict[str, Any],
-    *,
-    suffix: str,
-) -> str | None:
+def _write_trace_payload(request: ProviderOCRRequest, payload: dict[str, Any], *, suffix: str) -> str | None:
     trace_root = _trace_root(request)
     trace_root.mkdir(parents=True, exist_ok=True)
     target = trace_root / f"{request.task_id}-{suffix}.json"
@@ -453,137 +327,60 @@ def _trace_root(request: ProviderOCRRequest) -> Path:
     return project_root / "debug" / "provider-trace" / request.source_document_id
 
 
-def _guess_mock_block_type(text: str) -> str:
-    lowered = text.lower()
-    if lowered.startswith("a.") or lowered.startswith("b.") or lowered.startswith("c.") or lowered.startswith("d."):
-        return "option"
-    if lowered.startswith("答案") or lowered.startswith("answer"):
-        return "answer"
-    if lowered.startswith("解析") or lowered.startswith("analysis"):
-        return "analysis"
-    if any(token in text for token in ("根据以下资料", "回答", "材料")):
-        return "material_intro"
-    if text[:1].isdigit():
-        return "question_no"
-    return "text"
-
-
-def _baidu_elem_type_to_block_type(value: Any) -> str:
-    mapping = {
-        0: "stem",
-        1: "material_intro",
-        2: "answer",
-        3: "option",
-        4: "figure",
-        5: "analysis",
-    }
-    try:
-        key = int(value)
-    except (TypeError, ValueError):
-        return "unknown"
-    return mapping.get(key, "unknown")
-
-
-def _baidu_text_key_override(key: str, *, default: str) -> str:
-    return {
-        "stem_text": "stem",
-        "subqus_text": "material_intro",
-        "option_text": "option",
-        "answer_text": "answer",
-        "interpretation_text": "analysis",
-    }.get(key, default)
-
-
-def _append_question_summary_blocks(
-    *,
-    page_no: int,
-    question_ref: str,
-    item: dict[str, Any],
-    blocks: list[NormalizedOCRBlock],
-    fallback_bbox: list[float],
-    fallback_confidence: float | None,
-    reading_order: int,
-) -> int:
-    key_order = [
-        ("stem_text", "stem"),
-        ("subqus_text", "material_intro"),
-        ("option_text", "option"),
-        ("answer_text", "answer"),
-        ("interpretation_text", "analysis"),
-    ]
-    for key, block_type in key_order:
-        text = str(item.get(key) or "").strip()
-        if not text:
-            continue
-        blocks.append(
-            NormalizedOCRBlock(
-                block_id=f"baidu-{page_no}-{question_ref}-{key}",
-                provider_ref=f"baidu:question:{question_ref}",
-                page_no=page_no,
-                text=text,
-                bbox=list(fallback_bbox),
-                block_type=block_type,
-                confidence=fallback_confidence,
-                reading_order=reading_order,
-                raw={"question": item},
-                warnings=[] if fallback_bbox else ["bbox_missing"],
+def _replicate_fixture_pages(
+    page_results: list[ProviderPageResult],
+    page_numbers: list[int],
+    provider_name: str,
+) -> list[ProviderPageResult]:
+    if not page_results:
+        return []
+    template = page_results[0]
+    replicated: list[ProviderPageResult] = []
+    for target_page_no in page_numbers:
+        blocks = []
+        for block in template.blocks:
+            blocks.append(
+                NormalizedOCRBlock(
+                    block_id=f"{provider_name}-{target_page_no}-{block.block_id}",
+                    provider_ref=block.provider_ref.replace(":page:1", f":page:{target_page_no}"),
+                    page_no=target_page_no,
+                    text=block.text,
+                    bbox=list(block.bbox),
+                    block_type=block.block_type,
+                    confidence=block.confidence,
+                    reading_order=block.reading_order,
+                    parent_block_id=block.parent_block_id,
+                    raw=dict(block.raw),
+                    warnings=list(block.warnings),
+                )
+            )
+        replicated.append(
+            ProviderPageResult(
+                page_no=target_page_no,
+                blocks=blocks,
+                figures=list(template.figures),
+                tables=list(template.tables),
+                raw=dict(template.raw),
+                warnings=list(template.warnings),
             )
         )
-        reading_order += 1
-    return reading_order
+    return replicated
 
 
-def _sorted_blocks(blocks: list[NormalizedOCRBlock]) -> list[NormalizedOCRBlock]:
-    return sorted(blocks, key=lambda block: (block.page_no, block.reading_order, block.bbox[1] if len(block.bbox) >= 2 else 0.0))
-
-
-def _warnings_from_baidu_response(payload: dict[str, Any]) -> list[str]:
-    warnings = [str(item) for item in payload.get("warnings") or [] if str(item).strip()]
-    if payload.get("log_id") is None:
-        warnings.append("baidu_log_id_missing")
-    return list(dict.fromkeys(warnings))
-
-
-def _coerce_bbox(value: Any) -> list[float]:
-    if isinstance(value, dict):
-        points = value.get("point") or value.get("points")
-        if isinstance(points, list):
-            return _coerce_bbox(points)
-        if all(key in value for key in ("left", "top", "width", "height")):
-            left = _safe_float(value.get("left"))
-            top = _safe_float(value.get("top"))
-            width = _safe_float(value.get("width"))
-            height = _safe_float(value.get("height"))
-            if None not in {left, top, width, height}:
-                return [left, top, left + width, top + height]
-    if isinstance(value, list) and len(value) == 4 and all(isinstance(item, (int, float)) for item in value):
-        return [float(item) for item in value]
-    if isinstance(value, list) and value:
-        points: list[tuple[float, float]] = []
-        for item in value:
-            if isinstance(item, dict):
-                x = _safe_float(item.get("x"))
-                y = _safe_float(item.get("y"))
-            elif isinstance(item, (list, tuple)) and len(item) >= 2:
-                x = _safe_float(item[0])
-                y = _safe_float(item[1])
-            else:
-                continue
-            if x is None or y is None:
-                continue
-            points.append((x, y))
-        if points:
-            xs = [item[0] for item in points]
-            ys = [item[1] for item in points]
-            return [min(xs), min(ys), max(xs), max(ys)]
-    return []
-
-
-def _safe_float(value: Any) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
+def _provider_error_from_env(provider_name: str) -> dict[str, Any] | None:
+    prefix = _provider_env_prefix(provider_name)
+    code = str(os.getenv(f"{prefix}_ERROR_CODE") or "").strip()
+    message = str(os.getenv(f"{prefix}_ERROR_MESSAGE") or "").strip()
+    if not code and not message:
         return None
+    return {
+        "code": code or f"{provider_name}_mock_error",
+        "message": message or f"mock provider {provider_name} error",
+    }
+
+
+def _provider_env_prefix(provider_name: str) -> str:
+    return provider_name.upper().replace("-", "_")
 
 
 def _positive_int(value: str | None, default: int) -> int:

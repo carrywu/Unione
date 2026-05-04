@@ -1,0 +1,269 @@
+{
+  "provider_name": "tencent_question_split",
+  "provider_version": "fixture-tencent-split-v1",
+  "provider_status": "ok",
+  "provider_latency_ms": 24,
+  "warnings": [],
+  "response": {
+    "Response": {
+      "QuestionInfo": [
+        {
+          "Angle": 0,
+          "Height": 1800,
+          "Width": 1200,
+          "ResultList": [
+            {
+              "Index": 17,
+              "GroupType": "multiple-choice",
+              "Text": "17. 2024年甲市数字经济规模同比增长约为多少？",
+              "Coord": [
+                {
+                  "LeftTop": {"X": 120, "Y": 400},
+                  "RightTop": {"X": 1080, "Y": 400},
+                  "RightBottom": {"X": 1080, "Y": 520},
+                  "LeftBottom": {"X": 120, "Y": 520}
+                }
+              ],
+              "Option": [
+                {
+                  "Text": "A. 8%",
+                  "Coord": {
+                    "LeftTop": {"X": 150, "Y": 530},
+                    "RightTop": {"X": 280, "Y": 530},
+                    "RightBottom": {"X": 280, "Y": 565},
+                    "LeftBottom": {"X": 150, "Y": 565}
+                  }
+                },
+                {
+                  "Text": "B. 10%",
+                  "Coord": {
+                    "LeftTop": {"X": 320, "Y": 530},
+                    "RightTop": {"X": 470, "Y": 530},
+                    "RightBottom": {"X": 470, "Y": 565},
+                    "LeftBottom": {"X": 320, "Y": 565}
+                  }
+                }
+              ],
+              "Answer": [
+                {
+                  "Text": "B"
+                }
+              ],
+              "Figure": [
+                {
+                  "Text": "2024年主要城市数字经济规模",
+                  "Coord": {
+                    "LeftTop": {"X": 120, "Y": 160},
+                    "RightTop": {"X": 700, "Y": 160},
+                    "RightBottom": {"X": 700, "Y": 360},
+                    "LeftBottom": {"X": 120, "Y": 360}
+                  }
+                }
+              ],
+              "Table": []
+            },
+            {
+              "Index": 18,
+              "GroupType": "multiple-choice",
+              "Text": "18. 甲市规模占四市总规模的比重最接近以下哪项？",
+              "Coord": [
+                {
+                  "LeftTop": {"X": 120, "Y": 610},
+                  "RightTop": {"X": 1080, "Y": 610},
+                  "RightBottom": {"X": 1080, "Y": 730},
+                  "LeftBottom": {"X": 120, "Y": 730}
+                }
+              ],
+              "Option": [
+                {
+                  "Text": "A. 18%",
+                  "Coord": {
+                    "LeftTop": {"X": 150, "Y": 740},
+                    "RightTop": {"X": 300, "Y": 740},
+                    "RightBottom": {"X": 300, "Y": 775},
+                    "LeftBottom": {"X": 150, "Y": 775}
+                  }
+                }
+              ],
+              "Answer": [
+                {
+                  "Text": "A"
+                }
+              ],
+              "Figure": [],
+              "Table": []
+            }
+          ]
+        }
+      ],
+      "RequestId": "fixture-request-id"
+    }
+  },
+  "page_results": [
+    {
+      "page_no": 1,
+      "raw": {
+        "request_id": "fixture-request-id",
+        "question_info_count": 1,
+        "layout_only": false
+      },
+      "warnings": [],
+      "figures": [
+        {
+          "bbox": [120, 160, 700, 360],
+          "question_ref": "17",
+          "block_type": "chart"
+        }
+      ],
+      "tables": [],
+      "blocks": [
+        {
+          "block_id": "tencent-1-q17-no",
+          "provider_ref": "tencent_question_split:question:17",
+          "page_no": 1,
+          "text": "17",
+          "bbox": [120, 400, 1080, 520],
+          "block_type": "question_no",
+          "confidence": null,
+          "reading_order": 1,
+          "warnings": ["confidence_missing"],
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "tencent-1-q17-stem",
+          "provider_ref": "tencent_question_split:question:17",
+          "page_no": 1,
+          "text": "17. 2024年甲市数字经济规模同比增长约为多少？",
+          "bbox": [120, 400, 1080, 520],
+          "block_type": "stem",
+          "confidence": null,
+          "reading_order": 2,
+          "warnings": ["confidence_missing"],
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "tencent-1-q17-option-a",
+          "provider_ref": "tencent_question_split:question:17",
+          "page_no": 1,
+          "text": "A. 8%",
+          "bbox": [150, 530, 280, 565],
+          "block_type": "option",
+          "confidence": null,
+          "reading_order": 3,
+          "parent_block_id": "tencent-1-q17-stem",
+          "warnings": ["confidence_missing"],
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "tencent-1-q17-option-b",
+          "provider_ref": "tencent_question_split:question:17",
+          "page_no": 1,
+          "text": "B. 10%",
+          "bbox": [320, 530, 470, 565],
+          "block_type": "option",
+          "confidence": null,
+          "reading_order": 4,
+          "parent_block_id": "tencent-1-q17-stem",
+          "warnings": ["confidence_missing"],
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "tencent-1-q17-answer",
+          "provider_ref": "tencent_question_split:question:17",
+          "page_no": 1,
+          "text": "B",
+          "bbox": [120, 400, 1080, 520],
+          "block_type": "answer",
+          "confidence": null,
+          "reading_order": 5,
+          "parent_block_id": "tencent-1-q17-stem",
+          "warnings": ["confidence_missing"],
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "tencent-1-q17-chart",
+          "provider_ref": "tencent_question_split:question:17",
+          "page_no": 1,
+          "text": "2024年主要城市数字经济规模",
+          "bbox": [120, 160, 700, 360],
+          "block_type": "chart",
+          "confidence": null,
+          "reading_order": 6,
+          "parent_block_id": "tencent-1-q17-stem",
+          "warnings": ["confidence_missing"],
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "tencent-1-q18-no",
+          "provider_ref": "tencent_question_split:question:18",
+          "page_no": 1,
+          "text": "18",
+          "bbox": [120, 610, 1080, 730],
+          "block_type": "question_no",
+          "confidence": null,
+          "reading_order": 7,
+          "warnings": ["confidence_missing"],
+          "raw": {
+            "question_ref": "18"
+          }
+        },
+        {
+          "block_id": "tencent-1-q18-stem",
+          "provider_ref": "tencent_question_split:question:18",
+          "page_no": 1,
+          "text": "18. 甲市规模占四市总规模的比重最接近以下哪项？",
+          "bbox": [120, 610, 1080, 730],
+          "block_type": "stem",
+          "confidence": null,
+          "reading_order": 8,
+          "warnings": ["confidence_missing"],
+          "raw": {
+            "question_ref": "18"
+          }
+        },
+        {
+          "block_id": "tencent-1-q18-option-a",
+          "provider_ref": "tencent_question_split:question:18",
+          "page_no": 1,
+          "text": "A. 18%",
+          "bbox": [150, 740, 300, 775],
+          "block_type": "option",
+          "confidence": null,
+          "reading_order": 9,
+          "parent_block_id": "tencent-1-q18-stem",
+          "warnings": ["confidence_missing"],
+          "raw": {
+            "question_ref": "18"
+          }
+        },
+        {
+          "block_id": "tencent-1-q18-answer",
+          "provider_ref": "tencent_question_split:question:18",
+          "page_no": 1,
+          "text": "A",
+          "bbox": [120, 610, 1080, 730],
+          "block_type": "answer",
+          "confidence": null,
+          "reading_order": 10,
+          "parent_block_id": "tencent-1-q18-stem",
+          "warnings": ["confidence_missing"],
+          "raw": {
+            "question_ref": "18"
+          }
+        }
+      ]
+    }
+  ]
+}

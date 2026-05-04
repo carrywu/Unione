@@ -1,0 +1,188 @@
+{
+  "provider_name": "baidu_paper_cut_edu",
+  "provider_version": "fixture-baidu-v1",
+  "provider_status": "ok",
+  "provider_latency_ms": 18,
+  "warnings": [],
+  "response": {
+    "log_id": 123456789,
+    "qus_result_num": 4,
+    "qus_result": [
+      {
+        "question_id": "17",
+        "qus_probability": 0.98,
+        "qus_location": {
+          "left": 80,
+          "top": 180,
+          "width": 1420,
+          "height": 170
+        },
+        "stem_text": "17. 2024年甲市数字经济规模同比增长约为多少？",
+        "option_text": "A. 8% B. 10% C. 12% D. 14%",
+        "answer_text": "B",
+        "interpretation_text": "由材料可知，甲市同比增速约为10%。"
+      }
+    ]
+  },
+  "page_results": [
+    {
+      "page_no": 1,
+      "raw": {
+        "log_id": 123456789,
+        "qus_result_num": 4
+      },
+      "warnings": [],
+      "figures": [],
+      "tables": [],
+      "blocks": [
+        {
+          "block_id": "baidu-1-header-1",
+          "provider_ref": "baidu:page:1",
+          "page_no": 1,
+          "text": "2025 行测模拟卷",
+          "bbox": [60, 30, 340, 60],
+          "block_type": "header",
+          "confidence": 0.99,
+          "reading_order": 1,
+          "raw": {
+            "kind": "header"
+          }
+        },
+        {
+          "block_id": "baidu-1-title-1",
+          "provider_ref": "baidu:page:1",
+          "page_no": 1,
+          "text": "资料分析",
+          "bbox": [80, 70, 260, 110],
+          "block_type": "title",
+          "confidence": 0.99,
+          "reading_order": 2,
+          "raw": {
+            "kind": "title"
+          }
+        },
+        {
+          "block_id": "baidu-1-material-1",
+          "provider_ref": "baidu:material:17-20",
+          "page_no": 1,
+          "text": "根据以下资料，回答17-20题",
+          "bbox": [80, 120, 580, 155],
+          "block_type": "material_intro",
+          "confidence": 0.99,
+          "reading_order": 3,
+          "raw": {
+            "kind": "material_intro"
+          }
+        },
+        {
+          "block_id": "baidu-1-chart-1",
+          "provider_ref": "baidu:material:17-20",
+          "page_no": 1,
+          "text": "2024年主要城市数字经济规模",
+          "bbox": [90, 165, 760, 360],
+          "block_type": "chart",
+          "confidence": 0.96,
+          "reading_order": 4,
+          "raw": {
+            "kind": "chart"
+          }
+        },
+        {
+          "block_id": "baidu-1-table-1",
+          "provider_ref": "baidu:material:17-20",
+          "page_no": 1,
+          "text": "城市 规模 同比",
+          "bbox": [780, 165, 1440, 360],
+          "block_type": "table",
+          "confidence": 0.95,
+          "reading_order": 5,
+          "raw": {
+            "kind": "table"
+          }
+        },
+        {
+          "block_id": "baidu-1-q17-no",
+          "provider_ref": "baidu:question:17",
+          "page_no": 1,
+          "text": "17",
+          "bbox": [80, 390, 120, 425],
+          "block_type": "question_no",
+          "confidence": 0.99,
+          "reading_order": 6,
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "baidu-1-q17-stem",
+          "provider_ref": "baidu:question:17",
+          "page_no": 1,
+          "text": "17. 2024年甲市数字经济规模同比增长约为多少？",
+          "bbox": [130, 390, 1420, 455],
+          "block_type": "stem",
+          "confidence": 0.98,
+          "reading_order": 7,
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "baidu-1-q17-option-a",
+          "provider_ref": "baidu:question:17",
+          "page_no": 1,
+          "text": "A. 8%",
+          "bbox": [150, 460, 330, 500],
+          "block_type": "option",
+          "confidence": 0.97,
+          "reading_order": 8,
+          "parent_block_id": "baidu-1-q17-stem",
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "baidu-1-q17-option-b",
+          "provider_ref": "baidu:question:17",
+          "page_no": 1,
+          "text": "B. 10%",
+          "bbox": [360, 460, 560, 500],
+          "block_type": "option",
+          "confidence": 0.97,
+          "reading_order": 9,
+          "parent_block_id": "baidu-1-q17-stem",
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "baidu-1-q17-option-c",
+          "provider_ref": "baidu:question:17",
+          "page_no": 1,
+          "text": "C. 12%",
+          "bbox": [590, 460, 790, 500],
+          "block_type": "option",
+          "confidence": 0.97,
+          "reading_order": 10,
+          "parent_block_id": "baidu-1-q17-stem",
+          "raw": {
+            "question_ref": "17"
+          }
+        },
+        {
+          "block_id": "baidu-1-q17-option-d",
+          "provider_ref": "baidu:question:17",
+          "page_no": 1,
+          "text": "D. 14%",
+          "bbox": [820, 460, 1010, 500],
+          "block_type": "option",
+          "confidence": 0.97,
+          "reading_order": 11,
+          "parent_block_id": "baidu-1-q17-stem",
+          "raw": {
+            "question_ref": "17"
+          }
+        }
+      ]
+    }
+  ]
+}
