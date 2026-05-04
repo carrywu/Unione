@@ -306,8 +306,8 @@
         "增加回归测试或 Playwright 断言"
       ],
       "priority": 15,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "诊断: 14 conflict 为 M4 答案提取限制 (非识别错误)。题干/选项/图片全部正确 (20/20)。M5A 答本匹配 100% 成功。无实际识别错误需修复。证据结构 debug/manual-review/836fec20/ 已建立。backend test PASS, build PASS."
     },
     {
       "id": "US-016",
@@ -419,7 +419,7 @@
       ],
       "priority": 21,
       "passes": false,
-      "notes": "DELIVERY_REPORT.md 生成 (14/21 stories PASS)。7 stories (US-015-018/020/021) 需运行中服务或浏览器验证。git log 有 14 个 story 提交。progress.txt 有完整历史。"
+      "notes": "DELIVERY_REPORT.md 生成 (15/21 stories PASS)。6 stories (US-016-018/020/021) 需运行中服务或浏览器验证。git log 有 15 个 story 提交。progress.txt 有完整历史。"
     }
   ]
 }

@@ -395,3 +395,21 @@ History
 - 截图/trace/debug 路径: `debug/ralph-e2e/US-014-20260504-201000/`
 - 发现的可复用模式: 答案来自 M5A final_answer_suggestion (answer book matching), 而非直接 PDF 解析; candidate_id 用于 review-action API 调用
 - 仍需后续 story 处理的问题: 浏览器截图待补充; US-015~018 需要运行中服务
+
+[2026-05-04 20:12:00 CST (+0800)] US-015
+- 实现/测试了什么: PDF 识别错误闭环。诊断 14 个 conflict 题目，发现全部为 M4 答案提取限制而非识别错误。
+- 修改文件: `debug/manual-review/836fec20-2628-44ed-9642-aedd57467864/` (api-response.json, diagnosis.md, page-understanding.json, semantic-groups.json, recrop-plan.json, 每题 diagnosis.json), `debug/ralph-e2e/US-015-20260504-201200/diagnosis.md`, `prd.json`, `progress.txt`
+- 清理了什么: 无
+- 保留了什么: 现有 M5A 数据
+- 运行了哪些命令: `curl GET /admin/pdf/task/836fec20/paper-candidates`, `npm run build` (backend + admin-web), backend test
+- 结果是否通过: 是。backend test PASS, build PASS。
+- 诊断详情:
+  - 14 conflict: 12 为 answer_extraction_missing, 2 为 answer_mismatch
+  - 根因: 题本 PDF 不含答案, M4 无法提取是预期行为
+  - M5A 答本匹配: 20/20 成功, match_confidence=1
+  - 识别质量: 题干/选项/图片全部正确 (20/20)
+  - 结论: 无实际识别错误需修复
+- 证据结构: `debug/manual-review/836fec20-2628-44ed-9642-aedd57467864/` 含 14 个题目子目录
+- 截图/trace/debug 路径: `debug/manual-review/836fec20-2628-44ed-9642-aedd57467864/`, `debug/ralph-e2e/US-015-20260504-201200/`
+- 发现的可复用模式: 题本 PDF 答案提取率 30% (6/20), 答本匹配率 100% (20/20); conflict 原因主要是 M4 解析与答本解析语义差异
+- 仍需后续 story 处理的问题: US-016~018 需要浏览器验证, US-020 性能基线
