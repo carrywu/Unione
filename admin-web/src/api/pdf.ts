@@ -138,6 +138,34 @@ export interface PaperCandidate {
   recommendedAction?: string | null;
   source_locator_available?: boolean;
   source_artifacts_refs?: Record<string, string>;
+  provider_name?: string | null;
+  provider_status?: string | null;
+  provider_latency_ms?: number | null;
+  provider_trace_ref?: string | null;
+  provider_error?: Record<string, any> | null;
+  provider_fallback_used?: boolean;
+  grouping_evidence?: string[];
+  grouping_confidence?: number | null;
+  quality_gate?: {
+    extraction_complete?: boolean;
+    ocr_complete?: boolean;
+    visual_assets_preserved?: boolean;
+    semantic_consistent?: boolean;
+    reasoning_verified?: boolean;
+    review_ready?: boolean;
+    extracted_but_incomplete?: boolean;
+    needs_human_review?: boolean;
+    blocking_reasons?: string[];
+    warnings?: string[];
+    per_question_status?: Array<Record<string, any>>;
+  } | null;
+  quality_gate_question_status?: Record<string, any> | null;
+  extracted_but_incomplete?: boolean;
+  review_ready?: boolean;
+  needs_human_review?: boolean;
+  visual_understanding?: Record<string, any> | null;
+  missing_fields?: string[];
+  validation_warnings?: string[];
   material?: {
     id?: string;
     content?: string;
@@ -226,6 +254,7 @@ export interface PaperCandidatesResponse {
   };
   review_audit_events?: Array<Record<string, any>>;
   non_blocking_warnings?: string[];
+  commercial_ocr?: Record<string, any> | null;
   questions: PaperCandidate[];
   artifact_refs?: Record<string, string>;
 }

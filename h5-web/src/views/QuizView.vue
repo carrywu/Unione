@@ -30,7 +30,7 @@
 
     <main v-else-if="question" class="quiz-body animate-fade-in">
       <!-- Material Card -->
-      <section v-if="question.material?.content" class="material-card">
+      <section v-if="question.material?.content" class="material-card" data-testid="shared-material-card">
         <div class="material-header">
           <span class="material-icon"><AppIcon name="book" :size="16" /></span>
           <span class="material-label">材料阅读</span>
@@ -47,14 +47,14 @@
       </section>
 
       <!-- Question Card -->
-      <section class="question-card">
+      <section class="question-card" data-testid="question-card">
         <div class="question-header">
           <div class="question-meta">
             <span class="pill pill-primary">{{ question.type === 'judge' ? '判断' : '单选' }}</span>
             <span class="question-num">{{ quiz.currentIndex + 1 }} / {{ quiz.questions.length }}</span>
           </div>
         </div>
-        <h3 class="question-stem"><MathText :text="question.content" fallback="题干未能可靠定位" /></h3>
+        <h3 class="question-stem" data-testid="question-stem"><MathText :text="question.content" fallback="题干未能可靠定位" /></h3>
 
         <!-- Images -->
         <img
@@ -82,6 +82,7 @@
             v-for="option in options"
             :key="option.value"
             class="option-card"
+            :data-testid="`option-${option.value}`"
             :class="optionClass(option.value)"
             :disabled="quiz.status === 'submitted'"
             @click="quiz.status === 'answering' && (selectedAnswer = option.value)"
@@ -106,7 +107,7 @@
         </div>
 
         <!-- Analysis -->
-        <div v-if="quiz.status === 'submitted'" class="analysis-card">
+        <div v-if="quiz.status === 'submitted'" class="analysis-card" data-testid="analysis-card">
           <div class="analysis-header">
             <AppIcon name="spark" :size="18" />
             <span>解析详情</span>
@@ -156,10 +157,16 @@
         <span>笔记</span>
       </button>
 
-      <button v-if="quiz.status === 'answering'" class="btn-primary-wide" :disabled="!selectedAnswer" @click="handleSubmit">
+      <button
+        v-if="quiz.status === 'answering'"
+        class="btn-primary-wide"
+        data-testid="submit-answer-button"
+        :disabled="!selectedAnswer"
+        @click="handleSubmit"
+      >
         提交答案
       </button>
-      <button v-else class="btn-primary-wide" @click="handleNext">
+      <button v-else class="btn-primary-wide" data-testid="next-question-button" @click="handleNext">
         <span>{{ quiz.isFinished ? '查看结果' : '下一题' }}</span>
         <AppIcon name="chevron-right" :size="18" />
       </button>

@@ -30,6 +30,7 @@
             <input
               id="phone"
               v-model.trim="form.phone"
+              data-testid="login-phone"
               class="field-input"
               type="tel"
               inputmode="tel"
@@ -46,6 +47,7 @@
             <input
               id="password"
               v-model="form.password"
+              data-testid="login-password"
               class="field-input"
               type="password"
               autocomplete="current-password"
@@ -56,7 +58,7 @@
 
         <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
 
-        <button class="btn-submit" type="submit" :disabled="loading">
+        <button class="btn-submit" data-testid="login-submit" type="submit" :disabled="loading">
           <template v-if="loading">
             <span class="spinner" />
             登录中...
@@ -69,7 +71,7 @@
 
         <div class="demo-account">
           <span>测试账号</span>
-          <button type="button" @click="fillDemoAccount">一键填入</button>
+          <button type="button" data-testid="fill-demo-account" @click="fillDemoAccount">一键填入</button>
         </div>
 
         <div class="auth-switch">

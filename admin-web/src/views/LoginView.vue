@@ -3,12 +3,12 @@
     <el-form ref="formRef" :model="form" :rules="rules" class="login-panel" label-position="top">
       <h1>刷题管理后台</h1>
       <el-form-item label="手机号" prop="phone">
-        <el-input v-model="form.phone" size="large" />
+        <el-input v-model="form.phone" size="large" inputmode="text" />
       </el-form-item>
       <el-form-item label="密码" prop="password">
         <el-input v-model="form.password" size="large" type="password" show-password />
       </el-form-item>
-      <el-button type="primary" size="large" class="login-button" :loading="loading" @click="handleLogin">
+      <el-button data-testid="admin-login-submit" type="primary" size="large" class="login-button" :loading="loading" @click="handleLogin">
         登录
       </el-button>
     </el-form>

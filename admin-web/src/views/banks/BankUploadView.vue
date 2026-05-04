@@ -54,7 +54,7 @@
               <el-icon><Document /></el-icon>
               <span>{{ selectedFile.name }}</span>
             </div>
-            <el-button type="primary" :icon="UploadFilled" :loading="uploading" @click="handleUpload">
+            <el-button data-testid="start-upload-parse" type="primary" :icon="UploadFilled" :loading="uploading" @click="handleUpload">
               开始上传并解析
             </el-button>
           </div>
@@ -77,10 +77,10 @@
             </div>
           </div>
           <div v-if="task?.status === 'done'" class="done-actions">
-            <el-button :icon="Document" type="primary" @click="router.push(`/banks/${bankId}/questions?taskId=${taskId}`)">
+            <el-button data-testid="view-result-questions" :icon="Document" type="primary" @click="router.push(`/banks/${bankId}/questions?taskId=${taskId}`)">
               查看解析题目
             </el-button>
-            <el-button :icon="EditPen" type="success" @click="router.push(`/banks/${bankId}/review`)">
+            <el-button data-testid="enter-review-edit" :icon="EditPen" type="success" @click="router.push(`/banks/${bankId}/review`)">
               进入审核编辑
             </el-button>
             <el-button :icon="Finished" type="warning" @click="router.push(`/banks/${bankId}/answer-book`)">

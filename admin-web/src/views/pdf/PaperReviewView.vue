@@ -38,6 +38,10 @@
         <strong>{{ textOr(candidates?.provider, 'unknown') }} / {{ textOr(candidates?.model, 'unknown') }}</strong>
       </div>
       <div>
+        <span>OCR 主 Provider</span>
+        <strong>{{ textOr(candidates?.commercial_ocr?.effective_provider || candidates?.commercial_ocr?.provider_result?.provider_name, '未接入') }}</strong>
+      </div>
+      <div>
         <span>候选</span>
         <strong>{{ summary.total }} 题</strong>
       </div>
@@ -112,6 +116,9 @@
           <div class="candidate-tags" data-testid="candidate-risk-tags">
             <span v-if="candidate.need_manual_fix">need_manual_fix</span>
             <span>{{ candidate.can_add_to_paper ? '可入卷' : '不可自动入卷' }}</span>
+            <span v-if="candidate.provider_fallback_used">provider_fallback</span>
+            <span v-if="candidate.review_ready === false">review_ready=false</span>
+            <span v-if="candidate.extracted_but_incomplete">incomplete</span>
             <span v-if="candidate.manualReviewable === false">无法人工核验</span>
             <span>{{ hasImage(candidate) ? '有图片' : '无图片' }}</span>
             <span v-for="flag in (candidate.risk_flags || []).slice(0, 3)" :key="flag">{{ flag }}</span>
@@ -175,6 +182,15 @@
                 AI {{ textOr(selectedCandidate.ai_audit_status, 'unknown') }}
               </el-tag>
               <el-tag v-if="selectedCandidate.need_manual_fix" type="warning">need_manual_fix</el-tag>
+              <el-tag v-if="selectedCandidate.provider_fallback_used" type="warning" data-testid="provider-fallback-badge">
+                provider_fallback
+              </el-tag>
+              <el-tag v-if="selectedCandidate.review_ready === false" type="danger" data-testid="quality-gate-badge">
+                review_ready=false
+              </el-tag>
+              <el-tag v-if="selectedCandidate.extracted_but_incomplete" type="danger">
+                extracted_but_incomplete
+              </el-tag>
               <el-tag v-if="selectedCandidate.manualReviewable === false" type="danger" data-testid="not-manually-reviewable-badge">
                 无法人工核验
               </el-tag>
@@ -187,8 +203,25 @@
               <span data-testid="recommended-rerun-action">{{ candidateRecommendedAction(selectedCandidate) }}</span>
             </div>
             <section>
+              <h2>共享材料</h2>
+              <div v-if="selectedCandidate.material?.content" class="material-card" data-testid="shared-material-panel">
+                <p class="stem-text"><MathText :text="selectedCandidate.material?.content" fallback="材料文本缺失" /></p>
+                <div v-if="selectedCandidate.material?.images?.length" class="visual-preview material-preview-grid">
+                  <img
+                    v-for="(image, imageIndex) in selectedCandidate.material?.images || []"
+                    :key="image.asset_id || image.ref || image.url || imageIndex"
+                    :src="textOr(image.url || image.image_url || image.src || image.base64, '')"
+                    alt="共享材料图表"
+                  />
+                </div>
+              </div>
+              <p v-else class="muted">当前候选题未提供共享材料正文。</p>
+            </section>
+            <section>
               <h2>题干</h2>
-              <p class="stem-text"><MathText :text="selectedCandidate.stem" fallback="题干未能可靠定位" /></p>
+              <p class="stem-text" data-testid="selected-question-stem">
+                <MathText :text="selectedCandidate.stem" fallback="题干未能可靠定位" />
+              </p>
             </section>
             <section>
               <h2>选项</h2>
@@ -227,7 +260,60 @@
                   <dt>ai_reviewed_before_human</dt>
                   <dd>{{ booleanText(selectedCandidate.ai_reviewed_before_human) }}</dd>
                 </div>
+                <div>
+                  <dt>visual_understanding</dt>
+                  <dd>{{ textOr(selectedCandidate.visual_understanding?.visual_grouping_summary, '未触发或未返回') }}</dd>
+                </div>
               </dl>
+            </section>
+            <section data-testid="commercial-ocr-panel">
+              <h2>Commercial OCR / Quality Gate</h2>
+              <dl class="evidence-list">
+                <div>
+                  <dt>provider</dt>
+                  <dd>{{ providerSummary(selectedCandidate) }}</dd>
+                </div>
+                <div>
+                  <dt>provider_status</dt>
+                  <dd>{{ textOr(selectedCandidate.provider_status, '未提供') }}</dd>
+                </div>
+                <div>
+                  <dt>provider_trace_ref</dt>
+                  <dd>{{ textOr(selectedCandidate.provider_trace_ref, '未提供') }}</dd>
+                </div>
+                <div>
+                  <dt>grouping_confidence</dt>
+                  <dd>{{ confidenceText(selectedCandidate.grouping_confidence) }}</dd>
+                </div>
+                <div>
+                  <dt>review_ready</dt>
+                  <dd>{{ qualityBoolText(selectedCandidate.review_ready) }}</dd>
+                </div>
+                <div>
+                  <dt>needs_human_review</dt>
+                  <dd>{{ qualityBoolText(selectedCandidate.needs_human_review) }}</dd>
+                </div>
+                <div>
+                  <dt>extracted_but_incomplete</dt>
+                  <dd>{{ qualityBoolText(selectedCandidate.extracted_but_incomplete) }}</dd>
+                </div>
+              </dl>
+              <div class="candidate-tags" data-testid="grouping-evidence-list">
+                <span v-for="item in (selectedCandidate.grouping_evidence || [])" :key="item">{{ item }}</span>
+                <span v-if="!(selectedCandidate.grouping_evidence || []).length">未提供 grouping evidence</span>
+              </div>
+              <p class="muted" data-testid="quality-gate-summary">
+                {{ qualityGateSummaryText(selectedCandidate) }}
+              </p>
+              <p class="muted" v-if="(selectedCandidate.quality_gate?.blocking_reasons || []).length">
+                blocking_reasons：{{ joinList(selectedCandidate.quality_gate?.blocking_reasons) }}
+              </p>
+              <p class="muted" v-if="(selectedCandidate.validation_warnings || []).length">
+                validation_warnings：{{ joinList(selectedCandidate.validation_warnings) }}
+              </p>
+              <p class="muted" v-if="(selectedCandidate.missing_fields || []).length">
+                missing_fields：{{ joinList(selectedCandidate.missing_fields) }}
+              </p>
             </section>
             <section class="suggestion-grid">
               <div>
@@ -791,6 +877,8 @@ const checklist = computed(() => {
     { label: '解析建议存在或说明原因', ok: Boolean(item.analysis_suggestion || item.analysis_unknown_reason), detail: textOr(item.analysis_suggestion || item.analysis_unknown_reason, '无解析建议原因') },
     { label: 'AI 预审核状态明确', ok: Boolean(item.ai_audit_status), detail: textOr(item.ai_audit_status, 'unknown') },
     { label: '人工核验状态明确', ok: item.manualReviewable !== undefined || Boolean(item.manual_review_status), detail: manualReviewStatusText(item) },
+    { label: 'Commercial OCR review_ready', ok: item.review_ready !== false, detail: qualityGateSummaryText(item) },
+    { label: '17-20 共享材料关系', ok: !item.shared_material || Boolean(item.material?.content), detail: item.shared_material ? textOr(item.material?.content, '共享材料未透传') : 'standalone' },
     { label: '允许入卷 / 原因明确', ok: item.can_add_to_paper || Boolean(item.cannot_add_reason), detail: item.can_add_to_paper ? '允许入卷' : textOr(item.cannot_add_reason, '原因缺失') },
   ];
 });
@@ -1036,19 +1124,48 @@ function hasVisualRisk(candidate: PaperCandidate) {
 
 function imagePreviewUrl(candidate: PaperCandidate) {
   const direct = textOr(candidate.preview_image_path, '');
-  if (isHttpOrUploads(direct)) return direct;
+  if (isRenderableImageUrl(direct)) return direct;
   const assetUrl = (candidate.visual_assets || [])
     .map((asset) => textOr(asset.url || asset.image_url || asset.src, ''))
-    .find(isHttpOrUploads);
+    .find(isRenderableImageUrl);
   return assetUrl || '';
 }
 
-function isHttpOrUploads(value: string) {
-  return value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/uploads/');
+function isRenderableImageUrl(value: string) {
+  return value.startsWith('http://')
+    || value.startsWith('https://')
+    || value.startsWith('/uploads/')
+    || value.startsWith('data:image/');
 }
 
 function confidenceText(value?: number | null) {
   return value === null || value === undefined ? '置信度未提供' : `置信度 ${Number(value).toFixed(2)}`;
+}
+
+function providerSummary(candidate: PaperCandidate) {
+  const provider = textOr(candidate.provider_name, '未提供');
+  const latency = candidate.provider_latency_ms === null || candidate.provider_latency_ms === undefined
+    ? 'latency 未提供'
+    : `${Number(candidate.provider_latency_ms)}ms`;
+  return `${provider} / ${latency}`;
+}
+
+function qualityBoolText(value: unknown) {
+  if (value === true) return 'true';
+  if (value === false) return 'false';
+  return '未提供';
+}
+
+function qualityGateSummaryText(candidate: PaperCandidate) {
+  const gate = candidate.quality_gate;
+  if (!gate) return '未返回 commercial OCR quality gate';
+  const parts = [
+    `review_ready=${qualityBoolText(gate.review_ready)}`,
+    `ocr_complete=${qualityBoolText(gate.ocr_complete)}`,
+    `visual_assets_preserved=${qualityBoolText(gate.visual_assets_preserved)}`,
+    `semantic_consistent=${qualityBoolText(gate.semantic_consistent)}`,
+  ];
+  return parts.join(' / ');
 }
 
 function booleanText(value: unknown) {
