@@ -22,6 +22,8 @@ queue = {
 
 ai_providers: dict[str, dict[str, Any]] = {
     "qwen_vl": {"enabled": False, "last_call_at": None, "last_error": None},
+    "volcengine_ark_vl": {"enabled": False, "last_call_at": None, "last_error": None},
+    "mimo_vl": {"enabled": False, "last_call_at": None, "last_error": None},
     "deepseek": {"enabled": False, "last_call_at": None, "last_error": None},
 }
 
@@ -36,11 +38,13 @@ stats = {
     "session": {
         "total_parsed": 0,
         "total_questions": 0,
-        "ai_calls": {"qwen_vl": 0, "deepseek": 0},
+        "ai_calls": {"qwen_vl": 0, "volcengine_ark_vl": 0, "mimo_vl": 0, "deepseek": 0},
     },
 }
 
 runtime_config: dict[str, str] = {}
+RECENT_PROVIDER_ATTEMPTS_LIMIT = 400
+recent_provider_attempts: list[dict[str, Any]] = []
 
 
 def reset_today_if_needed() -> None:
@@ -90,6 +94,24 @@ def record_ai_call(provider: str, error: str | None = None) -> None:
     stats["session"]["ai_calls"][provider] = stats["session"]["ai_calls"].get(provider, 0) + 1
 
 
+def record_provider_attempt(attempt: dict[str, Any]) -> None:
+    reset_today_if_needed()
+    provider = str(attempt.get("provider") or "").strip()
+    if provider:
+        ai_providers.setdefault(
+            provider,
+            {"enabled": True, "last_call_at": None, "last_error": None},
+        )
+        ai_providers[provider]["enabled"] = True
+        ai_providers[provider]["last_call_at"] = attempt.get("finishedAt") or datetime.now(
+            timezone.utc
+        ).isoformat()
+        ai_providers[provider]["last_error"] = attempt.get("errorType") or attempt.get("error_type")
+    recent_provider_attempts.append(dict(attempt))
+    if len(recent_provider_attempts) > RECENT_PROVIDER_ATTEMPTS_LIMIT:
+        del recent_provider_attempts[:-RECENT_PROVIDER_ATTEMPTS_LIMIT]
+
+
 def memory_mb() -> int:
     if not psutil:
         return 0
@@ -98,6 +120,7 @@ def memory_mb() -> int:
 
 def status_payload() -> dict[str, Any]:
     reset_today_if_needed()
+    config = effective_config()
     return {
         "status": "ok",
         "uptime_seconds": int((datetime.now(timezone.utc) - STARTED_AT).total_seconds()),
@@ -105,6 +128,26 @@ def status_payload() -> dict[str, Any]:
         "queue": dict(queue),
         "memory_mb": memory_mb(),
         "ai_providers": ai_providers,
+        "runtime": {
+            "ai_provider_vision": config.get("ai_provider_vision") or "qwen_vl",
+            "vision_ai_provider_order": config.get("vision_ai_provider_order")
+            or "volcengine_ark_vl,qwen_vl,mimo_vl",
+            "vision_ai_timeout_seconds": float(config.get("vision_ai_timeout_seconds") or 120),
+            "vision_ai_provider_timeout_seconds": float(
+                config.get("vision_ai_provider_timeout_seconds") or 120
+            ),
+            "pdf_visual_page_timeout_seconds": float(
+                config.get("pdf_visual_page_timeout_seconds")
+                or config.get("vision_ai_timeout_seconds")
+                or 120
+            ),
+            "pdf_visual_provider_timeout_seconds": float(
+                config.get("pdf_visual_provider_timeout_seconds")
+                or config.get("vision_ai_provider_timeout_seconds")
+                or 120
+            ),
+        },
+        "recent_provider_attempts": recent_provider_attempts[-80:],
     }
 
 
@@ -124,13 +167,48 @@ def effective_config() -> dict[str, str]:
         "ai_provider_text": os.getenv("AI_PROVIDER_TEXT", "qwen"),
         "dashscope_api_key": os.getenv("DASHSCOPE_API_KEY", ""),
         "deepseek_api_key": os.getenv("DEEPSEEK_API_KEY", ""),
+        "mimo_api_key": os.getenv("MIMO_API_KEY", ""),
         "dashscope_base_url": os.getenv(
             "DASHSCOPE_BASE_URL",
             "https://dashscope.aliyuncs.com/compatible-mode/v1",
         ),
+        "mimo_base_url": os.getenv(
+            "MIMO_BASE_URL",
+            "https://token-plan-cn.xiaomimimo.com/v1",
+        ),
+        "mimo_model": os.getenv("MIMO_MODEL", "mimo-v2.5"),
+        "mimo_vision_model": os.getenv("MIMO_VISION_MODEL", os.getenv("MIMO_MODEL", "mimo-v2.5")),
+        "ark_api_key": os.getenv("ARK_API_KEY", "")
+        or os.getenv("VOLCENGINE_ARK_API_KEY", "")
+        or os.getenv("VOLC_ARK_API_KEY", ""),
+        "ark_base_url": os.getenv("ARK_BASE_URL", "")
+        or os.getenv("VOLCENGINE_ARK_BASE_URL", "")
+        or os.getenv("ARK_CHAT_COMPLETIONS_URL", "")
+        or os.getenv("VOLCENGINE_ARK_CHAT_COMPLETIONS_URL", "")
+        or "https://ark.cn-beijing.volces.com/api/v3",
+        "ark_vision_model": os.getenv("ARK_VISION_MODEL", "")
+        or os.getenv("VOLCENGINE_ARK_VISION_MODEL", "")
+        or os.getenv("ARK_MODEL", "")
+        or os.getenv("VOLCENGINE_ARK_MODEL", ""),
+        "ark_endpoint_id": os.getenv("ARK_ENDPOINT_ID", "")
+        or os.getenv("VOLCENGINE_ARK_ENDPOINT_ID", ""),
+        "ark_api_mode": os.getenv("ARK_API_MODE", "")
+        or os.getenv("VOLCENGINE_ARK_API_MODE", "")
+        or "responses",
+        "ark_responses_path": os.getenv("ARK_RESPONSES_PATH", "")
+        or os.getenv("VOLCENGINE_ARK_RESPONSES_PATH", "")
+        or "/responses",
+        "vision_ai_provider_order": os.getenv(
+            "VISION_AI_PROVIDER_ORDER",
+            "volcengine_ark_vl,qwen_vl,mimo_vl",
+        ),
         "backend_url": os.getenv("BACKEND_URL", "http://localhost:3010"),
         "prompt_source": os.getenv("PROMPT_SOURCE", "hardcoded"),
         "cache_ttl": os.getenv("PROMPT_CACHE_TTL", "300"),
+        "vision_ai_timeout_seconds": os.getenv("VISION_AI_TIMEOUT_SECONDS", "120"),
+        "vision_ai_provider_timeout_seconds": os.getenv("VISION_AI_PROVIDER_TIMEOUT_SECONDS", "120"),
+        "pdf_visual_page_timeout_seconds": os.getenv("PDF_VISUAL_PAGE_TIMEOUT_SECONDS", ""),
+        "pdf_visual_provider_timeout_seconds": os.getenv("PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS", ""),
     }
     merged.update(runtime_config)
     return merged
@@ -142,6 +220,21 @@ def update_runtime_config(data: dict[str, Any]) -> list[str]:
         "ai_provider_text": "AI_PROVIDER_TEXT",
         "qwen_api_key": "DASHSCOPE_API_KEY",
         "deepseek_api_key": "DEEPSEEK_API_KEY",
+        "mimo_api_key": "MIMO_API_KEY",
+        "mimo_base_url": "MIMO_BASE_URL",
+        "mimo_model": "MIMO_MODEL",
+        "mimo_vision_model": "MIMO_VISION_MODEL",
+        "ark_api_key": "ARK_API_KEY",
+        "ark_base_url": "ARK_BASE_URL",
+        "ark_vision_model": "ARK_VISION_MODEL",
+        "ark_endpoint_id": "ARK_ENDPOINT_ID",
+        "ark_api_mode": "ARK_API_MODE",
+        "ark_responses_path": "ARK_RESPONSES_PATH",
+        "vision_ai_provider_order": "VISION_AI_PROVIDER_ORDER",
+        "vision_ai_timeout_seconds": "VISION_AI_TIMEOUT_SECONDS",
+        "vision_ai_provider_timeout_seconds": "VISION_AI_PROVIDER_TIMEOUT_SECONDS",
+        "pdf_visual_page_timeout_seconds": "PDF_VISUAL_PAGE_TIMEOUT_SECONDS",
+        "pdf_visual_provider_timeout_seconds": "PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS",
         "cache_ttl": "PROMPT_CACHE_TTL",
     }
     updated: list[str] = []
@@ -162,9 +255,29 @@ def masked_config_payload() -> dict[str, Any]:
         "ai_provider_text": config.get("ai_provider_text") or "qwen",
         "qwen_api_key_set": bool(config.get("dashscope_api_key")),
         "deepseek_api_key_set": bool(config.get("deepseek_api_key")),
+        "mimo_api_key_set": bool(config.get("mimo_api_key")),
+        "ark_api_key_set": bool(config.get("ark_api_key")),
+        "dashscope_base_url": config.get("dashscope_base_url"),
+        "mimo_base_url": config.get("mimo_base_url") or "https://token-plan-cn.xiaomimimo.com/v1",
+        "mimo_model": config.get("mimo_model") or "mimo-v2.5",
+        "mimo_vision_model": config.get("mimo_vision_model") or config.get("mimo_model") or "mimo-v2.5",
+        "ark_base_url": config.get("ark_base_url") or "https://ark.cn-beijing.volces.com/api/v3",
+        "ark_vision_model": config.get("ark_vision_model") or "",
+        "ark_endpoint_id": config.get("ark_endpoint_id") or "",
+        "ark_api_mode": config.get("ark_api_mode") or "responses",
+        "ark_responses_path": config.get("ark_responses_path") or "/responses",
+        "vision_ai_provider_order": config.get("vision_ai_provider_order") or "volcengine_ark_vl,qwen_vl,mimo_vl",
         "backend_url": config.get("backend_url"),
         "prompt_source": config.get("prompt_source") or "hardcoded",
         "cache_ttl": int(config.get("cache_ttl") or 300),
+        "vision_ai_timeout_seconds": float(config.get("vision_ai_timeout_seconds") or 120),
+        "vision_ai_provider_timeout_seconds": float(config.get("vision_ai_provider_timeout_seconds") or 120),
+        "pdf_visual_page_timeout_seconds": float(
+            config.get("pdf_visual_page_timeout_seconds") or config.get("vision_ai_timeout_seconds") or 120
+        ),
+        "pdf_visual_provider_timeout_seconds": float(
+            config.get("pdf_visual_provider_timeout_seconds") or config.get("vision_ai_provider_timeout_seconds") or 120
+        ),
     }
 
 
@@ -174,5 +287,20 @@ def _runtime_key(env_key: str) -> str:
         "AI_PROVIDER_TEXT": "ai_provider_text",
         "DASHSCOPE_API_KEY": "dashscope_api_key",
         "DEEPSEEK_API_KEY": "deepseek_api_key",
+        "MIMO_API_KEY": "mimo_api_key",
+        "MIMO_BASE_URL": "mimo_base_url",
+        "MIMO_MODEL": "mimo_model",
+        "MIMO_VISION_MODEL": "mimo_vision_model",
+        "ARK_API_KEY": "ark_api_key",
+        "ARK_BASE_URL": "ark_base_url",
+        "ARK_VISION_MODEL": "ark_vision_model",
+        "ARK_ENDPOINT_ID": "ark_endpoint_id",
+        "ARK_API_MODE": "ark_api_mode",
+        "ARK_RESPONSES_PATH": "ark_responses_path",
+        "VISION_AI_PROVIDER_ORDER": "vision_ai_provider_order",
+        "VISION_AI_TIMEOUT_SECONDS": "vision_ai_timeout_seconds",
+        "VISION_AI_PROVIDER_TIMEOUT_SECONDS": "vision_ai_provider_timeout_seconds",
+        "PDF_VISUAL_PAGE_TIMEOUT_SECONDS": "pdf_visual_page_timeout_seconds",
+        "PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS": "pdf_visual_provider_timeout_seconds",
         "PROMPT_CACHE_TTL": "cache_ttl",
     }.get(env_key, env_key.lower())

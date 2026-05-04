@@ -15,6 +15,7 @@ export enum ParseTaskStatus {
   Done = 'done',
   Failed = 'failed',
   Paused = 'paused',
+  Canceled = 'canceled',
 }
 
 export enum ParseTaskType {

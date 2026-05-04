@@ -116,16 +116,23 @@ export class SystemService {
 
   async testPdfParse(body: Record<string, unknown>) {
     const aiConfig = await this.getAiConfig();
-    return this.proxyPdfService(
-      'POST',
-      '/admin/test-parse',
-      {
+    const pdfServiceUrl = this.configService.get<string>(
+      'PDF_SERVICE_URL',
+      'http://localhost:8001',
+    );
+    const token = this.configService.get<string>('PDF_SERVICE_INTERNAL_TOKEN', '');
+    const response = await axios.request({
+      method: 'POST',
+      url: `${pdfServiceUrl}/admin/test-parse`,
+      data: {
         url: body.file_url || body.url,
         pages: body.pages,
         ai_config: aiConfig,
       },
-      true,
-    );
+      timeout: 15 * 60 * 1000,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    return response.data;
   }
 
   async pdfServiceConfig() {
@@ -137,6 +144,8 @@ export class SystemService {
       ...(serviceConfig as Record<string, unknown>),
       qwen_api_key_set: Boolean(aiConfig.dashscope_api_key),
       deepseek_api_key_set: Boolean(aiConfig.deepseek_api_key),
+      mimo_api_key_set: Boolean(aiConfig.mimo_api_key),
+      ark_api_key_set: Boolean(aiConfig.ark_api_key),
       ai_provider_vision:
         (serviceConfig as Record<string, unknown>)?.ai_provider_vision || 'qwen_vl',
       ai_provider_text:
@@ -164,6 +173,138 @@ export class SystemService {
         this.updateConfig('DEEPSEEK_API_KEY', {
           value: body.deepseek_api_key,
           description: 'DeepSeek API Key（用于文字结构化）',
+        }),
+      );
+    }
+    if (typeof body.mimo_api_key === 'string' && body.mimo_api_key) {
+      updates.push(
+        this.updateConfig('MIMO_API_KEY', {
+          value: body.mimo_api_key,
+          description: 'MiMo API Key（用于视觉 fallback）',
+        }),
+      );
+    }
+    if (typeof body.mimo_base_url === 'string' && body.mimo_base_url) {
+      updates.push(
+        this.updateConfig('MIMO_BASE_URL', {
+          value: body.mimo_base_url,
+          description: 'MiMo Base URL（用于视觉 fallback）',
+        }),
+      );
+    }
+    if (typeof body.mimo_model === 'string' && body.mimo_model) {
+      updates.push(
+        this.updateConfig('MIMO_MODEL', {
+          value: body.mimo_model,
+          description: 'MiMo 默认模型',
+        }),
+      );
+    }
+    if (typeof body.mimo_vision_model === 'string' && body.mimo_vision_model) {
+      updates.push(
+        this.updateConfig('MIMO_VISION_MODEL', {
+          value: body.mimo_vision_model,
+          description: 'MiMo 视觉模型',
+        }),
+      );
+    }
+    if (typeof body.ark_api_key === 'string' && body.ark_api_key) {
+      updates.push(
+        this.updateConfig('ARK_API_KEY', {
+          value: body.ark_api_key,
+          description: '火山方舟视觉 API Key',
+        }),
+      );
+    }
+    if (typeof body.ark_base_url === 'string' && body.ark_base_url) {
+      updates.push(
+        this.updateConfig('ARK_BASE_URL', {
+          value: body.ark_base_url,
+          description: '火山方舟 OpenAI-compatible Base URL',
+        }),
+      );
+    }
+    if (typeof body.ark_vision_model === 'string' && body.ark_vision_model) {
+      updates.push(
+        this.updateConfig('ARK_VISION_MODEL', {
+          value: body.ark_vision_model,
+          description: '火山方舟视觉模型或 endpoint id',
+        }),
+      );
+    }
+    if (typeof body.ark_endpoint_id === 'string' && body.ark_endpoint_id) {
+      updates.push(
+        this.updateConfig('ARK_ENDPOINT_ID', {
+          value: body.ark_endpoint_id,
+          description: '火山方舟 endpoint id',
+        }),
+      );
+    }
+    if (typeof body.ark_api_mode === 'string' && body.ark_api_mode) {
+      updates.push(
+        this.updateConfig('ARK_API_MODE', {
+          value: body.ark_api_mode,
+          description: '火山方舟 API 模式，默认 responses',
+        }),
+      );
+    }
+    if (typeof body.ark_responses_path === 'string' && body.ark_responses_path) {
+      updates.push(
+        this.updateConfig('ARK_RESPONSES_PATH', {
+          value: body.ark_responses_path,
+          description: '火山方舟 Responses API 路径',
+        }),
+      );
+    }
+    if (typeof body.vision_ai_provider_order === 'string' && body.vision_ai_provider_order) {
+      updates.push(
+        this.updateConfig('VISION_AI_PROVIDER_ORDER', {
+          value: body.vision_ai_provider_order,
+          description: '视觉 provider fallback 顺序',
+        }),
+      );
+    }
+    if (
+      typeof body.vision_ai_timeout_seconds === 'number' &&
+      Number.isFinite(body.vision_ai_timeout_seconds)
+    ) {
+      updates.push(
+        this.updateConfig('VISION_AI_TIMEOUT_SECONDS', {
+          value: String(body.vision_ai_timeout_seconds),
+          description: '视觉理解总超时秒数',
+        }),
+      );
+    }
+    if (
+      typeof body.vision_ai_provider_timeout_seconds === 'number' &&
+      Number.isFinite(body.vision_ai_provider_timeout_seconds)
+    ) {
+      updates.push(
+        this.updateConfig('VISION_AI_PROVIDER_TIMEOUT_SECONDS', {
+          value: String(body.vision_ai_provider_timeout_seconds),
+          description: '视觉 provider 单次超时秒数',
+        }),
+      );
+    }
+    if (
+      typeof body.pdf_visual_page_timeout_seconds === 'number' &&
+      Number.isFinite(body.pdf_visual_page_timeout_seconds)
+    ) {
+      updates.push(
+        this.updateConfig('PDF_VISUAL_PAGE_TIMEOUT_SECONDS', {
+          value: String(body.pdf_visual_page_timeout_seconds),
+          description: '整页视觉解析超时秒数',
+        }),
+      );
+    }
+    if (
+      typeof body.pdf_visual_provider_timeout_seconds === 'number' &&
+      Number.isFinite(body.pdf_visual_provider_timeout_seconds)
+    ) {
+      updates.push(
+        this.updateConfig('PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS', {
+          value: String(body.pdf_visual_provider_timeout_seconds),
+          description: '整页视觉 provider 超时秒数',
         }),
       );
     }
@@ -208,6 +349,32 @@ export class SystemService {
         { key: 'DEEPSEEK_API_KEY' },
         { key: 'DEEPSEEK_BASE_URL' },
         { key: 'DEEPSEEK_MODEL' },
+        { key: 'MIMO_API_KEY' },
+        { key: 'MIMO_BASE_URL' },
+        { key: 'MIMO_MODEL' },
+        { key: 'MIMO_VISION_MODEL' },
+        { key: 'ARK_API_KEY' },
+        { key: 'VOLCENGINE_ARK_API_KEY' },
+        { key: 'VOLC_ARK_API_KEY' },
+        { key: 'ARK_BASE_URL' },
+        { key: 'VOLCENGINE_ARK_BASE_URL' },
+        { key: 'ARK_CHAT_COMPLETIONS_URL' },
+        { key: 'VOLCENGINE_ARK_CHAT_COMPLETIONS_URL' },
+        { key: 'ARK_VISION_MODEL' },
+        { key: 'VOLCENGINE_ARK_VISION_MODEL' },
+        { key: 'ARK_MODEL' },
+        { key: 'VOLCENGINE_ARK_MODEL' },
+        { key: 'ARK_ENDPOINT_ID' },
+        { key: 'VOLCENGINE_ARK_ENDPOINT_ID' },
+        { key: 'ARK_API_MODE' },
+        { key: 'VOLCENGINE_ARK_API_MODE' },
+        { key: 'ARK_RESPONSES_PATH' },
+        { key: 'VOLCENGINE_ARK_RESPONSES_PATH' },
+        { key: 'VISION_AI_PROVIDER_ORDER' },
+        { key: 'VISION_AI_TIMEOUT_SECONDS' },
+        { key: 'VISION_AI_PROVIDER_TIMEOUT_SECONDS' },
+        { key: 'PDF_VISUAL_PAGE_TIMEOUT_SECONDS' },
+        { key: 'PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS' },
       ],
     });
     const values = new Map(configs.map((config) => [config.key, config.value]));
@@ -220,7 +387,7 @@ export class SystemService {
           'DASHSCOPE_BASE_URL',
           'https://dashscope.aliyuncs.com/compatible-mode/v1',
         ),
-        visual_model: read('AI_VISUAL_MODEL', 'qwen-vl-max'),
+        visual_model: read('AI_VISUAL_MODEL', 'qwen3-vl-plus'),
         text_api_key: read('AI_TEXT_API_KEY') || read('DEEPSEEK_API_KEY') || read('DASHSCOPE_API_KEY'),
         text_base_url:
           read('AI_TEXT_BASE_URL') ||
@@ -230,6 +397,43 @@ export class SystemService {
         deepseek_api_key: read('DEEPSEEK_API_KEY'),
         deepseek_base_url: read('DEEPSEEK_BASE_URL'),
         deepseek_model: read('DEEPSEEK_MODEL'),
+        mimo_api_key: read('MIMO_API_KEY'),
+        mimo_base_url: read('MIMO_BASE_URL', 'https://token-plan-cn.xiaomimimo.com/v1'),
+        mimo_model: read('MIMO_MODEL', 'mimo-v2.5'),
+        mimo_vision_model: read('MIMO_VISION_MODEL', 'mimo-v2.5'),
+        ark_api_key:
+          read('ARK_API_KEY') ||
+          read('VOLCENGINE_ARK_API_KEY') ||
+          read('VOLC_ARK_API_KEY'),
+        ark_base_url:
+          read('ARK_BASE_URL') ||
+          read('VOLCENGINE_ARK_BASE_URL') ||
+          read('ARK_CHAT_COMPLETIONS_URL') ||
+          read('VOLCENGINE_ARK_CHAT_COMPLETIONS_URL') ||
+          'https://ark.cn-beijing.volces.com/api/v3',
+        ark_endpoint_id:
+          read('ARK_ENDPOINT_ID') || read('VOLCENGINE_ARK_ENDPOINT_ID'),
+        ark_vision_model:
+          read('ARK_VISION_MODEL') ||
+          read('VOLCENGINE_ARK_VISION_MODEL') ||
+          read('ARK_MODEL') ||
+          read('VOLCENGINE_ARK_MODEL'),
+        ark_api_mode:
+          read('ARK_API_MODE') ||
+          read('VOLCENGINE_ARK_API_MODE') ||
+          'responses',
+        ark_responses_path:
+          read('ARK_RESPONSES_PATH') ||
+          read('VOLCENGINE_ARK_RESPONSES_PATH') ||
+          '/responses',
+        vision_ai_provider_order: read(
+          'VISION_AI_PROVIDER_ORDER',
+          'volcengine_ark_vl,qwen_vl,mimo_vl',
+        ),
+        vision_ai_timeout_seconds: read('VISION_AI_TIMEOUT_SECONDS'),
+        vision_ai_provider_timeout_seconds: read('VISION_AI_PROVIDER_TIMEOUT_SECONDS'),
+        pdf_visual_page_timeout_seconds: read('PDF_VISUAL_PAGE_TIMEOUT_SECONDS'),
+        pdf_visual_provider_timeout_seconds: read('PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS'),
       }).filter(([, value]) => Boolean(value)),
     );
   }

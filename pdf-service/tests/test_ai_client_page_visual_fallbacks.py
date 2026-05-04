@@ -94,7 +94,7 @@ class AiClientPageVisualFallbacksTest(unittest.TestCase):
             ),
         ]
 
-        result = ai_client.parse_page_visual("ZmFrZS1wYWdl")
+        result = ai_client.parse_page_visual("cXdlbi1mYXN0LXN1Y2Nlc3M=")
 
         self.assertEqual(mock_openai_provider.call_count, 2)
         mock_dashscope_sdk.assert_not_called()
@@ -115,7 +115,7 @@ class AiClientPageVisualFallbacksTest(unittest.TestCase):
         clear=False,
     )
     def test_visual_chain_timeout_does_not_count_redundant_dashscope_sdk_slot(self):
-        self.assertEqual(_visual_chain_timeout_seconds(120.0), 250.0)
+        self.assertEqual(_visual_chain_timeout_seconds(120.0), 120.0)
 
     def test_runtime_config_enables_mimo_fallback_timeout_slot(self):
         with ai_client.use_config(
@@ -127,7 +127,7 @@ class AiClientPageVisualFallbacksTest(unittest.TestCase):
                 "vision_ai_provider_order": "qwen_vl,mimo_vl",
             }
         ):
-            self.assertEqual(_visual_chain_timeout_seconds(120.0), 250.0)
+            self.assertEqual(_visual_chain_timeout_seconds(120.0), 120.0)
 
     def test_runtime_config_overrides_provider_timeout(self):
         with ai_client.use_config(
@@ -136,6 +136,67 @@ class AiClientPageVisualFallbacksTest(unittest.TestCase):
             }
         ):
             self.assertEqual(ai_client._vision_provider_timeout_seconds(), 20.0)
+
+    def test_ranked_provider_order_preserves_requested_order(self):
+        with ai_client.use_config(
+            {
+                "ark_api_key": "ark-test",
+                "ark_vision_model": "ep-ark",
+                "dashscope_api_key": "qwen-test",
+                "visual_model": "qwen3-vl-plus",
+                "vision_ai_provider_order": "volcengine_ark_vl,qwen_vl",
+            }
+        ):
+            self.assertEqual(
+                ai_client.ranked_vision_provider_order(),
+                ["volcengine_ark_vl", "qwen_vl"],
+            )
+            self.assertEqual(
+                ai_client.configured_vision_provider_order(),
+                ["volcengine_ark_vl", "qwen_vl"],
+            )
+
+    def test_page_timeout_budget_prevents_late_qwen_fallback(self):
+        with ai_client.use_config(
+            {
+                "ark_api_key": "ark-test",
+                "ark_base_url": "https://ark.example.com/v3",
+                "ark_endpoint_id": "ep-test",
+                "dashscope_api_key": "qwen-test",
+                "dashscope_base_url": "https://dashscope.example.com/compatible-mode/v1",
+                "visual_model": "qwen3-vl-plus",
+                "vision_ai_provider_order": "volcengine_ark_vl,qwen_vl",
+                "vision_ai_timeout_seconds": "0.1",
+                "vision_ai_provider_timeout_seconds": "0.1",
+            }
+        ):
+            with patch("ai_client._call_openai_vision_provider") as mock_qwen:
+
+                def slow_ark(**kwargs):
+                    time.sleep(0.15)
+                    return (
+                        failed_result("provider_call_timeout_after_0.1s"),
+                        {
+                            "provider": "volcengine_ark_vl",
+                            "model": "ep-test",
+                            "timeout_seconds": kwargs["timeout_seconds"],
+                            "elapsed_ms": 150,
+                            "status": "failed",
+                            "error_type": "timeout",
+                            "error_message": "provider_call_timeout_after_0.1s",
+                            "fallback_from": None,
+                        },
+                    )
+
+                with patch("ai_client._call_ark_vision_provider", side_effect=slow_ark):
+                    result = ai_client.parse_page_visual("ZmFrZS1wYWdl")
+
+        mock_qwen.assert_not_called()
+        self.assertEqual(
+            [attempt["provider"] for attempt in result["_vision_provider_attempts"]],
+            ["volcengine_ark_vl"],
+        )
+        self.assertIn("vision_page_timeout", result["warnings"])
 
     def test_classify_vision_failure_allows_successful_provider_fallback(self):
         result = {
@@ -185,6 +246,7 @@ class AiClientPageVisualFallbacksTest(unittest.TestCase):
             ["ep-20260504082005-gvl4b", "doubao-seed-1-6-vision-250815"],
         )
         self.assertEqual(config["model_candidates"][0]["type"], "endpoint_id")
+        self.assertEqual(len(config["model_candidates"]), 2)
 
     def test_ark_responses_payload_uses_responses_api_schema(self):
         captured = {}

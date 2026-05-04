@@ -300,15 +300,20 @@ const emptyDescription = computed(() => {
 
 const taskStatusText = computed(() => {
   if (!task.value) return '等待上传';
-  return { pending: '等待中', processing: '解析中', done: '完成', failed: '失败', paused: '已暂停' }[
-    task.value.status
-  ] || task.value.status;
+  return {
+    pending: '等待中',
+    processing: '解析中',
+    done: '完成',
+    failed: '失败',
+    paused: '已暂停',
+    canceled: '已取消',
+  }[task.value.status] || task.value.status;
 });
 
 const taskTagType = computed(() => {
   if (task.value?.status === 'done') return 'success';
   if (task.value?.status === 'failed') return 'danger';
-  if (task.value?.status === 'paused') return 'info';
+  if (task.value?.status === 'paused' || task.value?.status === 'canceled') return 'info';
   return 'warning';
 });
 
@@ -352,7 +357,7 @@ function stopPolling() {
 async function fetchTask() {
   if (!taskId.value) return;
   task.value = await getTaskStatus(taskId.value);
-  if (['done', 'failed', 'paused'].includes(task.value.status)) {
+  if (['done', 'failed', 'paused', 'canceled'].includes(task.value.status)) {
     stopPolling();
     await fetchSources();
   }

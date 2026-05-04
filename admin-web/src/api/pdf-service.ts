@@ -9,6 +9,15 @@ export interface PdfServiceStatus {
   queue?: { pending: number; processing: number; completed_today: number };
   memory_mb?: number;
   ai_providers?: Record<string, { enabled: boolean; last_call_at?: string | null; last_error?: string | null }>;
+  runtime?: {
+    ai_provider_vision?: string;
+    vision_ai_provider_order?: string;
+    vision_ai_timeout_seconds?: number;
+    vision_ai_provider_timeout_seconds?: number;
+    pdf_visual_page_timeout_seconds?: number;
+    pdf_visual_provider_timeout_seconds?: number;
+  };
+  recent_provider_attempts?: Array<Record<string, any>>;
   error?: string;
 }
 

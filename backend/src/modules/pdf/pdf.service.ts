@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -99,6 +99,7 @@ export class PdfService {
     if (!task) {
       throw new NotFoundException('解析任务不存在');
     }
+    const liveProgress = await this.readTaskLiveProgress(task);
 
     return {
       status: task.status,
@@ -107,6 +108,9 @@ export class PdfService {
       done_count: task.done_count,
       result_summary: task.result_summary,
       error: task.error,
+      page_progress: liveProgress.page_progress,
+      provider_runtime: liveProgress.provider_runtime,
+      stale_processing: liveProgress.stale_processing,
     };
   }
 
@@ -284,11 +288,11 @@ export class PdfService {
     const task = await this.taskRepository.findOne({ where: { id: taskId } });
     if (!task) throw new NotFoundException('解析任务不存在');
     if (
-      ![ParseTaskStatus.Failed, ParseTaskStatus.Paused].includes(
+      ![ParseTaskStatus.Failed, ParseTaskStatus.Paused, ParseTaskStatus.Canceled].includes(
         task.status as ParseTaskStatus,
       )
     ) {
-      throw new BadRequestException('只有失败或已暂停的任务才能重试');
+      throw new BadRequestException('只有失败、已暂停或已取消的任务才能重试');
     }
     await this.taskRepository.update(task.id, {
       status: ParseTaskStatus.Pending,
@@ -297,6 +301,7 @@ export class PdfService {
       total_count: 0,
       done_count: 0,
       attempt: task.attempt + 1,
+      result_summary: null,
     });
     setImmediate(() => this.emitter.emit('parse', task.id));
     return { task_id: task.id, status: ParseTaskStatus.Pending };
@@ -321,6 +326,26 @@ export class PdfService {
       error: '用户已暂停解析，可稍后重试',
     });
     return { task_id: task.id, status: ParseTaskStatus.Paused };
+  }
+
+  async cancel(taskId: string) {
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('解析任务不存在');
+    if (
+      ![ParseTaskStatus.Pending, ParseTaskStatus.Processing, ParseTaskStatus.Paused].includes(
+        task.status as ParseTaskStatus,
+      )
+    ) {
+      throw new BadRequestException('只有等待中、解析中或已暂停的任务才能取消');
+    }
+    const controller = this.activeAbortControllers.get(task.id);
+    controller?.abort();
+    this.callbackMaterialMaps.delete(task.id);
+    await this.taskRepository.update(task.id, {
+      status: ParseTaskStatus.Canceled,
+      error: '用户已取消解析，可稍后重试',
+    });
+    return { task_id: task.id, status: ParseTaskStatus.Canceled };
   }
 
   async remove(taskId: string) {
@@ -3536,6 +3561,111 @@ export class PdfService {
     }
   }
 
+  private mergeTaskResultSummary(
+    value: string | null | undefined,
+    patch: Record<string, any>,
+  ) {
+    return {
+      ...this.parseResultSummary(value),
+      ...patch,
+    };
+  }
+
+  private kernelRunDebugDir(taskId: string) {
+    return join(process.cwd(), 'debug', 'pdf-ai-preaudit', taskId, 'kernel-run');
+  }
+
+  private checkpointManifestPath(taskId: string) {
+    return join(this.kernelRunDebugDir(taskId), 'debug', 'checkpoint-manifest.json');
+  }
+
+  private buildTaskRuntimeSnapshot(
+    taskId: string,
+    aiConfig: Record<string, string>,
+    debugDir: string,
+  ) {
+    return {
+      task_id: taskId,
+      debug_dir: debugDir,
+      requested_provider_order: this.firstMeaningfulText(
+        aiConfig.vision_ai_provider_order,
+      ) || null,
+      requested_visual_model: this.firstMeaningfulText(aiConfig.visual_model) || null,
+      requested_ark_model: this.firstMeaningfulText(aiConfig.ark_vision_model) || null,
+      requested_mimo_model: this.firstMeaningfulText(aiConfig.mimo_vision_model) || null,
+      started_at: new Date().toISOString(),
+    };
+  }
+
+  private async readTaskLiveProgress(task: ParseTask) {
+    const summary = this.parseResultSummary(task.result_summary);
+    const runtime = summary.runtime && typeof summary.runtime === 'object'
+      ? summary.runtime
+      : null;
+    const manifest = await this.readJsonIfExists(this.checkpointManifestPath(task.id));
+    const totalPages = Number(
+      manifest?.total_pages ||
+      summary?.stats?.pages_count ||
+      summary?.stage_counts?.pages_count ||
+      0,
+    );
+    const pageEntries =
+      manifest?.pages && typeof manifest.pages === 'object'
+        ? (manifest.pages as Record<string, Record<string, any>>)
+        : {};
+    const staleProcessing =
+      task.status === ParseTaskStatus.Processing &&
+      !this.activeAbortControllers.has(task.id);
+    const pages = Array.from({ length: Math.max(0, totalPages) }, (_unused, index) => {
+      const pageNo = index + 1;
+      const entry = pageEntries[String(pageNo)] || {};
+      const rawStatus = this.safeDisplayText(entry.status, '');
+      const mappedStatus =
+        rawStatus === 'running'
+          ? 'processing'
+          : rawStatus === 'success'
+            ? 'success'
+            : rawStatus === 'failed' || rawStatus === 'quarantined'
+              ? [ParseTaskStatus.Paused, ParseTaskStatus.Failed, ParseTaskStatus.Canceled].includes(
+                  task.status as ParseTaskStatus,
+                )
+                ? 'retryable'
+                : 'failed'
+              : 'pending';
+      return {
+        page_no: pageNo,
+        status: mappedStatus,
+        stage: this.safeDisplayText(entry.stage, '') || null,
+        provider: this.safeDisplayText(entry.provider_used, '') || null,
+        attempts: Number(entry.attempts || 0),
+        started_at: this.firstMeaningfulText(entry.started_at) || null,
+        finished_at: this.firstMeaningfulText(entry.finished_at) || null,
+        updated_at: this.firstMeaningfulText(entry.updated_at) || null,
+        last_error_type: this.firstMeaningfulText(entry.last_error_type) || null,
+        last_error_message: this.firstMeaningfulText(entry.last_error_message) || null,
+        recovered_from_cache: Boolean(entry.recovered_from_cache),
+      };
+    });
+    return {
+      page_progress: {
+        total_pages: totalPages,
+        pending_pages: pages.filter((item) => item.status === 'pending').length,
+        processing_pages: pages.filter((item) => item.status === 'processing').length,
+        success_pages: pages.filter((item) => item.status === 'success').length,
+        failed_pages: pages.filter((item) => item.status === 'failed').length,
+        retryable_pages: pages.filter((item) => item.status === 'retryable').length,
+        manifest_updated_at: this.firstMeaningfulText(manifest?.updated_at) || null,
+        pages,
+      },
+      provider_runtime: {
+        ...(runtime || {}),
+        service_provider_order_snapshot:
+          this.firstMeaningfulText(runtime?.requested_provider_order) || null,
+      },
+      stale_processing: staleProcessing,
+    };
+  }
+
   private resolveDebugArtifactPath(artifacts: Record<string, any>, path: unknown) {
     if (typeof path !== 'string' || !path || path.includes('\0')) {
       throw new BadRequestException('非法 artifact path');
@@ -3587,12 +3717,24 @@ export class PdfService {
     if (!task) {
       return;
     }
+    if (task.status !== ParseTaskStatus.Pending) {
+      return;
+    }
 
     try {
       this.logger.log(`Start parse task id=${task.id} bank=${task.bank_id}`);
+      const debugDir = this.kernelRunDebugDir(task.id);
+      const aiConfig = await this.getAiConfig(task.id);
+      const runtimeSnapshot = this.buildTaskRuntimeSnapshot(task.id, aiConfig, debugDir);
       await this.taskRepository.update(task.id, {
         status: ParseTaskStatus.Processing,
         progress: 10,
+        result_summary: JSON.stringify(
+          this.mergeTaskResultSummary(task.result_summary, {
+            runtime: runtimeSnapshot,
+            debug_dir: debugDir,
+          }),
+        ),
       });
       await this.clearPreviousTaskResults(task.id);
       this.callbackMaterialMaps.delete(task.id);
@@ -3616,14 +3758,8 @@ export class PdfService {
         `${pdfServiceUrl}/parse-by-url`,
         {
           url: task.file_url,
-          ai_config: await this.getAiConfig(),
-          debug_dir: join(
-            process.cwd(),
-            'debug',
-            'pdf-ai-preaudit',
-            task.id,
-            'kernel-run',
-          ),
+          ai_config: aiConfig,
+          debug_dir: debugDir,
           callback_url: `${backendUrl}/internal/pdf/tasks/${task.id}`,
           callback_token: internalToken,
           callback_batch_size: 20,
@@ -3692,13 +3828,17 @@ export class PdfService {
           total_count: questions.length,
           done_count: questions.length,
           error: null,
-          result_summary: JSON.stringify({
-            stats: result.stats || {},
-            detection: result.detection || result.stats?.detection || null,
-            delivery: 'direct_response',
-            debug_file: this.taskAiPreauditDebugFiles.get(task.id) || null,
-            dedupe: this.taskQuestionDedupeStats.get(task.id) || null,
-          }),
+          result_summary: JSON.stringify(
+            this.mergeTaskResultSummary(task.result_summary, {
+              runtime: runtimeSnapshot,
+              debug_dir: debugDir,
+              stats: result.stats || {},
+              detection: result.detection || result.stats?.detection || null,
+              delivery: 'direct_response',
+              debug_file: this.taskAiPreauditDebugFiles.get(task.id) || null,
+              dedupe: this.taskQuestionDedupeStats.get(task.id) || null,
+            }),
+          ),
         });
         await this.writeAiPreauditDebugArtifacts(task, {
           source: 'direct_response_done',
@@ -3726,13 +3866,17 @@ export class PdfService {
           total_count: Number(result.questions_count || savedCount || 0),
           done_count: Number(result.questions_count || savedCount || 0),
           error: null,
-          result_summary: JSON.stringify({
-            stats: result.stats || {},
-            detection: result.detection || result.stats?.detection || null,
-            delivery: 'callback_batches',
-            debug_file: this.taskAiPreauditDebugFiles.get(task.id) || null,
-            dedupe: this.taskQuestionDedupeStats.get(task.id) || null,
-          }),
+          result_summary: JSON.stringify(
+            this.mergeTaskResultSummary(task.result_summary, {
+              runtime: runtimeSnapshot,
+              debug_dir: debugDir,
+              stats: result.stats || {},
+              detection: result.detection || result.stats?.detection || null,
+              delivery: 'callback_batches',
+              debug_file: this.taskAiPreauditDebugFiles.get(task.id) || null,
+              dedupe: this.taskQuestionDedupeStats.get(task.id) || null,
+            }),
+          ),
         });
         await this.writeAiPreauditDebugArtifacts(task, {
           source: 'callback_batches',
@@ -3756,6 +3900,10 @@ export class PdfService {
         this.logger.warn(`Paused parse task id=${task.id}`);
         return;
       }
+      if (current?.status === ParseTaskStatus.Canceled) {
+        this.logger.warn(`Canceled parse task id=${task.id}`);
+        return;
+      }
       if (current?.status === ParseTaskStatus.Done) {
         this.logger.warn(`Parse task id=${task.id} finished via late callback after direct PDF call error; preserving done state`);
         await this.taskRepository.update(task.id, { error: null });
@@ -3770,6 +3918,11 @@ export class PdfService {
         status: ParseTaskStatus.Failed,
         progress: 100,
         error: message,
+        result_summary: JSON.stringify(
+          this.mergeTaskResultSummary(current?.result_summary, {
+            error: message,
+          }),
+        ),
       });
     } finally {
       this.activeAbortControllers.delete(task.id);
@@ -3782,8 +3935,8 @@ export class PdfService {
   ) {
     const task = await this.taskRepository.findOne({ where: { id: taskId } });
     if (!task) throw new NotFoundException('解析任务不存在');
-    if (task.status === ParseTaskStatus.Paused)
-      return { ignored: true, reason: 'task paused' };
+    if ([ParseTaskStatus.Paused, ParseTaskStatus.Canceled].includes(task.status))
+      return { ignored: true, reason: `task ${task.status}` };
 
     const saved = await this.saveMaterials(task.bank_id, materials, task.id);
     const existing =
@@ -3802,8 +3955,8 @@ export class PdfService {
   ) {
     const task = await this.taskRepository.findOne({ where: { id: taskId } });
     if (!task) throw new NotFoundException('解析任务不存在');
-    if (task.status === ParseTaskStatus.Paused)
-      return { ignored: true, reason: 'task paused' };
+    if ([ParseTaskStatus.Paused, ParseTaskStatus.Canceled].includes(task.status))
+      return { ignored: true, reason: `task ${task.status}` };
 
     const materials =
       this.callbackMaterialMaps.get(taskId) || new Map<string, Material>();
@@ -3834,8 +3987,8 @@ export class PdfService {
   async finishCallbackTask(taskId: string, body: Record<string, any>) {
     const task = await this.taskRepository.findOne({ where: { id: taskId } });
     if (!task) throw new NotFoundException('解析任务不存在');
-    if (task.status === ParseTaskStatus.Paused)
-      return { ignored: true, reason: 'task paused' };
+    if ([ParseTaskStatus.Paused, ParseTaskStatus.Canceled].includes(task.status))
+      return { ignored: true, reason: `task ${task.status}` };
 
     const doneCount = Number(
       body.done_count || task.done_count || body.total_count || 0,
@@ -3872,13 +4025,15 @@ export class PdfService {
       total_count: totalCount,
       done_count: doneCount,
       error: null,
-      result_summary: JSON.stringify({
-        stats: body.stats || {},
-        detection: body.detection || body.stats?.detection || null,
-        delivery: 'callback_batches',
-        debug_file: this.taskAiPreauditDebugFiles.get(task.id) || null,
-        dedupe: this.taskQuestionDedupeStats.get(task.id) || null,
-      }),
+      result_summary: JSON.stringify(
+        this.mergeTaskResultSummary(task.result_summary, {
+          stats: body.stats || {},
+          detection: body.detection || body.stats?.detection || null,
+          delivery: 'callback_batches',
+          debug_file: this.taskAiPreauditDebugFiles.get(task.id) || null,
+          dedupe: this.taskQuestionDedupeStats.get(task.id) || null,
+        }),
+      ),
     });
     await this.writeAiPreauditDebugArtifacts(task, {
       source: 'callback_finish',
@@ -3917,17 +4072,20 @@ export class PdfService {
     taskId: string,
     summary: Record<string, any>,
   ) {
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
     await this.taskRepository.update(taskId, {
       status: ParseTaskStatus.Failed,
       progress: 100,
       total_count: 0,
       done_count: 0,
       error: '未解析到题目',
-      result_summary: JSON.stringify({
-        ...summary,
-        error: summary.error || '未解析到题目',
-        warning: 'zero_questions_extracted',
-      }),
+      result_summary: JSON.stringify(
+        this.mergeTaskResultSummary(task?.result_summary, {
+          ...summary,
+          error: summary.error || '未解析到题目',
+          warning: 'zero_questions_extracted',
+        }),
+      ),
     });
   }
 
@@ -3945,7 +4103,7 @@ export class PdfService {
     return error instanceof Error ? error.message : 'PDF 解析失败';
   }
 
-  private async getAiConfig() {
+  private async getAiConfig(taskId?: string) {
     const configs = await this.systemConfigRepository.find({
       where: [
         { key: 'DASHSCOPE_API_KEY' },
@@ -4055,6 +4213,7 @@ export class PdfService {
       pdf_visual_page_timeout_seconds: read('PDF_VISUAL_PAGE_TIMEOUT_SECONDS'),
       pdf_visual_provider_timeout_seconds: read('PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS'),
       header_footer_blacklist: read('PDF_HEADER_FOOTER_BLACKLIST'),
+      parse_task_id: taskId || '',
     });
   }
 
@@ -4075,6 +4234,9 @@ export class PdfService {
     await this.materialRepository.delete({ parse_task_id: taskId });
     this.taskQuestionDedupeStats.delete(taskId);
     this.taskAiPreauditDebugFiles.delete(taskId);
+    await rm(this.kernelRunDebugDir(taskId), { recursive: true, force: true }).catch(
+      () => undefined,
+    );
   }
 
   private async saveMaterials(

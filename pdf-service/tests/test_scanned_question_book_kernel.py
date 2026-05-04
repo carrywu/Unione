@@ -5,7 +5,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from parser_kernel.adapter import _bbox_to_page_rect, parse_extractor_with_kernel
+from parser_kernel.adapter import (
+    _bbox_to_page_rect,
+    _visual_timeout_result,
+    parse_extractor_with_kernel,
+)
 
 
 class FakeScannedQuestionExtractor:
@@ -34,6 +38,26 @@ class FakeScannedQuestionExtractor:
 
 
 class ScannedQuestionBookKernelTest(unittest.TestCase):
+    def test_visual_timeout_result_uses_first_configured_provider(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "VISION_AI_PROVIDER_ORDER": "volcengine_ark_vl,qwen_vl",
+                "ARK_API_KEY": "ark-test",
+                "ARK_VISION_MODEL": "ep-ark",
+                "DASHSCOPE_API_KEY": "qwen-test",
+                "AI_VISUAL_MODEL": "qwen3-vl-plus",
+            },
+            clear=False,
+        ):
+            result = _visual_timeout_result(12.0)
+
+        self.assertEqual(result["_vision_provider"], "volcengine_ark_vl")
+        self.assertEqual(
+            result["_vision_provider_attempts"][0]["provider"],
+            "volcengine_ark_vl",
+        )
+
     def test_visual_bbox_conversion_uses_actual_capped_render_scale(self):
         class CappedRenderExtractor(FakeScannedQuestionExtractor):
             class _FakePage:

@@ -7,6 +7,7 @@ import queue
 import re
 import threading
 import time
+from datetime import datetime, timezone
 import httpx
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -14,9 +15,13 @@ from typing import Any
 
 import dashscope
 from openai import OpenAI
-from monitor import record_ai_call
+from monitor import record_ai_call, record_provider_attempt
 
 _AI_CONFIG: ContextVar[dict[str, str]] = ContextVar("AI_CONFIG", default={})
+_VISUAL_CALL_CONTEXT: ContextVar[dict[str, Any]] = ContextVar(
+    "VISUAL_CALL_CONTEXT",
+    default={},
+)
 
 
 PAGE_PARSE_PROMPT = """你是“先读题再识别”的试卷阅片引擎。请基于整页图像理解题目结构、图表关系，并返回完整结构化 JSON，不得编造。
@@ -304,6 +309,15 @@ def use_config(config: dict[str, str] | None):
         _AI_CONFIG.reset(token)
 
 
+@contextmanager
+def use_visual_call_context(context: dict[str, Any] | None):
+    token = _VISUAL_CALL_CONTEXT.set(context or {})
+    try:
+        yield
+    finally:
+        _VISUAL_CALL_CONTEXT.reset(token)
+
+
 def _config_value(key: str, env_key: str | None = None, default: str | None = None) -> str | None:
     config = _AI_CONFIG.get()
     value = config.get(key)
@@ -325,6 +339,10 @@ def current_config_value(
 def current_config_present(key: str, env_key: str | None = None) -> bool:
     value = _config_value(key, env_key)
     return bool(str(value or "").strip())
+
+
+def current_visual_call_context() -> dict[str, Any]:
+    return _VISUAL_CALL_CONTEXT.get() or {}
 
 
 DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -627,8 +645,6 @@ def _resolve_ark_vl_config() -> dict[str, Any]:
         ("volcengine_ark_endpoint_id", "VOLCENGINE_ARK_ENDPOINT_ID"),
         ("ark_vision_model", "ARK_VISION_MODEL"),
         ("volcengine_ark_vision_model", "VOLCENGINE_ARK_VISION_MODEL"),
-        ("ark_model", "ARK_MODEL"),
-        ("volcengine_ark_model", "VOLCENGINE_ARK_MODEL"),
     ]
     candidate_models: list[dict[str, str]] = []
     seen_models: set[str] = set()
@@ -644,7 +660,7 @@ def _resolve_ark_vl_config() -> dict[str, Any]:
             }
         )
         seen_models.add(value)
-    if DEFAULT_ARK_VISION_MODEL not in seen_models:
+    if not candidate_models and DEFAULT_ARK_VISION_MODEL not in seen_models:
         candidate_models.append(
             {
                 "model": DEFAULT_ARK_VISION_MODEL,
@@ -716,16 +732,13 @@ def configured_vision_provider_order() -> list[str]:
     configs = vision_provider_configs()
     return [
         provider
-        for provider in ranked_vision_provider_order()
+        for provider in vision_provider_order()
         if configs.get(provider, {}).get("configured")
     ]
 
 
 def ranked_vision_provider_order() -> list[str]:
-    requested = vision_provider_order()
-    preferred = [provider for provider in PREFERRED_VISION_PROVIDER_ORDER if provider in requested]
-    remainder = [provider for provider in requested if provider not in preferred]
-    return preferred + remainder
+    return vision_provider_order()
 
 
 def reset_vision_runtime_state() -> None:
@@ -793,16 +806,17 @@ def _provider_cooldown_attempt(
     timeout_seconds: float,
     fallback_from: str | None = None,
 ) -> dict[str, Any]:
-    return {
-        "provider": provider_config["provider"],
-        "model": provider_config.get("model") or "",
-        "timeout_seconds": timeout_seconds,
-        "elapsed_ms": 0,
-        "status": "failed",
-        "error_type": "cooldown_active",
-        "error_message": f"{provider_config['provider']} cooldown_active",
-        "fallback_from": fallback_from,
-    }
+    return _vision_attempt_payload(
+        provider=provider_config["provider"],
+        model=str(provider_config.get("model") or ""),
+        timeout_seconds=timeout_seconds,
+        started_at=time.perf_counter(),
+        status="failed",
+        error_type="cooldown_active",
+        error_message=f"{provider_config['provider']} cooldown_active",
+        fallback_from=fallback_from,
+        fallback_reason="provider_in_cooldown",
+    )
 
 
 def _provider_cache_key(provider: str, provider_config: dict[str, Any], page_b64: str) -> str:
@@ -1172,20 +1186,42 @@ def _vision_attempt_payload(
     error_type: str | None = None,
     error_message: str | None = None,
     fallback_from: str | None = None,
+    fallback_reason: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    visual_context = current_visual_call_context()
+    finished_at = datetime.now(timezone.utc)
+    elapsed_ms = int((time.perf_counter() - started_at) * 1000)
     payload = {
+        "taskId": str(
+            visual_context.get("task_id")
+            or current_config_value("parse_task_id")
+            or ""
+        )
+        or None,
+        "pageNo": visual_context.get("page_no"),
         "provider": provider,
         "model": model,
         "timeout_seconds": timeout_seconds,
-        "elapsed_ms": int((time.perf_counter() - started_at) * 1000),
+        "elapsed_ms": elapsed_ms,
+        "durationMs": elapsed_ms,
         "status": status,
         "error_type": error_type,
+        "errorType": error_type,
         "error_message": error_message,
+        "startedAt": datetime.fromtimestamp(
+            finished_at.timestamp() - (elapsed_ms / 1000),
+            timezone.utc,
+        ).isoformat(),
+        "finishedAt": finished_at.isoformat(),
         "fallback_from": fallback_from,
+        "fallbackReason": fallback_reason
+        or (error_type if fallback_from else None)
+        or ("fallback_from_previous_provider" if fallback_from else None),
     }
     if extra:
         payload.update(extra)
+    record_provider_attempt(payload)
     return payload
 
 
@@ -1206,6 +1242,41 @@ def _annotate_vision_result(
     result["_vision_provider_attempts"] = attempts
     result["_vision_fallback_from"] = fallback_from
     return result
+
+
+def _page_timeout_result_with_attempts(
+    *,
+    page_started: float,
+    page_timeout_seconds: float,
+    attempts: list[dict[str, Any]],
+    fallback_provider: str,
+    fallback_model: str,
+    fallback_from: str | None = None,
+) -> dict[str, Any]:
+    timeout_message = f"page_visual_timeout_after_{page_timeout_seconds:.1f}s"
+    provider = attempts[-1]["provider"] if attempts else fallback_provider
+    model = attempts[-1]["model"] if attempts else fallback_model
+    return _annotate_vision_result(
+        {
+            "page_type": "unknown",
+            "materials": [],
+            "questions": [],
+            "visuals": [],
+            "warnings": ["vision_page_timeout"],
+            "error": timeout_message,
+            "schema_validation": {
+                "timeout_seconds": page_timeout_seconds,
+                "provider_attempts": attempts,
+            },
+            "raw_model_result": {"error": "vision_page_timeout"},
+        },
+        provider=provider,
+        model=model,
+        timeout_seconds=page_timeout_seconds,
+        elapsed_ms=int((time.perf_counter() - page_started) * 1000),
+        attempts=attempts,
+        fallback_from=fallback_from,
+    )
 
 
 def _call_openai_vision_provider(
@@ -1408,16 +1479,19 @@ def _provider_missing_attempt(
         "base_url_missing": f"{provider_config['provider']} base_url not configured",
         "model_missing": f"{provider_config['provider']} model_or_endpoint not configured",
     }
-    return {
-        "provider": provider_config["provider"],
-        "model": provider_config.get("model") or "",
-        "timeout_seconds": timeout_seconds,
-        "elapsed_ms": 0,
-        "status": "failed",
-        "error_type": _vision_provider_error_type(message_map.get(error_type), error_type),
-        "error_message": message_map.get(error_type, f"{provider_config['provider']} not configured"),
-        "fallback_from": fallback_from,
-    }
+    return _vision_attempt_payload(
+        provider=provider_config["provider"],
+        model=str(provider_config.get("model") or ""),
+        timeout_seconds=timeout_seconds,
+        started_at=time.perf_counter(),
+        status="failed",
+        error_type=_vision_provider_error_type(message_map.get(error_type), error_type),
+        error_message=message_map.get(
+            error_type, f"{provider_config['provider']} not configured"
+        ),
+        fallback_from=fallback_from,
+        fallback_reason="provider_not_configured",
+    )
 
 
 def _provider_attempt_failure_summary(attempts: list[dict[str, Any]]) -> str:
@@ -1541,8 +1615,13 @@ def _start_provider_call(
 
 def parse_page_visual(page_b64: str) -> dict[str, Any]:
     """Full-page screenshot -> structured question JSON via Qwen-VL."""
+    page_started = time.perf_counter()
     page_timeout_seconds = _vision_timeout_seconds()
-    timeout_seconds = _vision_provider_timeout_seconds(page_timeout_seconds)
+    page_deadline = page_started + page_timeout_seconds
+    timeout_seconds = min(
+        _vision_provider_timeout_seconds(page_timeout_seconds),
+        page_timeout_seconds,
+    )
     soft_timeout_seconds = min(timeout_seconds, _vision_soft_timeout_seconds())
     attempts: list[dict[str, Any]] = []
     configs = vision_provider_configs()
@@ -1589,11 +1668,21 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
             qwen_attempted = True
 
         if primary == "qwen_vl" and backup == "volcengine_ark_vl":
+            primary_budget = min(timeout_seconds, max(0.0, page_deadline - time.perf_counter()))
+            if primary_budget <= 0:
+                return _page_timeout_result_with_attempts(
+                    page_started=page_started,
+                    page_timeout_seconds=page_timeout_seconds,
+                    attempts=attempts,
+                    fallback_provider=primary,
+                    fallback_model=str(primary_config.get("model") or DEFAULT_QWEN_VISION_MODEL),
+                    fallback_from=last_fallback_from,
+                )
             primary_thread, primary_queue = _start_provider_call(
                 provider=primary,
                 provider_config=primary_config,
                 page_b64=page_b64,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=primary_budget,
                 fallback_from=last_fallback_from,
             )
             used_providers.add(primary)
@@ -1601,26 +1690,39 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
             primary_result: dict[str, Any] | None = None
             primary_attempt: dict[str, Any] | None = None
             try:
-                primary_result, primary_attempt = primary_queue.get(timeout=soft_timeout_seconds)
+                primary_result, primary_attempt = primary_queue.get(
+                    timeout=min(soft_timeout_seconds, max(0.01, page_deadline - time.perf_counter()))
+                )
             except queue.Empty:
                 primary_placeholder_index = len(attempts)
                 attempts.append(
-                    {
-                        "provider": primary,
-                        "model": primary_config.get("model") or DEFAULT_QWEN_VISION_MODEL,
-                        "timeout_seconds": timeout_seconds,
-                        "elapsed_ms": int(soft_timeout_seconds * 1000),
-                        "status": "failed",
-                        "error_type": "soft_timeout_hedged",
-                        "error_message": f"soft timeout exceeded after {soft_timeout_seconds:.1f}s; backup launched",
-                        "fallback_from": last_fallback_from,
-                    }
+                    _vision_attempt_payload(
+                        provider=primary,
+                        model=str(primary_config.get("model") or DEFAULT_QWEN_VISION_MODEL),
+                        timeout_seconds=primary_budget,
+                        started_at=time.perf_counter() - soft_timeout_seconds,
+                        status="failed",
+                        error_type="soft_timeout_hedged",
+                        error_message=f"soft timeout exceeded after {soft_timeout_seconds:.1f}s; backup launched",
+                        fallback_from=last_fallback_from,
+                        fallback_reason="qwen_soft_timeout_hedge",
+                    )
                 )
+                backup_budget = min(timeout_seconds, max(0.0, page_deadline - time.perf_counter()))
+                if backup_budget <= 0:
+                    return _page_timeout_result_with_attempts(
+                        page_started=page_started,
+                        page_timeout_seconds=page_timeout_seconds,
+                        attempts=attempts,
+                        fallback_provider=primary,
+                        fallback_model=str(primary_config.get("model") or DEFAULT_QWEN_VISION_MODEL),
+                        fallback_from=last_fallback_from,
+                    )
                 backup_thread, backup_queue = _start_provider_call(
                     provider=backup,
                     provider_config=configs[backup],
                     page_b64=page_b64,
-                    timeout_seconds=timeout_seconds,
+                    timeout_seconds=backup_budget,
                     fallback_from=primary,
                 )
                 used_providers.add(backup)
@@ -1628,8 +1730,7 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                 backup_done = False
                 backup_result: dict[str, Any] | None = None
                 backup_attempt: dict[str, Any] | None = None
-                deadline = time.perf_counter() + timeout_seconds
-                while time.perf_counter() < deadline and not (primary_done and backup_done):
+                while time.perf_counter() < page_deadline and not (primary_done and backup_done):
                     if not primary_done:
                         try:
                             primary_result, primary_attempt = primary_queue.get_nowait()
@@ -1683,6 +1784,15 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                         fallback_from=last_fallback_from,
                     )
                 last_fallback_from = primary
+            if time.perf_counter() >= page_deadline:
+                return _page_timeout_result_with_attempts(
+                    page_started=page_started,
+                    page_timeout_seconds=page_timeout_seconds,
+                    attempts=attempts,
+                    fallback_provider=primary,
+                    fallback_model=str(primary_config.get("model") or DEFAULT_QWEN_VISION_MODEL),
+                    fallback_from=last_fallback_from,
+                )
 
         for provider in available_providers:
             if provider in used_providers:
@@ -1690,11 +1800,21 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
             provider_config = configs.get(provider)
             if not provider_config:
                 continue
+            remaining_timeout = min(timeout_seconds, max(0.0, page_deadline - time.perf_counter()))
+            if remaining_timeout <= 0:
+                return _page_timeout_result_with_attempts(
+                    page_started=page_started,
+                    page_timeout_seconds=page_timeout_seconds,
+                    attempts=attempts,
+                    fallback_provider=provider,
+                    fallback_model=str(provider_config.get("model") or provider),
+                    fallback_from=last_fallback_from,
+                )
             result, attempt = _call_vision_provider_with_cache(
                 provider=provider,
                 provider_config=provider_config,
                 page_b64=page_b64,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=remaining_timeout,
                 fallback_from=last_fallback_from,
             )
             attempts.append(attempt)
@@ -1711,6 +1831,15 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                     fallback_from=last_fallback_from,
                 )
             last_fallback_from = provider
+            if time.perf_counter() >= page_deadline:
+                return _page_timeout_result_with_attempts(
+                    page_started=page_started,
+                    page_timeout_seconds=page_timeout_seconds,
+                    attempts=attempts,
+                    fallback_provider=provider,
+                    fallback_model=str(attempt.get("model") or provider_config.get("model") or provider),
+                    fallback_from=last_fallback_from,
+                )
 
     provider_failure_summary = _provider_attempt_failure_summary(attempts)
 
@@ -1735,6 +1864,15 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
         )
 
     qwen_base_url = str(qwen_config.get("base_url") or "")
+    if time.perf_counter() >= page_deadline:
+        return _page_timeout_result_with_attempts(
+            page_started=page_started,
+            page_timeout_seconds=page_timeout_seconds,
+            attempts=attempts,
+            fallback_provider="qwen_vl",
+            fallback_model=str(qwen_config.get("model") or DEFAULT_QWEN_VISION_MODEL),
+            fallback_from=attempts[-1].get("fallback_from") if attempts else None,
+        )
     if not dashscope_sdk_page_fallback_enabled(qwen_base_url):
         return _annotate_vision_result(
             {

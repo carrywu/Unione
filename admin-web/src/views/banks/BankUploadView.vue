@@ -165,12 +165,15 @@ const statusText = computed(() => {
   if (status === 'processing') return `解析中 ${task.value?.progress || 0}%`;
   if (status === 'done') return '完成';
   if (status === 'failed') return '失败';
+  if (status === 'paused') return '已暂停';
+  if (status === 'canceled') return '已取消';
   return '等待中';
 });
 
 const statusType = computed(() => {
   if (task.value?.status === 'done') return 'success';
   if (task.value?.status === 'failed') return 'danger';
+  if (task.value?.status === 'paused' || task.value?.status === 'canceled') return 'info';
   return 'warning';
 });
 
@@ -203,7 +206,7 @@ function startPolling() {
 async function fetchTask() {
   if (!taskId.value) return;
   task.value = await getTaskStatus(taskId.value);
-  if (task.value.status === 'done' || task.value.status === 'failed') {
+  if (['done', 'failed', 'paused', 'canceled'].includes(task.value.status)) {
     window.clearInterval(timer);
     if (task.value.status === 'done') {
       await fetchResultQuestions();

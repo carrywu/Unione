@@ -81,8 +81,8 @@
             >
               一键发布结果
             </el-button>
-            <el-button link type="warning" :disabled="!canPause(row.status)" @click="handlePause(row.id)">
-              暂停
+            <el-button link type="warning" :disabled="!canCancel(row.status)" @click="handleCancel(row.id)">
+              取消
             </el-button>
             <el-button link type="primary" :disabled="!canRetry(row.status)" @click="handleRetry(row.id)">
               重试
@@ -102,9 +102,41 @@
           <el-tag :type="tagType(selectedTask.status)">{{ statusText(selectedTask.status) }}</el-tag>
           <span class="refresh-time">最后刷新：{{ lastLiveRefreshAt || '-' }}</span>
           <el-button size="small" :loading="statusRefreshing" @click="refreshSelectedTask">刷新</el-button>
-          <el-button size="small" type="warning" :disabled="!canPause(selectedTask.status)" @click="handlePause(selectedTask.id)">
-            暂停
+          <el-button size="small" type="warning" :disabled="!canCancel(selectedTask.status)" @click="handleCancel(selectedTask.id)">
+            取消
           </el-button>
+        </div>
+        <div v-if="pageProgressRows.length" class="page-progress-panel">
+          <div class="page-progress-summary">
+            <strong>页级进度</strong>
+            <span>
+              total={{ selectedTask.page_progress?.total_pages || 0 }}
+              pending={{ selectedTask.page_progress?.pending_pages || 0 }}
+              processing={{ selectedTask.page_progress?.processing_pages || 0 }}
+              success={{ selectedTask.page_progress?.success_pages || 0 }}
+              failed={{ selectedTask.page_progress?.failed_pages || 0 }}
+              retryable={{ selectedTask.page_progress?.retryable_pages || 0 }}
+            </span>
+          </div>
+          <div class="page-progress-grid">
+            <div v-for="page in pageProgressRows" :key="page.page_no" class="page-progress-card">
+              <div class="page-progress-head">
+                <strong>第 {{ page.page_no }} 页</strong>
+                <el-tag size="small" :type="pageStatusTagType(page.status)">{{ page.status }}</el-tag>
+              </div>
+              <div class="page-progress-meta">
+                <span>stage={{ page.stage || '-' }}</span>
+                <span>provider={{ page.provider || '-' }}</span>
+                <span>attempts={{ page.attempts ?? 0 }}</span>
+              </div>
+              <div class="page-progress-meta">
+                <span v-if="page.last_error_type">error={{ page.last_error_type }}</span>
+                <span v-else>error=-</span>
+                <span v-if="page.recovered_from_cache">cache=reused</span>
+                <span v-else>cache=miss/live</span>
+              </div>
+            </div>
+          </div>
         </div>
         <pre class="terminal"><code>{{ terminalText }}</code></pre>
       </div>
@@ -164,10 +196,10 @@ import { useRouter } from 'vue-router';
 import { getBanks, type Bank } from '@/api/bank';
 import {
   deleteTask,
+  cancelTask,
   getAiPreauditDebug,
   getTaskList,
   getTaskStatus,
-  pauseTask,
   publishParseResult,
   retryTask,
   type AiPreauditDebug,
@@ -215,14 +247,19 @@ const terminalText = computed(() => {
     `attempt: ${task.attempt || 0}`,
     `created_at: ${formatTime(task.created_at)}`,
     `file_url: ${task.file_url || '-'}`,
+    `provider_order: ${task.provider_runtime?.requested_provider_order || '-'}`,
+    `visual_model: ${task.provider_runtime?.requested_visual_model || '-'}`,
+    task.stale_processing ? 'stale_processing: true' : 'stale_processing: false',
     task.error ? `error: ${task.error}` : 'error: -',
     ...summaryTerminalLines(task),
+    ...pageProgressTerminalLines(task),
     '',
     '# pdf-service',
     `reachable: ${pdfStatus.value.reachable ?? true}`,
     `service_status: ${pdfStatus.value.status || '-'}`,
     `queue: pending=${pdfStatus.value.queue?.pending ?? '-'} processing=${pdfStatus.value.queue?.processing ?? '-'} completed_today=${pdfStatus.value.queue?.completed_today ?? '-'}`,
     `memory_mb: ${pdfStatus.value.memory_mb ?? '-'}`,
+    `provider_order(runtime): ${pdfStatus.value.runtime?.vision_ai_provider_order || '-'}`,
     `qwen_last_call_at: ${pdfStatus.value.ai_providers?.qwen_vl?.last_call_at || '-'}`,
     `qwen_last_error: ${pdfStatus.value.ai_providers?.qwen_vl?.last_error || '-'}`,
     `deepseek_last_call_at: ${pdfStatus.value.ai_providers?.deepseek?.last_call_at || '-'}`,
@@ -271,13 +308,15 @@ const aiDebugHeadline = computed(() => {
   return `候选 ${rows} 条，需人工修复 ${failures} 条`;
 });
 
+const pageProgressRows = computed(() => selectedTask.value?.page_progress?.pages || []);
+
 async function fetchTasks() {
   loading.value = true;
   try {
     tasks.value = await getTaskList(bankId.value);
     if (selectedTask.value?.id) {
       const latest = tasks.value.find((task) => task.id === selectedTask.value?.id);
-      if (latest) selectedTask.value = latest;
+      if (latest) selectedTask.value = { ...selectedTask.value, ...latest };
     }
   } finally {
     loading.value = false;
@@ -416,6 +455,22 @@ function summaryTerminalLines(task: ParseTask) {
   ];
 }
 
+function pageProgressTerminalLines(task: ParseTask) {
+  const progress = task.page_progress;
+  if (!progress?.pages?.length) return [];
+  return [
+    '',
+    '# page progress',
+    `pages_total: ${progress.total_pages}`,
+    `pages_pending: ${progress.pending_pages}`,
+    `pages_processing: ${progress.processing_pages}`,
+    `pages_success: ${progress.success_pages}`,
+    `pages_failed: ${progress.failed_pages}`,
+    `pages_retryable: ${progress.retryable_pages}`,
+    `manifest_updated_at: ${formatTime(progress.manifest_updated_at || undefined)}`,
+  ];
+}
+
 function handleStatusDrawerClosed() {
   stopLiveStatus();
   selectedTask.value = null;
@@ -439,11 +494,11 @@ async function handleRetry(id?: string) {
   await fetchTasks();
 }
 
-async function handlePause(id?: string) {
+async function handleCancel(id?: string) {
   if (!id) return;
-  await ElMessageBox.confirm('确认暂停该解析任务？暂停后可点击重试重新开始。', '暂停解析', { type: 'warning' });
-  await pauseTask(id);
-  ElMessage.success('已暂停解析');
+  await ElMessageBox.confirm('确认取消该解析任务？取消后可点击重试重新开始。', '取消解析', { type: 'warning' });
+  await cancelTask(id);
+  ElMessage.success('已取消解析');
   await fetchTasks();
   if (selectedTask.value?.id === id) await refreshSelectedTask();
 }
@@ -478,22 +533,37 @@ async function handleDelete(id?: string) {
 }
 
 function statusText(status: string) {
-  return { pending: '等待中', processing: '解析中', done: '完成', failed: '失败', paused: '已暂停' }[status] || status;
+  return {
+    pending: '等待中',
+    processing: '解析中',
+    done: '完成',
+    failed: '失败',
+    paused: '已暂停',
+    canceled: '已取消',
+  }[status] || status;
 }
 
 function tagType(status: string) {
   if (status === 'done') return 'success';
   if (status === 'failed') return 'danger';
-  if (status === 'paused') return 'info';
+  if (status === 'paused' || status === 'canceled') return 'info';
   return 'warning';
 }
 
-function canPause(status: string) {
-  return ['pending', 'processing'].includes(status);
+function canCancel(status: string) {
+  return ['pending', 'processing', 'paused'].includes(status);
 }
 
 function canRetry(status: string) {
-  return ['failed', 'paused'].includes(status);
+  return ['failed', 'paused', 'canceled'].includes(status);
+}
+
+function pageStatusTagType(status: string) {
+  if (status === 'success') return 'success';
+  if (status === 'failed') return 'danger';
+  if (status === 'retryable') return 'warning';
+  if (status === 'processing') return 'warning';
+  return 'info';
 }
 
 function canPublishResult(task: ParseTask) {
@@ -519,9 +589,12 @@ function formatTime(value?: string) {
 
 function hintLine(task: ParseTask) {
   if (task.status === 'processing' && (task.progress || 0) <= 10 && !(task.done_count || 0)) {
-    return 'hint: 仍在 PDF 服务解析阶段；如长时间无变化，可先暂停再重试。';
+    return task.stale_processing
+      ? 'hint: 当前 processing 为僵尸状态，可直接取消后重试。'
+      : 'hint: 仍在 PDF 服务解析阶段；如长时间无变化，可先取消再重试。';
   }
   if (task.status === 'paused') return 'hint: 任务已暂停，可重试重新开始解析。';
+  if (task.status === 'canceled') return 'hint: 任务已取消，可重试重新开始解析。';
   if (task.status === 'failed' && task.error === '未解析到题目') return 'hint: 未解析到题目，请查看 parse summary 后重试或人工框选。';
   if (task.status === 'failed') return 'hint: 任务失败，可查看 error 后重试。';
   if (task.status === 'done') return 'hint: 解析完成，可点击查看结果。';
@@ -562,6 +635,48 @@ onBeforeUnmount(() => {
 .terminal-wrap {
   display: grid;
   gap: 12px;
+}
+
+.page-progress-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.page-progress-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.page-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.page-progress-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  display: grid;
+  gap: 6px;
+}
+
+.page-progress-head,
+.page-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.page-progress-meta {
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .terminal-toolbar {

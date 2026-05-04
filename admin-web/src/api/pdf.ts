@@ -7,7 +7,7 @@ export interface ParseTask {
   file_name?: string;
   task_type?: 'question_book' | 'answer_book';
   answer_book_mode?: 'text' | 'image' | 'auto';
-  status: 'pending' | 'processing' | 'done' | 'failed' | 'paused';
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'paused' | 'canceled';
   progress: number;
   total_count: number;
   done_count: number;
@@ -16,6 +16,30 @@ export interface ParseTask {
   attempt?: number;
   created_at?: string;
   bank?: { id: string; name: string; subject: string };
+  page_progress?: {
+    total_pages: number;
+    pending_pages: number;
+    processing_pages: number;
+    success_pages: number;
+    failed_pages: number;
+    retryable_pages: number;
+    manifest_updated_at?: string | null;
+    pages: Array<{
+      page_no: number;
+      status: 'pending' | 'processing' | 'success' | 'failed' | 'retryable';
+      stage?: string | null;
+      provider?: string | null;
+      attempts?: number;
+      started_at?: string | null;
+      finished_at?: string | null;
+      updated_at?: string | null;
+      last_error_type?: string | null;
+      last_error_message?: string | null;
+      recovered_from_cache?: boolean;
+    }>;
+  };
+  provider_runtime?: Record<string, any>;
+  stale_processing?: boolean;
 }
 
 export type OcrRegionMode = 'stem' | 'options' | 'material' | 'analysis' | 'image';
@@ -305,6 +329,12 @@ export function retryTask(taskId: string) {
 export function pauseTask(taskId: string) {
   return http.post<{ task_id: string; status: string }, { task_id: string; status: string }>(
     `/admin/pdf/pause/${taskId}`,
+  );
+}
+
+export function cancelTask(taskId: string) {
+  return http.post<{ task_id: string; status: string }, { task_id: string; status: string }>(
+    `/admin/pdf/cancel/${taskId}`,
   );
 }
 

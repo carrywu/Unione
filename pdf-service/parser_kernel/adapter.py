@@ -8,6 +8,7 @@ import re
 import tempfile
 import threading
 import json
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -223,6 +224,19 @@ def parse_extractor_with_kernel(
             "checkpoint_recovery_report": getattr(extractor, "_parser_kernel_recovery_report", None),
         },
     }
+
+
+def _task_id_from_debug_dir(debug_dir: str | Path | None) -> str | None:
+    if not debug_dir:
+        return None
+    parts = Path(debug_dir).parts
+    if "pdf-ai-preaudit" not in parts:
+        return None
+    index = parts.index("pdf-ai-preaudit")
+    if index + 1 >= len(parts):
+        return None
+    task_id = str(parts[index + 1]).strip()
+    return task_id or None
 
 
 def _debug_counts(
@@ -2686,10 +2700,16 @@ def _pages_from_visual_fallback(
                 recovered_from_cache=False,
             )
             _save_checkpoint_manifest(debug_dir, manifest)
-            visual_result, attempt_errors, attempts = _parse_page_visual_with_retry(
-                page_b64,
-                timeout_seconds=visual_timeout,
-            )
+            with ai_client.use_visual_call_context(
+                {
+                    "task_id": _task_id_from_debug_dir(debug_dir),
+                    "page_no": page_num,
+                }
+            ):
+                visual_result, attempt_errors, attempts = _parse_page_visual_with_retry(
+                    page_b64,
+                    timeout_seconds=visual_timeout,
+                )
         initial_page_image_path = page_image_path
         initial_prompt_path = page_prompt_path
         fallback_attempted = False
@@ -2698,8 +2718,14 @@ def _pages_from_visual_fallback(
         fallback_prompt_path: Path | None = None
         fallback_attempt_errors: list[dict[str, Any]] = []
         fallback_attempt_count = 0
-        if recovered_visual_result is None and _visual_result_failed(visual_result) and (
+        failure_reason = _classify_vision_failure(visual_result)
+        if (
+            recovered_visual_result is None
+            and _visual_result_failed(visual_result)
+            and failure_reason != "provider_timeout"
+            and (
             visual_result.get("error") or visual_result.get("schema_validation")
+            )
         ):
             compact_size = 1000
             if compact_size < VISUAL_PAGE_MAX_SIDE:
@@ -2724,10 +2750,16 @@ def _pages_from_visual_fallback(
                     except Exception:
                         compact_image_path = None
                     fallback_image_path = compact_image_path
-                    fallback_result, fallback_errors, fallback_attempts = _parse_page_visual_with_retry(
-                        compact_b64,
-                        timeout_seconds=_reduced_image_retry_timeout_seconds(visual_timeout),
-                    )
+                    with ai_client.use_visual_call_context(
+                        {
+                            "task_id": _task_id_from_debug_dir(debug_dir),
+                            "page_no": page_num,
+                        }
+                    ):
+                        fallback_result, fallback_errors, fallback_attempts = _parse_page_visual_with_retry(
+                            compact_b64,
+                            timeout_seconds=_reduced_image_retry_timeout_seconds(visual_timeout),
+                        )
                     fallback_attempt_errors = fallback_errors
                     fallback_attempt_count = fallback_attempts
                     attempts += fallback_attempts
@@ -2760,12 +2792,12 @@ def _pages_from_visual_fallback(
             "simplified_prompt_retry_reason",
             "prompt_builder_not_yet_parameterized",
         )
+        default_provider, default_model = _default_visual_provider_metadata()
         request_payload = {
             "page": page_num,
-            "provider": visual_result.get("_vision_provider") or "qwen_vl",
+            "provider": visual_result.get("_vision_provider") or default_provider,
             "model": visual_result.get("_vision_model")
-            or os.getenv("AI_VISUAL_MODEL")
-            or ai_client.DEFAULT_QWEN_VISION_MODEL,
+            or default_model,
             "timeout_seconds": visual_timeout,
             "page_image_path": str(page_image_path),
             "prompt_path": str(page_prompt_path),
@@ -2784,10 +2816,9 @@ def _pages_from_visual_fallback(
         }
         vision_call_record = {
             "page": page_num,
-            "provider": visual_result.get("_vision_provider") or "qwen_vl",
+            "provider": visual_result.get("_vision_provider") or default_provider,
             "model": visual_result.get("_vision_model")
-            or os.getenv("AI_VISUAL_MODEL")
-            or ai_client.DEFAULT_QWEN_VISION_MODEL,
+            or default_model,
             "timeout_seconds": visual_result.get("_vision_timeout_seconds") or visual_timeout,
             "elapsed_ms": visual_result.get("_vision_elapsed_ms"),
             "fallback_from": visual_result.get("_vision_fallback_from"),
@@ -2807,10 +2838,9 @@ def _pages_from_visual_fallback(
         visual_links["vision_ai_calls"].append(vision_call_record)
         visual_result["vision_ai"] = {
             "page": page_num,
-            "provider": visual_result.get("_vision_provider") or "qwen_vl",
+            "provider": visual_result.get("_vision_provider") or default_provider,
             "model": visual_result.get("_vision_model")
-            or os.getenv("AI_VISUAL_MODEL")
-            or ai_client.DEFAULT_QWEN_VISION_MODEL,
+            or default_model,
             "timeout_seconds": visual_result.get("_vision_timeout_seconds") or visual_timeout,
             "elapsed_ms": visual_result.get("_vision_elapsed_ms"),
             "fallback_from": visual_result.get("_vision_fallback_from"),
@@ -3691,23 +3721,46 @@ def _reduced_image_retry_timeout_seconds(page_timeout_seconds: float) -> float:
 
 
 def _visual_chain_timeout_seconds(provider_timeout_seconds: float) -> float:
-    configured_providers = ai_client.configured_vision_provider_order()
-    provider_slots = max(1, len(configured_providers))
-    sdk_fallback_enabled = (
-        "qwen_vl" in configured_providers
-        and ai_client.dashscope_sdk_page_fallback_enabled(
-            ai_client.current_config_value(
-                "dashscope_base_url",
-                "DASHSCOPE_BASE_URL",
-            ),
-        )
-    )
-    if sdk_fallback_enabled:
-        provider_slots += 1
-    return max(provider_timeout_seconds, provider_timeout_seconds * provider_slots + 10.0)
+    return max(provider_timeout_seconds, 0.0)
+
+
+def _default_visual_provider_metadata() -> tuple[str, str]:
+    configs = ai_client.vision_provider_configs()
+    requested = ai_client.vision_provider_order()
+    ordered = requested or list(configs.keys())
+    for provider in ordered:
+        provider_config = configs.get(provider)
+        if provider_config and provider_config.get("configured"):
+            return provider, _provider_model_from_config(provider, provider_config)
+    for provider in ordered:
+        provider_config = configs.get(provider)
+        if provider_config:
+            return provider, _provider_model_from_config(provider, provider_config)
+    return "unknown", ""
+
+
+def _provider_model_from_config(provider: str, provider_config: dict[str, Any]) -> str:
+    model = str(provider_config.get("model") or "").strip()
+    if model:
+        return model
+    model_candidates = provider_config.get("model_candidates") or []
+    if isinstance(model_candidates, list):
+        for candidate in model_candidates:
+            if not isinstance(candidate, dict):
+                continue
+            candidate_model = str(candidate.get("model") or "").strip()
+            if candidate_model:
+                return candidate_model
+    fallback_models = {
+        "qwen_vl": ai_client.DEFAULT_QWEN_VISION_MODEL,
+        "mimo_vl": ai_client.DEFAULT_MIMO_VISION_MODEL,
+        "volcengine_ark_vl": ai_client.DEFAULT_ARK_VISION_MODEL,
+    }
+    return fallback_models.get(provider, "")
 
 
 def _visual_timeout_result(timeout_seconds: float) -> dict[str, Any]:
+    provider, model = _default_visual_provider_metadata()
     return {
         "page_type": "unknown",
         "materials": [],
@@ -3717,36 +3770,27 @@ def _visual_timeout_result(timeout_seconds: float) -> dict[str, Any]:
         "error": f"page_visual_timeout_after_{timeout_seconds:.1f}s",
         "schema_validation": {"timeout_seconds": timeout_seconds},
         "raw_model_result": {"error": "vision_page_timeout"},
-        "_vision_provider": "qwen_vl",
-        "_vision_model": ai_client.current_config_value(
-            "visual_model",
-            "AI_VISUAL_MODEL",
-            ai_client.DEFAULT_QWEN_VISION_MODEL,
-        )
-        or ai_client.DEFAULT_QWEN_VISION_MODEL,
+        "_vision_provider": provider,
+        "_vision_model": model,
         "_vision_timeout_seconds": timeout_seconds,
         "_vision_elapsed_ms": int(timeout_seconds * 1000),
         "_vision_provider_attempts": [
-            {
-                "provider": "qwen_vl",
-                "model": ai_client.current_config_value(
-                    "visual_model",
-                    "AI_VISUAL_MODEL",
-                    ai_client.DEFAULT_QWEN_VISION_MODEL,
-                )
-                or ai_client.DEFAULT_QWEN_VISION_MODEL,
-                "timeout_seconds": timeout_seconds,
-                "elapsed_ms": int(timeout_seconds * 1000),
-                "status": "failed",
-                "error_type": "timeout",
-                "error_message": f"page_visual_timeout_after_{timeout_seconds:.1f}s",
-                "fallback_from": None,
-            }
+            ai_client._vision_attempt_payload(
+                provider=provider,
+                model=model,
+                timeout_seconds=timeout_seconds,
+                started_at=time.perf_counter() - timeout_seconds,
+                status="failed",
+                error_type="timeout",
+                error_message=f"page_visual_timeout_after_{timeout_seconds:.1f}s",
+            )
         ],
     }
 
 
 def _visual_failure_result(message: str) -> dict[str, Any]:
+    provider, model = _default_visual_provider_metadata()
+    timeout_seconds = _visual_page_timeout_seconds()
     return {
         "page_type": "unknown",
         "materials": [],
@@ -3756,31 +3800,20 @@ def _visual_failure_result(message: str) -> dict[str, Any]:
         "error": message,
         "schema_validation": {"exception": message},
         "raw_model_result": {"error": message},
-        "_vision_provider": "qwen_vl",
-        "_vision_model": ai_client.current_config_value(
-            "visual_model",
-            "AI_VISUAL_MODEL",
-            ai_client.DEFAULT_QWEN_VISION_MODEL,
-        )
-        or ai_client.DEFAULT_QWEN_VISION_MODEL,
-        "_vision_timeout_seconds": _visual_page_timeout_seconds(),
+        "_vision_provider": provider,
+        "_vision_model": model,
+        "_vision_timeout_seconds": timeout_seconds,
         "_vision_elapsed_ms": 0,
         "_vision_provider_attempts": [
-            {
-                "provider": "qwen_vl",
-                "model": ai_client.current_config_value(
-                    "visual_model",
-                    "AI_VISUAL_MODEL",
-                    ai_client.DEFAULT_QWEN_VISION_MODEL,
-                )
-                or ai_client.DEFAULT_QWEN_VISION_MODEL,
-                "timeout_seconds": _visual_page_timeout_seconds(),
-                "elapsed_ms": 0,
-                "status": "failed",
-                "error_type": "exception",
-                "error_message": message,
-                "fallback_from": None,
-            }
+            ai_client._vision_attempt_payload(
+                provider=provider,
+                model=model,
+                timeout_seconds=timeout_seconds,
+                started_at=time.perf_counter(),
+                status="failed",
+                error_type="exception",
+                error_message=message,
+            )
         ],
     }
 

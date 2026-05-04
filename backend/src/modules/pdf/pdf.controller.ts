@@ -210,6 +210,12 @@ export class PdfController {
     return this.pdfService.pause(taskId);
   }
 
+  @Post('cancel/:taskId')
+  @ApiOperation({ summary: '取消解析任务' })
+  cancel(@Param('taskId') taskId: string) {
+    return this.pdfService.cancel(taskId);
+  }
+
   @Delete('task/:taskId')
   @ApiOperation({ summary: '删除解析任务记录' })
   remove(@Param('taskId') taskId: string) {
