@@ -1,40 +1,30 @@
-# Commercial OCR Main Handoff
+# Commercial OCR Overnight Handoff
 
-当前主线已切换到 `main`，主题为 `commercial OCR first + VLM/LLM semantic assembler`。
+当前默认恢复入口：
 
-## 当前事实
+- 最新 overnight handoff：`/home/carry/project2/.agent/handoff/commercial-ocr-overnight-20260504-2335.md`
+- Phase README：`/home/carry/project2/docs/commercial-ocr-phase-reports/README.md`
+- 当前主线分支：`main`
+- 当前 code baseline commit：`d7b26a0`
 
-- merge 来源分支：`ralph/xingce-e2e-git-hygiene-delivery`
-- merge commit：`d411a90`
-- merge 后 hygiene commit：`2fbf506`
-- 当前开发策略：继续直接在 `main` 上推进，默认不再新建测试分支
+## 本轮落地范围
 
-## 本轮已完成
+- COCR-M2 mock fixture / mock provider / fallback tests
+- COCR-M3 OCR normalizer
+- COCR-M4 17-20 shared-material semantic assembler
+- COCR-M7 parse quality gate
+- COCR-M8-pre Tencent OCR SDK adapter + real smoke gating
+- 额外修复：vision soft-timeout hedge 胜者覆盖问题
 
-- 安全合并验证分支到 `main`
-- 从 Git index 中移除误跟踪的 `debug/**` runtime/raw response
-- 新增 `pdf-service/commercial_ocr` provider abstraction
-- 接入 provider 选择、fallback 顺序、mock provider、百度 `paper_cut_edu` adapter、腾讯 stub
-- 新增 COCR M0/M1 报告与新 `prd.json`
+## 仍未完成
 
-## 真实 provider 结论
+- COCR-M5 visual understanding
+- COCR-M9 review UI / publish hard gate
+- 既有回归：`test_provider_health_report` 两条、`test_visual_api_smoke_tool` 一条
 
-- provider：百度 `paper_cut_edu`
-- endpoint：`https://aip.baidubce.com/rest/2.0/ocr/v1/paper_cut_edu`
-- auth：AK/SK 换 `access_token`，也支持 `BAIDU_ACCESS_TOKEN` 直传
-- 真实 smoke：成功，第一页返回 33 个 normalized blocks
-- 本地 raw trace：`/tmp/cocr-baidu-smoke/debug/commercial_ocr/cocr-baidu-smoke-success.json`
+## 恢复建议
 
-## 必看文件
+1. `git checkout main && git pull --ff-only origin main`
+2. 先看 overnight handoff，再看对应 phase report。
+3. 优先处理 M5 / M8 hardening / M9 或既有 3 条回归。
 
-- `/home/carry/project2/docs/commercial-ocr-phase-reports/COCR-M0-baseline.md`
-- `/home/carry/project2/docs/commercial-ocr-phase-reports/COCR-M1-merge-main-and-provider-baseline.md`
-- `/home/carry/project2/docs/commercial-ocr-phase-reports/README.md`
-- `/home/carry/project2/.agent/reports/commercial-ocr-main-handoff.md`
-
-## 继续推进建议
-
-1. 先补 `backend pnpm build` 与 `pdf-service .venv` 全量测试结果。
-2. 进入 M2/M3：用真实 OCR blocks + visual summary 做 semantic assembler。
-3. 优先打通 `17-20` 共用材料题。
-4. 在 M7 前不要把 `question_count == expected_count` 当成功判定。

@@ -6,32 +6,36 @@
 - Merge source: `ralph/xingce-e2e-git-hygiene-delivery`
 - Merge commit: `d411a90`
 - Post-merge hygiene commit: `2fbf506`
-- Current phase docs:
-  - `docs/commercial-ocr-phase-reports/COCR-M0-baseline.md`
-  - `docs/commercial-ocr-phase-reports/COCR-M1-merge-main-and-provider-baseline.md`
+- Current code baseline after overnight implementation: `d7b26a0`
 
-## Code Delivered In M1
+## Delivered Through M8-pre
 
-- `pdf-service/commercial_ocr/types.py`
-- `pdf-service/commercial_ocr/adapters.py`
-- `pdf-service/commercial_ocr/service.py`
-- `pdf-service/tests/test_commercial_ocr_pipeline.py`
-- `pdf-service/tests/test_commercial_ocr_kernel_integration.py`
+- mock fixture providers:
+  - `mock_commercial_ocr`
+  - `mock_tencent_question_split`
+  - `mock_tencent_question_split_layout`
+- real providers:
+  - `baidu_paper_cut_edu`
+  - `tencent_question_split`
+  - `tencent_question_split_layout`
+- unified modules:
+  - `normalizer.py`
+  - `semantic_assembler.py`
+  - `quality_gate.py`
+- eval hook:
+  - `pdf-service/scripts/eval_commercial_ocr.py`
 
 ## Verification Snapshot
 
-- `backend pnpm test`: failed because no `test` script exists
 - `backend pnpm build`: passed
 - `admin-web pnpm build`: passed
-- `pdf-service python3 -m pytest tests/ -v`: failed because system Python lacks dependencies
-- `pdf-service .venv targeted commercial OCR tests`: 6 passed
-- `pdf-service .venv full pytest`: 115 passed, 3 failed, 1 skipped
-- `baidu paper_cut_edu` real smoke: passed on one page
+- `pdf-service targeted commercial OCR suite`: `27 passed / 1 skipped`
+- `pdf-service full pytest`: `136 passed / 3 failed / 2 skipped`
+- remaining failures are known regressions in provider health and visual smoke retry cache
 
-## Risks
+## Risk Notes
 
-- semantic assembler still pending
-- Tencent real adapter still pending
-- quality gate still only defined as contract
-- browser verification not refreshed in this round
-- existing full-suite failures remain in provider health and visual smoke cache tests
+- Tencent real API is still smoke-gated to explicit single-page runs.
+- Visual understanding layer is still pending.
+- Review UI / publish hard gate is still pending.
+- Baidu Key was previously exposed in chat and should be rotated.

@@ -16,8 +16,8 @@
         "Push origin/main without force push"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Merged validation branch into main with d411a90, removed tracked debug/runtime artifacts with 2fbf506, and kept origin/main updated. Evidence: docs/commercial-ocr-phase-reports/COCR-M0-baseline.md and COCR-M1-merge-main-and-provider-baseline.md."
     },
     {
       "id": "US-002",
@@ -32,8 +32,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Provider abstraction now supports mock_commercial_ocr, mock_tencent_question_split, mock_tencent_question_split_layout, baidu_paper_cut_edu, tencent_question_split, tencent_question_split_layout, and local_parser fallback. Evidence: pdf-service/commercial_ocr/, docs/commercial-ocr-phase-reports/COCR-M1-merge-main-and-provider-baseline.md, COCR-M8-tencent-ocr-adapter.md."
     },
     {
       "id": "US-003",
@@ -47,8 +47,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Deterministic fixtures and mock providers landed with no-network tests, provider failure controls, and fixture secret scans. Evidence: pdf-service/tests/fixtures/commercial_ocr/, tests/test_commercial_ocr_pipeline.py, docs/commercial-ocr-phase-reports/COCR-M2-mock-provider.md."
     },
     {
       "id": "US-004",
@@ -62,8 +62,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "OCR blocks now normalize across Baidu, Tencent QuestionSplitOCR, Tencent QuestionSplitLayoutOCR, and local parser pages with bbox validation and raw redaction. Evidence: pdf-service/commercial_ocr/normalizer.py, tests/test_commercial_ocr_normalizer.py, docs/commercial-ocr-phase-reports/COCR-M3-ocr-normalizer.md."
     },
     {
       "id": "US-005",
@@ -76,8 +76,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "MaterialGroup, NormalizedQuestion, and SemanticAssemblyResult now represent 17-20 shared-material ranges without duplicating shared stem into local stem. Evidence: pdf-service/commercial_ocr/types.py, semantic_assembler.py, tests/test_commercial_ocr_semantic_assembler.py, docs/commercial-ocr-phase-reports/COCR-M4-semantic-assembler.md."
     },
     {
       "id": "US-006",
@@ -91,8 +91,8 @@
         "Tests pass"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Semantic assembler baseline now emits material groups, question groups, grouping evidence/confidence, and human-review flags from normalized OCR blocks. Evidence: pdf-service/commercial_ocr/semantic_assembler.py, tests/test_commercial_ocr_semantic_assembler.py, eval output under pdf-service/debug/commercial-ocr-eval/20260504-233354/evaluation.json."
     },
     {
       "id": "US-007",
@@ -107,7 +107,7 @@
       ],
       "priority": 7,
       "passes": false,
-      "notes": ""
+      "notes": "Visual understanding remains a follow-up phase. This round preserved existing visual link outputs and added shared-asset placeholders, but did not add a new VLM verification layer. Follow-up: COCR-M5 visual understanding."
     },
     {
       "id": "US-008",
@@ -122,8 +122,8 @@
         "Tests pass"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Parse quality gate now evaluates extraction completeness, OCR completeness, visual asset preservation, semantic consistency, extracted-but-incomplete state, and review readiness. Evidence: pdf-service/commercial_ocr/quality_gate.py, tests/test_commercial_ocr_quality_gate.py, docs/commercial-ocr-phase-reports/COCR-M7-quality-gate.md."
     },
     {
       "id": "US-009",
@@ -137,8 +137,8 @@
         "Tests pass"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Baidu real smoke and fallback evidence remain tracked from M1, and Tencent adapter now adds env-driven endpoint/version/smoke gating plus trace archiving. Evidence: docs/commercial-ocr-phase-reports/COCR-M1-merge-main-and-provider-baseline.md and COCR-M8-tencent-ocr-adapter.md."
     },
     {
       "id": "US-010",
@@ -153,7 +153,7 @@
       ],
       "priority": 10,
       "passes": false,
-      "notes": ""
+      "notes": "Admin review and publish hard-gates are not yet wired to semantic assembly and quality-gate outputs. Existing M5A/M5B paths remain preserved. Follow-up: COCR-M9 review UI and publish policy."
     },
     {
       "id": "US-011",
@@ -167,8 +167,8 @@
         "Update .agent handoff and reports for the new COCR phase"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Phase README, M0/M1/M2/M3/M4/M7/M8 reports, progress append, overnight handoff, and mock-only eval script are now in place. Evidence: docs/commercial-ocr-phase-reports/, .agent/handoff/, .agent/reports/, pdf-service/scripts/eval_commercial_ocr.py."
     },
     {
       "id": "US-012",
@@ -182,8 +182,8 @@
         "git status is understandable after the changes"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Git hygiene continues to ignore secrets, uploads, provider traces, eval output, local PDFs, and the original Baidu sample JS while keeping source/tests/docs/fixtures trackable. Evidence: .gitignore, COCR-M0/COCR-M1 reports, and this round's clean fixture set."
     }
   ]
 }
