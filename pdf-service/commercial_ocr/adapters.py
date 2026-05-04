@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -10,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from commercial_ocr.config import get_config_value, get_positive_int
 from commercial_ocr.fixtures import provider_result_from_fixture
 from commercial_ocr.normalizer import normalize_baidu_page_result
 from commercial_ocr.types import NormalizedOCRBlock, ProviderOCRRequest, ProviderOCRResult, ProviderPageResult
@@ -63,22 +63,48 @@ class FixtureBackedMockProvider(CommercialOCRProvider):
 
     def analyze_document(self, request: ProviderOCRRequest) -> ProviderOCRResult:
         started = time.perf_counter()
-        status = self._provider_status or os.getenv(f"{_provider_env_prefix(self.provider_name)}_STATUS") or "ok"
+        effective_fixture_name = (
+            get_config_value(
+                f"{_provider_config_prefix(self.provider_name)}_fixture_name",
+                f"{_provider_env_prefix(self.provider_name)}_FIXTURE_NAME",
+            )
+            or self.fixture_name
+        )
+        status = self._provider_status or get_config_value(
+            f"{_provider_config_prefix(self.provider_name)}_status",
+            f"{_provider_env_prefix(self.provider_name)}_STATUS",
+            "ok",
+        ) or "ok"
         latency_ms = self._provider_latency_ms
         if latency_ms is None:
-            latency_ms = _positive_int(os.getenv(f"{_provider_env_prefix(self.provider_name)}_LATENCY_MS"), 8)
+            latency_ms = get_positive_int(
+                f"{_provider_config_prefix(self.provider_name)}_latency_ms",
+                f"{_provider_env_prefix(self.provider_name)}_LATENCY_MS",
+                default=8,
+            )
         provider_error = self._provider_error or _provider_error_from_env(self.provider_name)
         result = provider_result_from_fixture(
             self.provider_name,
             source_document_id=request.source_document_id,
             task_id=request.task_id,
-            fixture_name=self.fixture_name,
+            fixture_name=effective_fixture_name,
             provider_status=status,
             provider_error=provider_error,
             provider_latency_ms=latency_ms,
         )
         if request.page_numbers:
-            result.page_results = _replicate_fixture_pages(result.page_results, request.page_numbers, self.provider_name)
+            if _is_single_fixture_page(result.page_results):
+                result.page_results = _rebase_fixture_pages(
+                    result.page_results,
+                    request.page_numbers[0],
+                    self.provider_name,
+                )
+            else:
+                result.page_results = _replicate_fixture_pages(
+                    result.page_results,
+                    request.page_numbers,
+                    self.provider_name,
+                )
         if status != "ok":
             result.page_results = [] if status == "error" else result.page_results
             if result.provider_error is None:
@@ -87,7 +113,9 @@ class FixtureBackedMockProvider(CommercialOCRProvider):
                     "message": f"mock provider {self.provider_name} forced into {status}",
                 }
         result.provider_latency_ms = latency_ms or int((time.perf_counter() - started) * 1000)
-        result.raw_response_ref = str(Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "commercial_ocr" / self.fixture_name)
+        result.raw_response_ref = str(
+            Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "commercial_ocr" / effective_fixture_name
+        )
         return result
 
 
@@ -114,12 +142,26 @@ class BaiduPaperCutEduProvider(CommercialOCRProvider):
     provider_version = "rest2.0-paper-cut-edu"
 
     def __init__(self) -> None:
-        self.endpoint = str(os.getenv("BAIDU_OCR_ENDPOINT") or DEFAULT_BAIDU_ENDPOINT).strip()
+        self.endpoint = (
+            get_config_value(
+                "baidu_ocr_endpoint",
+                "BAIDU_OCR_ENDPOINT",
+                DEFAULT_BAIDU_ENDPOINT,
+            )
+            or DEFAULT_BAIDU_ENDPOINT
+        )
         self.token_endpoint = DEFAULT_BAIDU_TOKEN_ENDPOINT
-        self.timeout_ms = _positive_int(os.getenv("BAIDU_OCR_TIMEOUT_MS"), DEFAULT_BAIDU_TIMEOUT_MS)
-        self.api_key = str(os.getenv("BAIDU_API_KEY") or "").strip()
-        self.secret_key = str(os.getenv("BAIDU_SECRET_KEY") or "").strip()
-        self.static_access_token = str(os.getenv("BAIDU_ACCESS_TOKEN") or "").strip()
+        self.timeout_ms = get_positive_int(
+            "baidu_ocr_timeout_ms",
+            "BAIDU_OCR_TIMEOUT_MS",
+            default=DEFAULT_BAIDU_TIMEOUT_MS,
+        )
+        self.api_key = get_config_value("baidu_api_key", "BAIDU_API_KEY")
+        self.secret_key = get_config_value("baidu_secret_key", "BAIDU_SECRET_KEY")
+        self.static_access_token = get_config_value(
+            "baidu_access_token",
+            "BAIDU_ACCESS_TOKEN",
+        )
 
     def is_available(self) -> tuple[bool, list[str]]:
         if self.static_access_token:
@@ -367,10 +409,65 @@ def _replicate_fixture_pages(
     return replicated
 
 
+def _rebase_fixture_pages(
+    page_results: list[ProviderPageResult],
+    target_page_no: int,
+    provider_name: str,
+) -> list[ProviderPageResult]:
+    if not page_results:
+        return []
+    template = page_results[0]
+    return [
+        ProviderPageResult(
+            page_no=target_page_no,
+            blocks=[
+                NormalizedOCRBlock(
+                    block_id=f"{provider_name}-{target_page_no}-{block.block_id}",
+                    provider_ref=block.provider_ref.replace(
+                        f":page:{block.page_no}",
+                        f":page:{target_page_no}",
+                    ),
+                    page_no=target_page_no,
+                    text=block.text,
+                    bbox=list(block.bbox),
+                    block_type=block.block_type,
+                    confidence=block.confidence,
+                    reading_order=block.reading_order,
+                    parent_block_id=block.parent_block_id,
+                    raw=dict(block.raw),
+                    warnings=list(block.warnings),
+                )
+                for block in template.blocks
+            ],
+            figures=list(template.figures),
+            tables=list(template.tables),
+            raw=dict(template.raw),
+            warnings=list(template.warnings),
+        )
+    ]
+
+
+def _is_single_fixture_page(page_results: list[ProviderPageResult]) -> bool:
+    if len(page_results) != 1:
+        return False
+    page_result = page_results[0]
+    if not page_result.blocks:
+        return True
+    page_numbers = {block.page_no for block in page_result.blocks}
+    return len(page_numbers) == 1
+
+
 def _provider_error_from_env(provider_name: str) -> dict[str, Any] | None:
     prefix = _provider_env_prefix(provider_name)
-    code = str(os.getenv(f"{prefix}_ERROR_CODE") or "").strip()
-    message = str(os.getenv(f"{prefix}_ERROR_MESSAGE") or "").strip()
+    config_prefix = _provider_config_prefix(provider_name)
+    code = get_config_value(
+        f"{config_prefix}_error_code",
+        f"{prefix}_ERROR_CODE",
+    )
+    message = get_config_value(
+        f"{config_prefix}_error_message",
+        f"{prefix}_ERROR_MESSAGE",
+    )
     if not code and not message:
         return None
     return {
@@ -382,10 +479,5 @@ def _provider_error_from_env(provider_name: str) -> dict[str, Any] | None:
 def _provider_env_prefix(provider_name: str) -> str:
     return provider_name.upper().replace("-", "_")
 
-
-def _positive_int(value: str | None, default: int) -> int:
-    try:
-        parsed = int(str(value or "").strip())
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
+def _provider_config_prefix(provider_name: str) -> str:
+    return provider_name.lower().replace("-", "_")

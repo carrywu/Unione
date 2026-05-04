@@ -130,6 +130,49 @@ class CommercialOCRPipelineTest(unittest.TestCase):
         self.assertEqual(execution.attempted_providers[0]["provider_error"]["code"], "timeout")
         self.assertEqual(execution.attempted_providers[1]["status"], "ok")
 
+    def test_mock_provider_fixture_override_can_switch_to_publishable_shared_material_case(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "COMMERCIAL_OCR_ENABLED": "true",
+                "PDF_PARSE_PRIMARY_PROVIDER": "mock_commercial_ocr",
+                "PDF_PARSE_FALLBACK_PROVIDERS": "local_parser",
+                "MOCK_COMMERCIAL_OCR_FIXTURE_NAME": "shared_material_17_20_complete_blocks.json",
+            },
+            clear=False,
+        ):
+            execution = run_commercial_ocr_pipeline(FakeExtractor(), total_pages=1, debug_dir=None)
+
+        self.assertEqual(execution.effective_provider, "mock_commercial_ocr")
+        self.assertTrue(str(execution.provider_result.raw_response_ref).endswith("shared_material_17_20_complete_blocks.json"))
+        self.assertEqual(
+            [question.question_no for question in execution.semantic_assembly.normalized_questions],
+            [17, 18, 19, 20],
+        )
+        self.assertTrue(execution.quality_gate.review_ready)
+        self.assertFalse(execution.quality_gate.extracted_but_incomplete)
+
+    def test_single_page_fixture_is_not_replicated_across_multi_page_pdf_requests(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "COMMERCIAL_OCR_ENABLED": "true",
+                "PDF_PARSE_PRIMARY_PROVIDER": "mock_commercial_ocr",
+                "PDF_PARSE_FALLBACK_PROVIDERS": "local_parser",
+                "MOCK_COMMERCIAL_OCR_FIXTURE_NAME": "shared_material_17_20_complete_blocks.json",
+            },
+            clear=False,
+        ):
+            execution = run_commercial_ocr_pipeline(FakeExtractor(), total_pages=5, debug_dir=None)
+
+        self.assertEqual(execution.effective_provider, "mock_commercial_ocr")
+        self.assertEqual(len(execution.provider_result.page_results), 1)
+        self.assertEqual(
+            [question.question_no for question in execution.semantic_assembly.normalized_questions],
+            [17, 18, 19, 20],
+        )
+        self.assertTrue(execution.quality_gate.review_ready)
+
     def test_fixture_files_do_not_contain_secrets(self):
         forbidden_tokens = [
             "AKID",

@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
 import fitz
 
+from commercial_ocr.config import get_flag, get_config_value
 from commercial_ocr.adapters import provider_registry
 from commercial_ocr.quality_gate import evaluate_parse_quality
 from commercial_ocr.semantic_assembler import assemble_semantic_result
 from commercial_ocr.types import CommercialOCRExecution, ProviderOCRRequest, ProviderOCRResult
+from commercial_ocr.visual_understanding import build_visual_understanding_summary
 from models import PageContent, Region, TextBlock
 
 
@@ -22,20 +23,31 @@ DEFAULT_PRIMARY_PROVIDER = "mock_commercial_ocr"
 
 
 def commercial_ocr_enabled() -> bool:
-    return _env_flag("COMMERCIAL_OCR_ENABLED", default=False)
+    return get_flag("commercial_ocr_enabled", "COMMERCIAL_OCR_ENABLED", default=False)
 
 
 def primary_provider_name() -> str:
-    return str(os.getenv("PDF_PARSE_PRIMARY_PROVIDER") or DEFAULT_PRIMARY_PROVIDER).strip() or DEFAULT_PRIMARY_PROVIDER
+    return (
+        get_config_value(
+            "pdf_parse_primary_provider",
+            "PDF_PARSE_PRIMARY_PROVIDER",
+            DEFAULT_PRIMARY_PROVIDER,
+        )
+        or DEFAULT_PRIMARY_PROVIDER
+    )
 
 
 def fallback_provider_names() -> list[str]:
-    raw = str(os.getenv("PDF_PARSE_FALLBACK_PROVIDERS") or "local_parser,mock_commercial_ocr").strip()
+    raw = get_config_value(
+        "pdf_parse_fallback_providers",
+        "PDF_PARSE_FALLBACK_PROVIDERS",
+        "local_parser,mock_commercial_ocr",
+    )
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
 def provider_trace_enabled() -> bool:
-    return _env_flag("OCR_PROVIDER_TRACE_ENABLED", default=False)
+    return get_flag("ocr_provider_trace_enabled", "OCR_PROVIDER_TRACE_ENABLED", default=False)
 
 
 def build_provider_request(
@@ -111,6 +123,15 @@ def run_commercial_ocr_pipeline(
                 fallback_used=provider_name != primary,
                 provider_error=result.provider_error,
             )
+        visual_understanding = None
+        if assembly is not None and quality_gate is not None:
+            visual_understanding = build_visual_understanding_summary(
+                assembly,
+                quality_gate=quality_gate,
+                provider_name=result.provider_name,
+                provider_trace_ref=result.raw_response_ref,
+                fallback_used=provider_name != primary,
+            )
 
         attempt_payload = {
             "provider": provider_name,
@@ -119,6 +140,7 @@ def run_commercial_ocr_pipeline(
             "provider_error": result.provider_error,
             "warnings": result.warnings,
             "quality_gate": quality_gate.to_dict() if quality_gate else None,
+            "visual_understanding": visual_understanding,
         }
         execution.attempted_providers.append(attempt_payload)
 
@@ -126,6 +148,7 @@ def run_commercial_ocr_pipeline(
             execution.provider_result = result
             execution.semantic_assembly = assembly
             execution.quality_gate = quality_gate
+            execution.visual_understanding = visual_understanding
             execution.effective_provider = provider_name
             execution.fallback_used = provider_name != primary
             result.fallback_used = execution.fallback_used
@@ -193,6 +216,7 @@ def execution_summary(execution: CommercialOCRExecution | None) -> dict[str, Any
         "provider_result": provider_result.to_dict() if provider_result else None,
         "semantic_assembly": execution.semantic_assembly.to_dict() if execution.semantic_assembly else None,
         "quality_gate": execution.quality_gate.to_dict() if execution.quality_gate else None,
+        "visual_understanding": execution.visual_understanding,
     }
 
 
@@ -233,13 +257,6 @@ def _dedupe_order(items: list[str]) -> list[str]:
             seen.add(item)
             ordered.append(item)
     return ordered
-
-
-def _env_flag(name: str, *, default: bool) -> bool:
-    value = str(os.getenv(name) or "").strip().lower()
-    if not value:
-        return default
-    return value in {"1", "true", "yes", "on"}
 
 
 def _to_page_text(text: str, block_type: str) -> str:

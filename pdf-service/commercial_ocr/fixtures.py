@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
+from commercial_ocr.config import get_json_path_override
 from commercial_ocr.types import NormalizedOCRBlock, ProviderOCRResult, ProviderPageResult
 
 
@@ -16,7 +16,10 @@ DEFAULT_PROVIDER_FIXTURES = {
 
 
 def fixture_root() -> Path:
-    override = str(os.getenv("COMMERCIAL_OCR_FIXTURE_ROOT") or "").strip()
+    override = get_json_path_override(
+        "commercial_ocr_fixture_root",
+        "COMMERCIAL_OCR_FIXTURE_ROOT",
+    )
     if override:
         return Path(override)
     return Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "commercial_ocr"
@@ -43,17 +46,7 @@ def provider_result_from_fixture(
     fallback_used: bool = False,
 ) -> ProviderOCRResult:
     payload = load_fixture(fixture_name or DEFAULT_PROVIDER_FIXTURES[provider_name])
-    page_results = [
-        ProviderPageResult(
-            page_no=int(page.get("page_no") or 0),
-            blocks=[_block_from_payload(block) for block in page.get("blocks") or []],
-            figures=list(page.get("figures") or []),
-            tables=list(page.get("tables") or []),
-            raw=dict(page.get("raw") or {}),
-            warnings=[str(item) for item in page.get("warnings") or [] if str(item).strip()],
-        )
-        for page in payload.get("page_results") or []
-    ]
+    page_results = _page_results_from_payload(payload)
     return ProviderOCRResult(
         provider_name=str(provider_name or payload.get("provider_name") or "mock_commercial_ocr"),
         provider_version=str(payload.get("provider_version") or "fixture-v1"),
@@ -83,3 +76,34 @@ def _block_from_payload(payload: dict[str, Any]) -> NormalizedOCRBlock:
         raw=dict(payload.get("raw") or {}),
         warnings=[str(item) for item in payload.get("warnings") or [] if str(item).strip()],
     )
+
+
+def _page_results_from_payload(payload: dict[str, Any]) -> list[ProviderPageResult]:
+    if payload.get("page_results"):
+        return [
+            ProviderPageResult(
+                page_no=int(page.get("page_no") or 0),
+                blocks=[_block_from_payload(block) for block in page.get("blocks") or []],
+                figures=list(page.get("figures") or []),
+                tables=list(page.get("tables") or []),
+                raw=dict(page.get("raw") or {}),
+                warnings=[str(item) for item in page.get("warnings") or [] if str(item).strip()],
+            )
+            for page in payload.get("page_results") or []
+        ]
+
+    if payload.get("blocks"):
+        blocks = [_block_from_payload(block) for block in payload.get("blocks") or []]
+        page_no = next((block.page_no for block in blocks if block.page_no > 0), 1)
+        return [
+            ProviderPageResult(
+                page_no=page_no,
+                blocks=blocks,
+                figures=list(payload.get("figures") or []),
+                tables=list(payload.get("tables") or []),
+                raw=dict(payload.get("raw") or {}),
+                warnings=[str(item) for item in payload.get("warnings") or [] if str(item).strip()],
+            )
+        ]
+
+    return []

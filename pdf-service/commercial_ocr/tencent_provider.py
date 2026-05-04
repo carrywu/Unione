@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any
 
+from commercial_ocr.config import get_config_value, get_flag, get_positive_int
 from commercial_ocr.normalizer import normalize_tencent_question_split_response
 from commercial_ocr.types import ProviderOCRRequest, ProviderOCRResult
 from tencentcloud.common import credential
@@ -32,16 +32,53 @@ class TencentQuestionSplitProvider(CommercialOCRProvider):
     layout_only = False
 
     def __init__(self) -> None:
-        self.secret_id = str(os.getenv("TENCENT_SECRET_ID") or "").strip()
-        self.secret_key = str(os.getenv("TENCENT_SECRET_KEY") or "").strip()
-        self.region = str(os.getenv("TENCENT_REGION") or "ap-guangzhou").strip() or "ap-guangzhou"
-        self.endpoint = str(os.getenv("TENCENT_OCR_ENDPOINT") or DEFAULT_TENCENT_ENDPOINT).strip() or DEFAULT_TENCENT_ENDPOINT
-        self.version = str(os.getenv("TENCENT_OCR_VERSION") or DEFAULT_TENCENT_VERSION).strip() or DEFAULT_TENCENT_VERSION
-        self.timeout_ms = _positive_int(os.getenv("TENCENT_OCR_TIMEOUT_MS"), DEFAULT_TENCENT_TIMEOUT_MS)
-        self.use_new_model = _env_flag("TENCENT_OCR_USE_NEW_MODEL", default=False)
-        self.enable_image_crop = _env_flag("TENCENT_OCR_ENABLE_IMAGE_CROP", default=False)
-        self.enable_only_detect_border = _env_flag("TENCENT_OCR_ENABLE_ONLY_DETECT_BORDER", default=False)
-        self.real_smoke_enabled = _env_flag("TENCENT_OCR_REAL_SMOKE", default=False)
+        self.secret_id = get_config_value("tencent_secret_id", "TENCENT_SECRET_ID")
+        self.secret_key = get_config_value("tencent_secret_key", "TENCENT_SECRET_KEY")
+        self.region = (
+            get_config_value("tencent_region", "TENCENT_REGION", "ap-guangzhou")
+            or "ap-guangzhou"
+        )
+        self.endpoint = (
+            get_config_value(
+                "tencent_ocr_endpoint",
+                "TENCENT_OCR_ENDPOINT",
+                DEFAULT_TENCENT_ENDPOINT,
+            )
+            or DEFAULT_TENCENT_ENDPOINT
+        )
+        self.version = (
+            get_config_value(
+                "tencent_ocr_version",
+                "TENCENT_OCR_VERSION",
+                DEFAULT_TENCENT_VERSION,
+            )
+            or DEFAULT_TENCENT_VERSION
+        )
+        self.timeout_ms = get_positive_int(
+            "tencent_ocr_timeout_ms",
+            "TENCENT_OCR_TIMEOUT_MS",
+            default=DEFAULT_TENCENT_TIMEOUT_MS,
+        )
+        self.use_new_model = get_flag(
+            "tencent_ocr_use_new_model",
+            "TENCENT_OCR_USE_NEW_MODEL",
+            default=False,
+        )
+        self.enable_image_crop = get_flag(
+            "tencent_ocr_enable_image_crop",
+            "TENCENT_OCR_ENABLE_IMAGE_CROP",
+            default=False,
+        )
+        self.enable_only_detect_border = get_flag(
+            "tencent_ocr_enable_only_detect_border",
+            "TENCENT_OCR_ENABLE_ONLY_DETECT_BORDER",
+            default=False,
+        )
+        self.real_smoke_enabled = get_flag(
+            "tencent_ocr_real_smoke",
+            "TENCENT_OCR_REAL_SMOKE",
+            default=False,
+        )
 
     def is_available(self) -> tuple[bool, list[str]]:
         missing = []
@@ -182,22 +219,6 @@ def _warning_for_tencent_error(error_code: str) -> str:
 
 def _endpoint_host(endpoint: str) -> str:
     return endpoint.replace("https://", "").replace("http://", "").strip("/") or "ocr.tencentcloudapi.com"
-
-
-def _env_flag(name: str, *, default: bool) -> bool:
-    value = str(os.getenv(name) or "").strip().lower()
-    if not value:
-        return default
-    return value in {"1", "true", "yes", "on"}
-
-
-def _positive_int(value: str | None, default: int) -> int:
-    try:
-        parsed = int(str(value or "").strip())
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
-
 
 def _write_trace_payload(request: ProviderOCRRequest, payload: dict[str, Any], *, suffix: str) -> str | None:
     trace_root = _trace_root(request)
