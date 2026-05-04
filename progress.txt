@@ -1,0 +1,105 @@
+Project: 行测助手全链路测试修复、Git 工作区治理、垃圾文件清理与可交付加固
+Branch: ralph/xingce-e2e-git-hygiene-delivery
+Project Root: /home/carry/project2
+Initialized At: 2026-05-04 17:46:46 CST (+0800)
+Status: initialized
+Current Story: pending start of US-001
+
+Scope
+- 先做 Git 工作区治理，再进入全链路测试修复、回归和交付验收。
+- 根目录执行 PRD 为 `/home/carry/project2/prd.json`；历史 `/home/carry/project2/ralph/prd.json` 保留不动。
+- 本次仅完成 Ralph 初始化，不开始大规模修代码、清理、构建或浏览器验证。
+
+Hard Constraints
+- 禁止执行 `git reset --hard`、`git clean -fd`、`git clean -fdx`、危险性批量删除或任何会清空工作区的操作。
+- 禁止删除真实题本、答本、数据库、migration、fixture、lockfile、`.env`、密钥文件、当前交付证据。
+- 禁止通过特判、手改数据库、手改 JSON、手动标记 passes 或只隐藏前端错误来伪造通过。
+- Git 工作区 400+ 状态必须先分诊、备份、dry-run，再做任何清理或测试修复。
+
+Known Inputs
+- 题本 PDF: `/home/carry/题本/题本篇.pdf`
+- 答本 PDF: `/home/carry/答本/解析篇.pdf`
+- 真实任务 ID: `836fec20-2628-44ed-9642-aedd57467864`
+- M5A 报告目录: `debug/m5/836fec20-2628-44ed-9642-aedd57467864/`
+- 当前 M5A: `20/20` 有答本结果，`6` 题 matched，`14` 题 conflict
+
+Codebase Patterns
+- `backend/` 是主要后端服务与测试目录，后续默认质量检查中的后端构建和测试从这里执行。
+- `admin-web/` 是管理端前端，后续 UI 相关 story 需要真实浏览器验证并保留截图证据。
+- `pdf-service/` 承担 PDF 解析与视觉 provider 相关链路，后续 provider 调度、超时、fallback、视觉归属问题主要落在这里或其调用链。
+- `debug/` 是统一证据根目录；本轮 PRD 约定每个 story 额外保存到 `debug/ralph-e2e/<storyId>-<timestamp>/`。
+- 根目录同时存在 `.env`、`node_modules/`、`.pytest_cache/`、`logs/`、`artifacts/`、历史截图和多份调研文档；在 US-001 完成前应视为混合工作区，默认保留。
+- `ralph/` 目录下已有旧的 Ralph 资产，但当前执行入口改为根目录 `prd.json` 和 `progress.txt`。
+
+Default Quality Checks
+- `cd /home/carry/project2/backend && node -r ts-node/register -r tsconfig-paths/register test/pdf-review-workflow.test.ts`
+- `cd /home/carry/project2/backend && npm run build`
+- `cd /home/carry/project2/admin-web && npm run build`
+
+Story Queue
+- US-001 Git 工作区 400+ 状态分诊
+- US-002 Git 清理安全备份
+- US-003 Git 垃圾文件 dry-run 清单
+- US-004 执行安全清理并缩减 Git 噪音
+- US-005 .gitignore 仓库卫生加固
+- US-006 建立 Ralph 基线与运行手册
+- US-007 建立全链路测试矩阵
+- US-008 服务启动与健康检查自动化
+- US-009 AI provider 调度与耗时日志
+- US-010 任务 cancel/retry 与卡 processing 恢复
+- US-011 20页题本上传解析真人式 smoke test
+- US-012 答本上传与 M5A 真实对撞验证
+- US-013 M5B 历史撞库候选验证
+- US-014 制卷核对页真人式审核体验
+- US-015 PDF 识别错误闭环
+- US-016 图表题与图片归属专项测试
+- US-017 发布入库最小闭环
+- US-018 刷题端预览验证
+- US-019 回归测试与质量门禁
+- US-020 性能与耗时基线
+- US-021 最终交付验收报告
+
+Append Template
+- `[timestamp] US-XXX`
+- 实现/测试了什么:
+- 修改文件:
+- 清理了什么:
+- 保留了什么:
+- 运行了哪些命令:
+- 结果是否通过:
+- 截图/trace/debug 路径:
+- 发现的可复用模式:
+- 仍需后续 story 处理的问题:
+
+History
+- [2026-05-04 17:46:46 CST (+0800)] INIT
+- 实现/测试了什么: 创建根目录 `prd.json` 和初始 `progress.txt`；按用户给定范围登记 21 个 Ralph stories；未开始清理、构建、测试、浏览器验证或业务修复。
+- 修改文件: `/home/carry/project2/prd.json`, `/home/carry/project2/progress.txt`
+- 清理了什么: 无
+- 保留了什么: 当前整个 Git 工作区、旧的 `/home/carry/project2/ralph/prd.json`、所有源码改动、debug 证据、`.env`、题本/答本 PDF
+- 运行了哪些命令: `rg --files -g 'prd.json' -g 'progress.txt' -g 'README*' -g 'package.json' .`, `sed -n '1,220p' /home/carry/.codex/skills/ralph/SKILL.md`, `sed -n '220,320p' /home/carry/.codex/skills/ralph/SKILL.md`, `sed -n '1,260p' /home/carry/project2/ralph/prd.json`, `ls -la /home/carry/project2`, `date '+%Y-%m-%d %H:%M:%S %Z (%z)'`
+- 结果是否通过: 初始化完成；所有 stories 维持 `passes=false`
+- 截图/trace/debug 路径: 暂无，等待 US-001 开始产出
+- 发现的可复用模式: 根目录 `prd.json` 作为当前 Ralph 入口；`progress.txt` 采用追加式历史；所有实际证据统一写入 `debug/` 子目录
+- 仍需后续 story 处理的问题: 先执行 US-001 至 US-003 完成工作区分诊、备份和 dry-run，再允许进入清理和全链路测试
+
+[2026-05-04 17:52:00 CST (+0800)] US-001
+- 实现/测试了什么: Git 工作区 400+ 状态分诊。收集 git status、diff stat、diff name-status、untracked 文件清单，按 9 类分类统计所有变更。
+- 修改文件: `debug/git-hygiene/20260504-175000/git-status-before.txt`, `git-diff-stat-before.txt`, `git-diff-name-status-before.txt`, `untracked-files-manifest.txt`, `git-change-classification.json`
+- 清理了什么: 无（US-001 仅诊断，不执行删除）
+- 保留了什么: 全部 20 个 tracked modified 文件、全部 452 个 untracked 文件、题本/答本 PDF、.agent/ 历史证据、所有 .env.example
+- 运行了哪些命令: `git branch --show-current`, `git branch --list`, `git checkout -b ralph/xingce-e2e-git-hygiene-delivery`, `git status --porcelain=v1`, `git diff --stat`, `git diff --name-status`, `git ls-files --others --exclude-standard`, `git ls-files --others --exclude-standard -z | xargs stat`, `du -sh .agent/ ralph/ logs/ 题本/ 答本/ backend/uploads`
+- 结果是否通过: 是。9 类分类统计全部生成。
+- 分类结果:
+  - tracked_modified: 20 files (1019+, 106-)
+  - tracked_deleted: 0 files
+  - untracked_source_like: 18 files (scripts, config, package.json)
+  - untracked_generated: ~370 files (~41 MB) (.agent/ 目录下全部为 agent 编排历史)
+  - cache: 2 files (.pnpm-approved-builds.json, backend/uploads)
+  - logs: 4 files (~984 KB) (dev PID files)
+  - debug_evidence: 0 files (已在 .agent/generated 中归类)
+  - env_secrets: 0 files (无 .env 出现在 untracked)
+  - unknown: 9 PDF files (~553 MB) (题本/答本测试材料，必须保留)
+- 截图/trace/debug 路径: `debug/git-hygiene/20260504-175000/`
+- 发现的可复用模式: 工作区 567 MB untracked 中，553 MB (97.5%) 为题本/答本 PDF 测试材料；41 MB (7.2%) 为 .agent/ 历史编排状态；其余 13 MB 为脚本、报告和日志
+- 仍需后续 story 处理的问题: US-002 安全备份 → US-003 dry-run 清单 → US-004 执行清理

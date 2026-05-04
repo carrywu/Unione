@@ -1,0 +1,26 @@
+Git Diff Stat Before - US-001 Triage
+Generated: 2026-05-04 17:50 CST
+Branch: ralph/xingce-e2e-git-hygiene-delivery
+
+--- git diff --stat ---
+
+ admin-web/src/views/system/SystemView.vue          |   2 +-
+ backend/.env.example                               |  11 +-
+ backend/src/modules/answer-book/answer-book.service.ts |  65 ++-
+ backend/src/modules/question/entities/question.entity.ts |  18 +
+ backend/src/modules/question/question.service.ts   |  78 +++-
+ backend/src/seed.ts                                |   2 +-
+ docs/pdf-image-recognition-acceptance.md           |  57 +++
+ h5-web/.env.example                                |   2 +-
+ pdf-service/.env.example                           |   9 +-
+ pdf-service/AGENTS.md                              |   2 +-
+ pdf-service/ai_parser.py                           |   2 +-
+ pdf-service/debug_tools/export_visual_debug.py     |   2 -
+ pdf-service/parser_kernel/__init__.py              |   4 +-
+ pdf-service/parser_kernel/routing.py               | 112 ++++-
+ pdf-service/tests/test_pdf_review_flow_rules.py    |  32 +-
+ pdf-service/tests/test_scanned_pdf_routing.py      |  22 +-
+ pdf-service/vision_ai/qwen_vl_provider.py          |   2 +-
+ scripts/check-paper-review-recognition.mjs         | 192 +++++++-
+ scripts/check-pdf-fixtures.mjs                     | 509 ++++++++++++++++++---
+ 20 files changed, 1019 insertions(+), 106 deletions(-)
