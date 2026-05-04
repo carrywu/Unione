@@ -1,0 +1,118 @@
+ M admin-web/.env.example
+ M admin-web/src/views/system/SystemView.vue
+ M backend/.env.example
+ M backend/src/modules/answer-book/answer-book.service.ts
+ M backend/src/modules/question/entities/question.entity.ts
+ M backend/src/modules/question/question.service.ts
+ M backend/src/seed.ts
+ M docs/pdf-image-recognition-acceptance.md
+ M h5-web/.env.example
+ M pdf-service/.env.example
+ M pdf-service/AGENTS.md
+ M pdf-service/ai_parser.py
+ M pdf-service/debug_tools/export_visual_debug.py
+ M pdf-service/parser_kernel/__init__.py
+ M pdf-service/parser_kernel/routing.py
+ M pdf-service/tests/test_pdf_review_flow_rules.py
+ M pdf-service/tests/test_scanned_pdf_routing.py
+ M pdf-service/vision_ai/qwen_vl_provider.py
+ M scripts/check-paper-review-recognition.mjs
+ M scripts/check-pdf-fixtures.mjs
+?? .agent/.latest-managed-snapshot
+?? .agent/.latest_volcengine_ark_snapshot
+?? .agent/BOARD.md
+?? .agent/CODEX_CONTROL_GOAL.md
+?? .agent/CODEX_CONTROL_STATUS.md
+?? .agent/MILESTONES.md
+?? .agent/README.md
+?? .agent/STATUS.json
+?? .agent/SUPERVISOR.md
+?? .agent/SUPERVISOR.md.bak.20260503-150153
+?? .agent/bus/
+?? .agent/codex-control/
+?? .agent/prompts/
+?? .agent/reports/agent-bus-setup-report.md
+?? .agent/reports/archivist-report.md
+?? .agent/reports/archivist-runtime-last.md
+?? .agent/reports/archivist-task.md
+?? .agent/reports/builder-report.md
+?? .agent/reports/builder-runtime-last.md
+?? .agent/reports/builder-task.md
+?? .agent/reports/diagnosis-report.md
+?? .agent/reports/diagnostician-page5-smoke-report.md
+?? .agent/reports/diagnostician-report.md
+?? .agent/reports/diagnostician-runtime-last.md
+?? .agent/reports/diagnostician-task.md
+?? .agent/reports/doctor-20260503-083039.md
+?? .agent/reports/doctor-20260503-083055.md
+?? .agent/reports/doctor-20260503-092029.md
+?? .agent/reports/doctor-20260503-092106.md
+?? .agent/reports/doctor-20260503-121947.md
+?? .agent/reports/doctor-20260503-132337.md
+?? .agent/reports/doctor-20260503-193915.md
+?? .agent/reports/doctor-20260503-201607.md
+?? .agent/reports/doctor-20260503-214814.md
+?? .agent/reports/doctor-20260503-220318.md
+?? .agent/reports/doctor-20260503-231743.md
+?? .agent/reports/doctor-20260504-021306.md
+?? .agent/reports/doctor-latest.md
+?? .agent/reports/dry-run-20260503-083102.md
+?? .agent/reports/dry-run-20260503-092032.md
+?? .agent/reports/dry-run-20260503-092109.md
+?? .agent/reports/dry-run-20260503-121950.md
+?? .agent/reports/dry-run-20260503-132340.md
+?? .agent/reports/dry-run-20260503-193918.md
+?? .agent/reports/dry-run-20260503-201611.md
+?? .agent/reports/dry-run-20260503-214817.md
+?? .agent/reports/dry-run-20260503-231746.md
+?? .agent/reports/dry-run-latest.md
+?? .agent/reports/m2-m3-definition-and-fix-report.md
+?? .agent/reports/m2-night-recovery-final.md
+?? .agent/reports/m2-night-recovery-start.md
+?? .agent/reports/m2-prehost-gate-recheck.md
+?? .agent/reports/orchestrator-runtime-fix-report.md
+?? .agent/reports/orchestrator-setup-report.md
+?? .agent/reports/page5-smoke-report.md
+?? .agent/reports/provider-health-report.json
+?? .agent/reports/provider-health-report.md
+?? .agent/reports/runtime-smoke/
+?? .agent/reports/supervisor-b4-status.md
+?? .agent/reports/supervisor-b5-dispatch-status.md
+?? .agent/reports/supervisor-dispatch-b3.md
+?? .agent/reports/supervisor-managed-mode-report.md
+?? .agent/reports/supervisor-runtime-last.md
+?? .agent/reports/supervisor-user-goal-m3-after-m2-gate.md
+?? .agent/reports/verifier-evidence/
+?? .agent/reports/verifier-runtime-last.md
+?? .agent/reports/verifier-task.md
+?? .agent/reports/volcengine-ark-provider-report.md
+?? .agent/runs/
+?? .agent/workers/
+?? .mcp.json
+?? DB_RESTORE_REPORT.md
+?? ENV_FIX_REPORT.md
+?? MVP_LOCAL_RUNBOOK.md
+?? PDF_PARSE_REVIEW_MEMORY.md
+?? PDF_VISUAL_AGENT_10Q_TASK.md
+?? RECENT_WORK_SUMMARY.md
+?? backend/.pnpm-approved-builds.json
+?? "backend/sample-\351\242\230\346\234\254\347\257\207-3-7.pdf"
+?? backend/uploads
+?? check-dev.sh
+?? deep-research-report.md
+?? docs/hermes-phase-reports/
+?? docs/pdf-recognition-production-roadmap.md
+?? logs/
+?? package.json
+?? pdf-service/tests/__init__.py
+?? ralph/
+?? scripts/agent-bus.sh
+?? scripts/agent-orchestrator.sh
+?? scripts/m2-watchdog.sh
+?? scripts/ralph/
+?? scripts/run-hermes-prompt.sh
+?? scripts/verifier_m2_forced_new_rerun.py
+?? start-dev.sh
+?? stop-dev.sh
+?? "\347\255\224\346\234\254/"
+?? "\351\242\230\346\234\254/"

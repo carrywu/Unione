@@ -106,8 +106,8 @@
         "如果 build 因环境问题失败，记录完整错误和下一步，不得标 `passes:true`"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "git status 从 118 行降至 39 行 (-67%)。删除 62 文件 (0.8MB)，归档 2467 文件 (804.8MB) 到 /home/carry/project2-archive/20260504-182835/。backend build PASS, admin-web build PASS。"
     },
     {
       "id": "US-005",

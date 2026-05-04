@@ -136,3 +136,20 @@ History
 - 截图/trace/debug 路径: `debug/git-hygiene/20260504-182031/`, `debug/ralph-e2e/US-003-20260504-182031/`
 - 发现的可复用模式: 工作区 2579 个未跟踪文件中，767 MB 为 backend/uploads/ 上传证据（1665 files），38 MB 为 .agent/ 编排状态（796 files），其余 ~0.8 MB 为日志和缓存；真正可安全删除的仅 62 个小文件
 - 仍需后续 story 处理的问题: US-004 执行安全清理（删除 62 文件 + 归档 2467 文件）→ US-005 .gitignore 加固
+
+[2026-05-04 18:34:00 CST (+0800)] US-004
+- 实现/测试了什么: 执行安全清理并缩减 Git 噪音。删除 62 个小文件（日志、PID、缓存），归档 2467 个文件到 /home/carry/project2-archive/20260504-182835/。
+- 修改文件: `debug/git-hygiene/20260504-182031/before.txt`, `debug/git-hygiene/20260504-182031/after.txt`, `debug/git-hygiene/20260504-182031/cleanup-report.md`, `debug/ralph-e2e/US-004-20260504-182835/`
+- 清理了什么: 57 个 dev 日志文件、4 个 PID 文件、1 个 pnpm 缓存文件（共 ~0.8 MB）
+- 保留了什么: 20 个 tracked modified 源码文件、16 个 tracked .agent 文件、9 个 PDF 测试材料、19 个 untracked 工具/配置/文档
+- 运行了哪些命令: `rm` 删除日志/PID/缓存, `mv` 归档 .agent/backend/uploads/scripts/ralph, `npm run build` (backend + admin-web)
+- 结果是否通过: 是。git status 从 118 行降至 39 行（-67%），backend build PASS，admin-web build PASS。
+- 归档详情:
+  - .agent/ untracked: 796 files, 38 MB → /home/carry/project2-archive/20260504-182835/.agent/
+  - backend/uploads/: 1665 files, 767 MB → /home/carry/project2-archive/20260504-182835/backend-uploads/
+  - scripts/ 编排工具: 5 files, 0.1 MB → /home/carry/project2-archive/20260504-182835/scripts/
+  - ralph/prd.json: 1 file, 19 KB → /home/carry/project2-archive/20260504-182835/ralph-prd.json
+  - 16 个 tracked .agent 文件从归档恢复回工作区（CHECKPOINT/HANDOFF/RESUME_PROMPT + 13 个 reports）
+- 截图/trace/debug 路径: `debug/git-hygiene/20260504-182031/cleanup-report.md`, `debug/ralph-e2e/US-004-20260504-182835/`
+- 发现的可复用模式: .agent/ 目录包含 tracked 和 untracked 混合文件，归档前需用 `git ls-files` 区分；debug/ 在 .gitignore 中，commit 需 `git add -f`
+- 仍需后续 story 处理的问题: US-005 .gitignore 加固（防止后续构建产物再次污染 git status）

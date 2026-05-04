@@ -1,0 +1,55 @@
+ D .agent/CHECKPOINT.md
+ D .agent/HANDOFF.md
+ D .agent/RESUME_PROMPT.md
+ D .agent/reports/checkpoint-recovery-report.md
+ D .agent/reports/final-report.md
+ D .agent/reports/m2-completion-report.md
+ D .agent/reports/m3-semantic-recrop-report.md
+ D .agent/reports/m4-ai-preaudit-report.md
+ D .agent/reports/m5a-answer-book-alignment-report.md
+ D .agent/reports/m5b-similarity-dedupe-report.md
+ D .agent/reports/m6a-admin-review-closure-report.md
+ D .agent/reports/m6b-h5-consistency-report.md
+ D .agent/reports/m6c-publish-smoke-report.md
+ D .agent/reports/provider-fallback-report.md
+ D .agent/reports/verifier-report.json
+ D .agent/reports/verifier-report.md
+ M admin-web/.env.example
+ M admin-web/src/views/system/SystemView.vue
+ M backend/.env.example
+ M backend/src/modules/answer-book/answer-book.service.ts
+ M backend/src/modules/question/entities/question.entity.ts
+ M backend/src/modules/question/question.service.ts
+ M backend/src/seed.ts
+ M docs/pdf-image-recognition-acceptance.md
+ M h5-web/.env.example
+ M pdf-service/.env.example
+ M pdf-service/AGENTS.md
+ M pdf-service/ai_parser.py
+ M pdf-service/debug_tools/export_visual_debug.py
+ M pdf-service/parser_kernel/__init__.py
+ M pdf-service/parser_kernel/routing.py
+ M pdf-service/tests/test_pdf_review_flow_rules.py
+ M pdf-service/tests/test_scanned_pdf_routing.py
+ M pdf-service/vision_ai/qwen_vl_provider.py
+ M scripts/check-paper-review-recognition.mjs
+ M scripts/check-pdf-fixtures.mjs
+?? .mcp.json
+?? DB_RESTORE_REPORT.md
+?? ENV_FIX_REPORT.md
+?? MVP_LOCAL_RUNBOOK.md
+?? PDF_PARSE_REVIEW_MEMORY.md
+?? PDF_VISUAL_AGENT_10Q_TASK.md
+?? RECENT_WORK_SUMMARY.md
+?? "backend/sample-\351\242\230\346\234\254\347\257\207-3-7.pdf"
+?? check-dev.sh
+?? deep-research-report.md
+?? docs/hermes-phase-reports/
+?? docs/pdf-recognition-production-roadmap.md
+?? package.json
+?? pdf-service/tests/__init__.py
+?? scripts/ralph/
+?? start-dev.sh
+?? stop-dev.sh
+?? "\347\255\224\346\234\254/"
+?? "\351\242\230\346\234\254/"
