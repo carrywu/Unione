@@ -238,6 +238,7 @@ async function run() {
   await testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts();
   await testPaperCandidatesFillM4CoverageAndSemanticArtifacts();
   await testPaperCandidatesExposeM5EmptyStateAndSeededFixture();
+  await testPaperCandidatesLoadRealM5aAlignmentReport();
   await testPaperCandidatesExposeRealSimilarityCandidates();
   await testBuildTaskConsistencyPreviewIncludesAllQuestions();
   await testPaperCandidatesDoNotTreatMaterialBindingFailureAsMissingPreviousPage();
@@ -947,6 +948,140 @@ async function testPaperCandidatesExposeM5EmptyStateAndSeededFixture() {
     assert.match(candidates.questions[0].m5_similarity?.empty_state_text || '', /历史题库为空/);
   } finally {
     await rm(debugDir, { recursive: true, force: true });
+  }
+}
+
+async function testPaperCandidatesLoadRealM5aAlignmentReport() {
+  const h = harness();
+  const debugDir = join(process.cwd(), 'debug', 'pdf-ai-preaudit', 'task-1');
+  const m5Dir = join(process.cwd(), 'debug', 'm5', 'task-1');
+
+  await rm(debugDir, { recursive: true, force: true });
+  await rm(m5Dir, { recursive: true, force: true });
+  await mkdir(debugDir, { recursive: true });
+  await mkdir(m5Dir, { recursive: true });
+
+  try {
+    await writeFile(
+      join(debugDir, 'ai-preaudit-debug.json'),
+      JSON.stringify({ qwen_vl_enabled: true, qwen_vl_call_count_after: 1 }, null, 2),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'final-preview-payload.json'),
+      JSON.stringify(
+        {
+          questions: [
+            {
+              question_no: 1,
+              stem: '高置信题',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              visual_parse_status: 'success',
+              source_page_refs: [1],
+              source_bbox: [10, 20, 220, 90],
+              source_text_span: '高置信题',
+              risk_flags: [],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'semantic-groups.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            source_page_start: 1,
+            source_page_end: 1,
+            source_text_span: '高置信题',
+            stem_group: {
+              text: '高置信题',
+              bbox: [10, 20, 220, 90],
+              source_text_span: '高置信题',
+            },
+            options_group: {
+              blocks: [
+                { label: 'A', text: '甲' },
+                { label: 'B', text: '乙' },
+                { label: 'C', text: '丙' },
+                { label: 'D', text: '丁' },
+              ],
+            },
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'ai-audit-results.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            ai_audit_status: 'passed',
+            ai_audit_verdict: '可通过',
+            ai_audit_summary: '结构完整。',
+            answer_suggestion: 'A',
+            analysis_suggestion: 'AI 建议解析',
+            risk_flags: [],
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(m5Dir, 'm5a-answer-match-report.json'),
+      JSON.stringify(
+        {
+          task_id: 'task-1',
+          m5a_verdict: 'M5A_PASS',
+          items: [
+            {
+              question_no: 1,
+              matched_answer_item_id: 'answer-item-p009-q001',
+              answer_from_answer_book: 'D',
+              analysis_from_answer_book: '真实答本解析',
+              final_answer_suggestion: 'D',
+              final_analysis_suggestion: '真实答本解析',
+              match_method: 'normalized_stem_similarity',
+              match_confidence: 0.98,
+              evidence: {
+                answer_book_pdf: '/tmp/解析篇.pdf',
+                answer_book_page: 9,
+              },
+              conflict_reason: 'M4答案=A 与答本答案=D 不一致',
+              needs_human_review: true,
+              status: 'conflict',
+              unmatched_reason: null,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const candidates = await h.pdfService.getPaperCandidates('task-1');
+    const candidate = candidates.questions[0];
+    assert.equal(candidates.m5a_verdict, 'M5A_PASS');
+    assert.doesNotMatch((candidates.non_blocking_warnings || []).join(' '), /未提供答本\/解析本/);
+    assert.equal(candidate.m5_answer_book?.status, 'conflict');
+    assert.equal(candidate.m5_answer_book?.answer_from_answer_book, 'D');
+    assert.equal(candidate.m5_answer_book?.final_answer_suggestion, 'D');
+    assert.equal(candidate.m5_answer_book?.matched_answer_item_id, 'answer-item-p009-q001');
+    assert.match((candidate.m5_answer_book?.evidence || []).join(' '), /answer_book_page:9/);
+  } finally {
+    await rm(debugDir, { recursive: true, force: true });
+    await rm(m5Dir, { recursive: true, force: true });
   }
 }
 

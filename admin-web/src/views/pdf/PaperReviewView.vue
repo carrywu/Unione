@@ -355,11 +355,19 @@
               <div class="options-grid">
                 <div>
                   <span>状态</span>
-                  <p>{{ textOr(selectedCandidate.m5_answer_book?.verdict, candidates?.m5a_verdict || 'blocked') }}</p>
+                  <p>{{ textOr(selectedCandidate.m5_answer_book?.status || selectedCandidate.m5_answer_book?.verdict, candidates?.m5a_verdict || 'blocked') }}</p>
                 </div>
                 <div>
                   <span>匹配方式</span>
                   <p>{{ textOr(selectedCandidate.m5_answer_book?.match_method, '未提供') }}</p>
+                </div>
+                <div>
+                  <span>匹配置信度</span>
+                  <p>{{ confidenceText(selectedCandidate.m5_answer_book?.match_confidence) }}</p>
+                </div>
+                <div>
+                  <span>匹配条目</span>
+                  <p>{{ textOr(selectedCandidate.m5_answer_book?.matched_answer_item_id, '未提供') }}</p>
                 </div>
                 <div>
                   <span>答本答案</span>
@@ -384,6 +392,15 @@
               <p v-if="selectedCandidate.m5_answer_book?.fixture_only" class="muted">
                 当前为 seeded fixture，仅用于 UI / 交互验证，不写入正式答案源。
               </p>
+              <p v-if="selectedCandidate.m5_answer_book?.conflict_reason" class="muted">
+                冲突原因：{{ selectedCandidate.m5_answer_book?.conflict_reason }}
+              </p>
+              <p v-if="selectedCandidate.m5_answer_book?.unmatched_reason" class="muted">
+                未命中原因：{{ selectedCandidate.m5_answer_book?.unmatched_reason }}
+              </p>
+              <div v-if="(selectedCandidate.m5_answer_book?.evidence || []).length" class="candidate-tags">
+                <span v-for="item in selectedCandidate.m5_answer_book?.evidence || []" :key="item">{{ item }}</span>
+              </div>
               <div class="candidate-actions">
                 <el-button
                   size="small"

@@ -4,7 +4,7 @@
 - m2_verdict: `M2_PASS`
 - m3_verdict: `M3_PASS`
 - m4_verdict: `M4_PASS`
-- m5a_verdict: `M5A_IN_PROGRESS`
+- m5a_verdict: `M5A_PASS`
 - m5b_verdict: `M5B_PASS`
 - m6a_verdict: `M6A_PASS`
 - m6b_verdict: `M6B_PASS`
@@ -37,12 +37,14 @@
 
 ## Non-Blocking Warnings
 
-- `M5A_IN_PROGRESS`：真实答本/解析本目录待读取并进入正式对撞；当前只保留 seeded fixture 作为 UI 兜底。
+- 真实答本对撞已落地，但 `20/20` 中有 `14` 题与现有 M4 结果冲突，当前保持建议态并要求人工复核，不自动覆盖正式题库。
 - 本地 `.env` 与 `backend/.env` 存在真实密钥，但未进入暂存区或提交；扫描输出已脱敏。
 
 ## Evidence
 
 - `/home/carry/project2/debug/m6/836fec20-2628-44ed-9642-aedd57467864/admin-review-playwright.json`
+- `/home/carry/project2/debug/m5/836fec20-2628-44ed-9642-aedd57467864/m5a-answer-match-report.json`
+- `/home/carry/project2/debug/m5/836fec20-2628-44ed-9642-aedd57467864/answer-question-alignment.json`
 - `/home/carry/project2/debug/m6/836fec20-2628-44ed-9642-aedd57467864/publish-smoke.json`
 - `/home/carry/project2/backend/debug/m6/836fec20-2628-44ed-9642-aedd57467864/review-state.json`
 - `/home/carry/project2/backend/debug/m6-preview-papers/h5-audit-836fec20-2628-44ed-9642-aedd57467864.json`

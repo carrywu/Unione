@@ -123,6 +123,7 @@ export interface PaperCandidate {
   } | null;
   m5_answer_book?: {
     verdict?: string;
+    status?: string;
     empty_state_text?: string | null;
     answer_from_answer_book?: string | null;
     analysis_from_answer_book?: string | null;
@@ -131,10 +132,14 @@ export interface PaperCandidate {
     match_confidence?: number | null;
     match_method?: string | null;
     evidence?: string[];
+    evidence_details?: Record<string, any> | null;
     conflict_reason?: string | null;
     needs_human_review?: boolean;
     fixture_only?: boolean;
     decision_status?: string | null;
+    matched_answer_item_id?: string | null;
+    unmatched_reason?: string | null;
+    report_source?: string | null;
     candidates?: Array<Record<string, any>>;
   } | null;
   m5_similarity?: {

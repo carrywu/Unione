@@ -3,7 +3,7 @@
   "m2_verdict": "M2_PASS",
   "m3_verdict": "M3_PASS",
   "m4_verdict": "M4_PASS",
-  "m5a_verdict": "M5A_IN_PROGRESS",
+  "m5a_verdict": "M5A_PASS",
   "m5b_verdict": "M5B_PASS",
   "m6a_verdict": "M6A_PASS",
   "m6b_verdict": "M6B_PASS",
@@ -11,10 +11,16 @@
   "m6_verdict": "M6_PASS",
   "failed_checks": [],
   "non_blocking_warnings": [
-    "M5A 真实答本/解析本目录待读取并进入正式对撞；当前 seeded fixture 仅用于 UI/交互兜底，不写入正式题库。",
+    "真实答本对撞已落地，但 20/20 中有 14 题与现有 M4 结果冲突，当前保持建议态并要求人工复核，不自动覆盖正式题库。",
     "密钥扫描命中本地 .env 与 backend/.env 的真实密钥；两者均未暂存、未提交，并已在扫描输出中脱敏。"
   ],
   "evidence_paths": [
+    "/home/carry/project2/debug/m5/836fec20-2628-44ed-9642-aedd57467864/source-documents-discovery.json",
+    "/home/carry/project2/debug/m5/836fec20-2628-44ed-9642-aedd57467864/answer-book-understanding.json",
+    "/home/carry/project2/debug/m5/836fec20-2628-44ed-9642-aedd57467864/answer-analysis-items.json",
+    "/home/carry/project2/debug/m5/836fec20-2628-44ed-9642-aedd57467864/answer-question-alignment.json",
+    "/home/carry/project2/debug/m5/836fec20-2628-44ed-9642-aedd57467864/m5a-answer-match-report.json",
+    "/home/carry/project2/.agent/reports/m5a-answer-book-alignment-report.md",
     "/home/carry/project2/debug/m6/836fec20-2628-44ed-9642-aedd57467864/admin-review-playwright.json",
     "/home/carry/project2/debug/m6/836fec20-2628-44ed-9642-aedd57467864/screenshots/admin-review.png",
     "/home/carry/project2/debug/m6/836fec20-2628-44ed-9642-aedd57467864/trace.zip",

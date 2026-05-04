@@ -554,6 +554,13 @@ export class PdfService {
     if (!task) throw new NotFoundException('解析任务不存在');
 
     const debug = await this.getAiPreauditDebug(taskId);
+    const m5aAlignmentReport = await this.readM5aAlignmentReport(task.id);
+    const m5aAlignmentByQuestionNo = new Map<number, Record<string, any>>();
+    this.toArrayOfObjects(m5aAlignmentReport?.items).forEach((item) => {
+      const questionNo = this.toOptionalNumber(item.question_no);
+      if (questionNo === null) return;
+      m5aAlignmentByQuestionNo.set(questionNo, item);
+    });
     const finalQuestions = Array.isArray(debug.final_questions)
       ? (debug.final_questions as Array<Record<string, any>>)
       : [];
@@ -645,6 +652,8 @@ export class PdfService {
         task,
         candidate: baseCandidate,
         sourceQuestion,
+        m5aAlignment:
+          questionNo !== null ? m5aAlignmentByQuestionNo.get(Number(questionNo)) || null : null,
         answerSources:
           questionNo !== null ? answerSourcesByIndex.get(Number(questionNo)) || [] : [],
         pageMaterialContext,
@@ -701,9 +710,9 @@ export class PdfService {
       taskId: task.id,
       bankId: task.bank_id,
       status: task.status,
-      m5a_verdict: answerSources.length
-        ? 'M5A_PASS'
-        : 'M5A_BLOCKED_BY_MISSING_ANSWER_BOOK',
+      m5a_verdict:
+        this.firstMeaningfulText(m5aAlignmentReport?.m5a_verdict) ||
+        (answerSources.length ? 'M5A_PASS' : 'M5A_BLOCKED_BY_MISSING_ANSWER_BOOK'),
       m5b_verdict: 'M5B_PASS',
       publish_preview: reviewState.publish_preview || null,
       debug_dir: debug.debug_dir,
@@ -713,7 +722,7 @@ export class PdfService {
       diagnostics,
       review_audit_events: reviewState.audit_events || [],
       non_blocking_warnings: [
-        answerSources.length
+        m5aAlignmentReport || answerSources.length
           ? null
           : '未提供答本/解析本，M5A 当前仅展示 empty-state 与 seeded fixture，不写入正式库',
         historicalQuestions.length
@@ -729,6 +738,41 @@ export class PdfService {
           'pdf-ai-preaudit',
           task.id,
           'paper-candidate-payload.json',
+        ),
+        m5_source_documents_discovery: join(
+          process.cwd(),
+          'debug',
+          'm5',
+          task.id,
+          'source-documents-discovery.json',
+        ),
+        m5_answer_book_understanding: join(
+          process.cwd(),
+          'debug',
+          'm5',
+          task.id,
+          'answer-book-understanding.json',
+        ),
+        m5_answer_analysis_items: join(
+          process.cwd(),
+          'debug',
+          'm5',
+          task.id,
+          'answer-analysis-items.json',
+        ),
+        m5_answer_question_alignment: join(
+          process.cwd(),
+          'debug',
+          'm5',
+          task.id,
+          'answer-question-alignment.json',
+        ),
+        m5_answer_match_report: join(
+          process.cwd(),
+          'debug',
+          'm5',
+          task.id,
+          'm5a-answer-match-report.json',
         ),
       },
     };
@@ -1526,6 +1570,7 @@ export class PdfService {
     task: ParseTask;
     candidate: Record<string, any>;
     sourceQuestion: Question | null;
+    m5aAlignment: Record<string, any> | null;
     answerSources: AnswerSource[];
     pageMaterialContext: Map<number, Array<Record<string, any>>>;
     similarityCandidates: Array<Record<string, any>>;
@@ -1537,6 +1582,7 @@ export class PdfService {
     const answerBook = this.buildPaperCandidateAnswerBook({
       candidate: input.candidate,
       sourceQuestion,
+      m5aAlignment: input.m5aAlignment,
       answerSources: input.answerSources,
       reviewDecision: input.reviewDecision,
     });
@@ -1556,6 +1602,7 @@ export class PdfService {
         input.reviewDecision.answer_book_decision === 'accepted'
           ? answerBook.answer_from_answer_book
           : null,
+        answerBook.final_answer_suggestion,
         input.reviewDecision.final_answer_suggestion,
         input.candidate.answer_suggestion,
         sourceQuestion?.answer,
@@ -1566,6 +1613,7 @@ export class PdfService {
         input.reviewDecision.answer_book_decision === 'accepted'
           ? answerBook.analysis_from_answer_book
           : null,
+        answerBook.final_analysis_suggestion,
         input.reviewDecision.final_analysis_suggestion,
         input.candidate.analysis_suggestion,
         sourceQuestion?.analysis,
@@ -1646,9 +1694,80 @@ export class PdfService {
   private buildPaperCandidateAnswerBook(input: {
     candidate: Record<string, any>;
     sourceQuestion: Question | null;
+    m5aAlignment: Record<string, any> | null;
     answerSources: AnswerSource[];
     reviewDecision: Record<string, any>;
   }) {
+    if (input.m5aAlignment) {
+      const status =
+        this.firstMeaningfulText(input.m5aAlignment.status, input.m5aAlignment.verdict) ||
+        'matched';
+      const conflictReason =
+        this.firstMeaningfulText(
+          input.reviewDecision.answer_book_decision === 'rejected'
+            ? '人工拒绝答本候选'
+            : null,
+          input.m5aAlignment.conflict_reason,
+          input.m5aAlignment.unmatched_reason,
+        ) || null;
+      return {
+        verdict: status,
+        status,
+        empty_state_text:
+          status === 'matched'
+            ? null
+            : this.firstMeaningfulText(
+                input.m5aAlignment.unmatched_reason,
+                input.m5aAlignment.conflict_reason,
+              ) || '真实答本已加载，当前结果需人工复核',
+        answer_from_answer_book:
+          this.firstMeaningfulText(input.m5aAlignment.answer_from_answer_book) || null,
+        analysis_from_answer_book:
+          this.firstMeaningfulText(input.m5aAlignment.analysis_from_answer_book) || null,
+        final_answer_suggestion:
+          this.firstMeaningfulText(input.m5aAlignment.final_answer_suggestion) || null,
+        final_analysis_suggestion:
+          this.firstMeaningfulText(input.m5aAlignment.final_analysis_suggestion) || null,
+        match_confidence:
+          this.toOptionalNumber(input.m5aAlignment.match_confidence) ?? null,
+        match_method:
+          this.firstMeaningfulText(input.m5aAlignment.match_method) || null,
+        evidence: this.m5aEvidenceStrings(input.m5aAlignment.evidence),
+        evidence_details:
+          input.m5aAlignment.evidence &&
+          typeof input.m5aAlignment.evidence === 'object'
+            ? this.cloneJson(input.m5aAlignment.evidence)
+            : null,
+        conflict_reason: conflictReason,
+        needs_human_review: Boolean(
+          input.m5aAlignment.needs_human_review ?? status !== 'matched',
+        ),
+        fixture_only: false,
+        decision_status:
+          this.firstMeaningfulText(input.reviewDecision.answer_book_decision) ||
+          (status === 'matched' ? 'report_loaded' : 'human_review_needed'),
+        matched_answer_item_id:
+          this.firstMeaningfulText(input.m5aAlignment.matched_answer_item_id) || null,
+        unmatched_reason:
+          this.firstMeaningfulText(input.m5aAlignment.unmatched_reason) || null,
+        report_source: 'debug_m5_alignment_report',
+        candidates: [
+          {
+            id:
+              this.firstMeaningfulText(input.m5aAlignment.matched_answer_item_id) || null,
+            status,
+            answer:
+              this.firstMeaningfulText(input.m5aAlignment.answer_from_answer_book) || null,
+            analysis:
+              this.firstMeaningfulText(input.m5aAlignment.analysis_from_answer_book) || null,
+            match_confidence:
+              this.toOptionalNumber(input.m5aAlignment.match_confidence) ?? null,
+            source_page_num:
+              this.toOptionalNumber(input.m5aAlignment.evidence?.answer_book_page) ?? null,
+          },
+        ],
+      };
+    }
     const primarySource = input.answerSources[0] || null;
     const fixtureAnswer =
       !primarySource &&
@@ -3126,6 +3245,31 @@ export class PdfService {
     } catch {
       return null;
     }
+  }
+
+  private async readM5aAlignmentReport(taskId: string) {
+    return this.readJsonIfExists(
+      join(process.cwd(), 'debug', 'm5', taskId, 'm5a-answer-match-report.json'),
+    );
+  }
+
+  private m5aEvidenceStrings(evidence: unknown) {
+    if (Array.isArray(evidence)) {
+      return evidence.map((item) => String(item || '').trim()).filter(Boolean);
+    }
+    if (!evidence || typeof evidence !== 'object') return [];
+    return Object.entries(evidence as Record<string, unknown>)
+      .map(([key, value]) => {
+        if (value == null || value === '') return '';
+        const rendered =
+          typeof value === 'string'
+            ? value
+            : Array.isArray(value)
+              ? value.join(',')
+              : JSON.stringify(value);
+        return `${key}:${rendered}`;
+      })
+      .filter(Boolean);
   }
 
   private async writePrettyJson(path: string, payload: unknown) {

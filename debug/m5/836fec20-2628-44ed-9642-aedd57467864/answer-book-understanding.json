@@ -1,0 +1,35 @@
+{
+  "answer_book_path": "/home/carry/答本/解析篇.pdf",
+  "toc_observation": {
+    "exercise_01_start_page_label": "001",
+    "exercise_02_start_page_label": "013",
+    "toc_pdf_pages": [
+      1,
+      2
+    ]
+  },
+  "layout_pattern": {
+    "summary_pages": [
+      9,
+      12
+    ],
+    "right_column_contains": [
+      "题干",
+      "选项",
+      "参考答案及正确率",
+      "实战解析"
+    ],
+    "left_column_contains": [
+      "批注",
+      "手算草稿"
+    ],
+    "continuation_noise_pages": [
+      18
+    ]
+  },
+  "cleaning_rules": [
+    "忽略 question_text 以 A/B/C/D 选项开头且无正式选项区的续页片段",
+    "page 10 的第14题答案用 page 9 的全篇答案串 DBCBA 回填",
+    "page 18 的 A/B/C/D 选项解析并回 page 17 的第5题"
+  ]
+}

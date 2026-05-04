@@ -1,6 +1,6 @@
 # 最终报告
 
-一句话结论：`836fec20-2628-44ed-9642-aedd57467864` 已完成 `M6_PASS`，且 `M5B` 真实 similarity / duplicate 链路已接入；admin-web 审核闭环、H5 移动端一致性、preview/dry-run 发布 smoke 均通过。当前仅剩 `M5A` 真实答本对撞待继续完成。
+一句话结论：`836fec20-2628-44ed-9642-aedd57467864` 已完成 `M5A_PASS / M5B_PASS / M6_PASS`。真实题本 `/home/carry/题本/题本篇.pdf` 与真实答本 `/home/carry/答本/解析篇.pdf` 已完成对撞，admin-web/API 已展示真实答本匹配、冲突、证据与最终建议。
 
 ## 1. 当前 task_id
 
@@ -21,8 +21,16 @@
 - M2：`PASS`
 - M3：`PASS`
 - M4：`PASS`
-- M5A：`IN_PROGRESS`
-  - 下一步：读取 `/home/carry/答本` 做真实答本/解析本对撞
+- M5A：`PASS`
+  - 已识别真实题本：`/home/carry/题本/题本篇.pdf`
+  - 已识别真实答本：`/home/carry/答本/解析篇.pdf`
+  - 已输出：
+    - `debug/m5/836fec20-2628-44ed-9642-aedd57467864/source-documents-discovery.json`
+    - `debug/m5/836fec20-2628-44ed-9642-aedd57467864/answer-book-understanding.json`
+    - `debug/m5/836fec20-2628-44ed-9642-aedd57467864/answer-analysis-items.json`
+    - `debug/m5/836fec20-2628-44ed-9642-aedd57467864/answer-question-alignment.json`
+    - `debug/m5/836fec20-2628-44ed-9642-aedd57467864/m5a-answer-match-report.json`
+    - `.agent/reports/m5a-answer-book-alignment-report.md`
 - M5B：`PASS`
   - backend 与 admin-web 均已接入真实 similarity/duplicate 候选链路
 - M6A：`PASS`
@@ -39,7 +47,7 @@
   - M3 recrop 结果
   - 题干 / 选项 / 材料 / 图片图表
   - M4 AI 预审核字段
-  - M5A 答本候选空状态或 seeded fixture
+  - M5A 真实答本对撞结果、冲突原因、置信度与证据
   - M5B 相似题真实候选与人工决策区
 - 可执行动作列表：
   - `accept_match`
@@ -150,8 +158,6 @@
 
 ## 11. 未完成项 / 阻塞项
 
-- `M5A_IN_PROGRESS`：
-  - 需读取 `/home/carry/答本` 中真实答本/解析本原始输入，把答本候选从 seeded fixture 提升为正式对撞结果。
 - `M7`：
   - 本轮未启动，符合范围约束。
 

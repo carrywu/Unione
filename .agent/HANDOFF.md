@@ -1,6 +1,6 @@
 # HANDOFF
 
-当前 authoritative truth：`M2_PASS / M3_PASS / M4_PASS / M6_PASS`。
+当前 authoritative truth：`M2_PASS / M3_PASS / M4_PASS / M5A_PASS / M5B_PASS / M6_PASS`。
 
 - 最新全量 task：`836fec20-2628-44ed-9642-aedd57467864`
 - 当前分支：`main`
@@ -23,9 +23,11 @@
 
 ## M5/M6 口径
 
-- `M5A_IN_PROGRESS`
-  - 下一步直接读取 `/home/carry/答本` 做真实答本/解析本对撞
-  - seeded fixture 只能作为兜底 UI 验证，不能再作为 authoritative 结果
+- `M5A_PASS`
+  - 真实题本已锁定：`/home/carry/题本/题本篇.pdf`
+  - 真实答本已锁定：`/home/carry/答本/解析篇.pdf`
+  - 20/20 题已生成真实答本对撞结果、冲突原因、证据与最终建议
+  - API / admin-web 已直接读取 `debug/m5/.../m5a-answer-match-report.json`
 - `M5B_PASS`
   - backend 已接入真实历史题库 similarity / duplicate 候选生成
   - admin-web 已展示真实候选明细、分数、来源与人工决策区
@@ -39,6 +41,9 @@
 - `/home/carry/project2/backend/debug/m6/836fec20-2628-44ed-9642-aedd57467864/review-state.json`
 - `/home/carry/project2/backend/debug/m6/836fec20-2628-44ed-9642-aedd57467864/preview-submit-log.json`
 - `/home/carry/project2/backend/debug/m6-preview-papers/h5-audit-836fec20-2628-44ed-9642-aedd57467864.json`
+- `/home/carry/project2/debug/m5/836fec20-2628-44ed-9642-aedd57467864/m5a-answer-match-report.json`
+- `/home/carry/project2/debug/m5/836fec20-2628-44ed-9642-aedd57467864/answer-question-alignment.json`
+- `/home/carry/project2/.agent/reports/m5a-answer-book-alignment-report.md`
 - `/home/carry/project2/debug/m6/836fec20-2628-44ed-9642-aedd57467864/admin-review-playwright.json`
 - `/home/carry/project2/debug/m6/836fec20-2628-44ed-9642-aedd57467864/publish-smoke.json`
 - `/home/carry/project2/debug/h5-regression/836fec20-2628-44ed-9642-aedd57467864/playwright-h5-consistency.json`
@@ -47,13 +52,12 @@
 
 - 不要回退多 agent 架构
 - 不要重写 M2/M3/M4 主逻辑
-- 不要把 seeded fixture 当成正式答本结果
+- 不要把冲突题自动写回正式题库；只能作为建议并进入人工复核
 - 不要伪造 similarity candidate
 - 不要把 preview 发布当成真实生产发布
 - 不要 force push 或改写历史
 
 ## 建议续跑顺序
 
-1. 推送当前 `M5B` 代码与 report/handoff 更新
-2. 读取 `/home/carry/题本` 与 `/home/carry/答本`，完成真实 `M5A` 对撞
-3. `M7` 仍未启动，需要用户另行授权进入合规/审计加固阶段
+1. 推送当前 `M5A` 代码、debug 产物与 report/handoff 更新
+2. 如需继续推进，下一阶段只剩 `M7`，需要用户另行授权进入合规/审计加固阶段
