@@ -88,6 +88,12 @@ function createRepository<T extends Row>(rows: T[]) {
       const row = rows.find((item) => item.id === entity.id);
       if (row) row.deleted_at = new Date();
     },
+    async delete(criteria: string | Record<string, any>) {
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const matched = typeof criteria === 'string' ? rows[i].id === criteria : matchesWhere(rows[i], criteria);
+        if (matched) rows.splice(i, 1);
+      }
+    },
   };
 }
 

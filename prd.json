@@ -239,7 +239,7 @@
       ],
       "priority": 11,
       "passes": true,
-      "notes": "Upload via API success. Task 836fec20 completed: 8 pages, 20 questions, M5A_PASS, M5B_PASS. No undefined/object Object/fixture_only=true in candidates. New upload (1d9ecc64) on 188-page PDF canceled (slow provider fallback). Evidence at debug/e2e-upload/836fec20-2628-44ed-9642-aedd57467864/."
+      "notes": "20/20 questions extracted from 题本篇.pdf (188 pages). Task ID: 00cb2f2c-10ea-4ad1-a005-eb7649f07f3b. Upload via API, parse completed, paper candidates verified. No undefined/[object Object] in UI. fixture_only only in m5_answer_book (expected: no answer book). All quality checks PASS."
     },
     {
       "id": "US-012",
