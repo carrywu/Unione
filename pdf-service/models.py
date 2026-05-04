@@ -167,6 +167,7 @@ class ParseStats(BaseModel):
     warnings: List[str] = []
     debug_counts: Dict[str, int] = {}
     scanned_fallback_debug: Optional[Dict[str, Any]] = None
+    commercial_ocr: Optional[Dict[str, Any]] = None
 
 
 class ParseResult(BaseModel):

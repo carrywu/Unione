@@ -559,3 +559,36 @@ History
 - 截图/trace/debug 路径: `debug/e2e-upload/00cb2f2c-10ea-4ad1-a005-eb7649f07f3b/`
 - 发现的可复用模式: mock repository 需要与 pdf.service.ts 中使用的方法同步（delete/softRemove/save/find/findOne/count/update）
 - 仍需后续 story 处理的问题: US-012 答本上传与 M5A 对撞, US-014~018 需浏览器验证
+
+[2026-05-04 22:39:58 CST (+0800)] COCR-M0/M1
+- 实现/测试了什么: 把 `ralph/xingce-e2e-git-hygiene-delivery` 安全并回 `main`，补做 `debug/**` runtime/raw response 去跟踪清理；新增 `pdf-service/commercial_ocr` provider abstraction（mock / baidu_paper_cut_edu / tencent stub / local_parser fallback）、统一 OCR block 契约、parser kernel 接入点、COCR 阶段报告与新 `prd.json`。
+- 修改文件: `pdf-service/commercial_ocr/**`, `pdf-service/parser_kernel/adapter.py`, `pdf-service/models.py`, `pdf-service/pipeline.py`, `pdf-service/monitor.py`, `pdf-service/main.py`, `pdf-service/.env.example`, `backend/.env.example`, `docs/commercial-ocr-phase-reports/**`, `.agent/handoff/README.md`, `.agent/reports/commercial-ocr-main-handoff.md`, `prd.json`, `progress.txt`
+- 清理了什么: 在 `main` 上新增提交 `2fbf506`，把 merge 历史里误跟踪的 `debug/**` 运行时证据从 Git index 移除，但保留本地文件
+- 保留了什么: 现有 local parser、M5A、M5B、admin review、publish 主链保持不删；`backend/sample-题本篇-3-7.pdf` 作为最小负样例保留
+- 运行了哪些命令:
+  - `git merge --no-ff ralph/xingce-e2e-git-hygiene-delivery`
+  - `git rm --cached -r debug`
+  - `cd backend && pnpm test`
+  - `cd backend && pnpm build`
+  - `cd admin-web && pnpm build`
+  - `cd pdf-service && python3 -m pytest tests/ -v`
+  - `cd pdf-service && ./.venv/bin/python -m pytest tests/test_commercial_ocr_pipeline.py tests/test_commercial_ocr_kernel_integration.py -v`
+  - `cd pdf-service && ./.venv/bin/python -m pytest tests/ -v`
+  - 百度一页 smoke：真实 `paper_cut_edu` adapter 成功返回 33 个 blocks
+- 结果是否通过:
+  - `backend pnpm test`: 失败，原因是 package.json 无 `test` script
+  - `backend pnpm build`: 通过
+  - `admin-web pnpm build`: 通过
+  - `pdf-service python3 -m pytest tests/ -v`: 失败，系统 Python 缺少 `fastapi/httpx/openai/fitz/pydantic` 依赖
+  - `pdf-service .venv targeted tests`: 6/6 通过
+  - `pdf-service .venv full pytest`: 115 通过 / 3 失败 / 1 跳过；失败项集中在 provider health 与 visual smoke 缓存旧回归
+  - `baidu_paper_cut_edu` smoke: 通过，真实返回字段为 `log_id / qus_figure / qus_result / qus_result_num`
+- 关键结论:
+  - 商业 OCR provider baseline 已接入 scanned question book 入口前
+  - provider fallback 会保留 primary error，不伪装为 primary 成功
+  - `MaterialGroup` / `NormalizedQuestion` / `ParseQualityGateResult` 契约已预留，semantic assembler 与 quality gate 仍待后续阶段实现
+- 仍需后续 story 处理的问题:
+  - `17-20` 共用材料题的语义编排与验收
+  - Tencent 真实 adapter
+  - 统一 runtime config 到 backend/admin review
+  - browser verification 与全量 pdf-service venv 回归

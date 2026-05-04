@@ -1,5 +1,7 @@
 # HANDOFF
 
+> 当前主线 handoff 已切换到 `/home/carry/project2/.agent/handoff/README.md`，本文件保留为上一阶段 M5/M6 交付记录。
+
 当前 authoritative truth：`M2_PASS / M3_PASS / M4_PASS / M5A_PASS / M5B_PASS / M6_PASS`。
 
 - 最新全量 task：`836fec20-2628-44ed-9642-aedd57467864`

@@ -101,6 +101,20 @@ class RuntimeConfigUpdate(BaseModel):
     pdf_visual_page_timeout_seconds: float | None = None
     pdf_visual_provider_timeout_seconds: float | None = None
     cache_ttl: int | None = None
+    commercial_ocr_enabled: bool | None = None
+    pdf_parse_primary_provider: str | None = None
+    pdf_parse_fallback_providers: str | None = None
+    ocr_provider_trace_enabled: bool | None = None
+    baidu_api_key: str | None = None
+    baidu_secret_key: str | None = None
+    baidu_access_token: str | None = None
+    baidu_ocr_endpoint: str | None = None
+    baidu_ocr_timeout_ms: int | None = None
+    tencent_secret_id: str | None = None
+    tencent_secret_key: str | None = None
+    tencent_region: str | None = None
+    tencent_ocr_endpoint: str | None = None
+    tencent_ocr_timeout_ms: int | None = None
 
 
 @app.get("/health")

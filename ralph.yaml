@@ -1,0 +1,27 @@
+# Ralph Configuration
+
+agent:
+  type: codex
+  flags: []
+  timeout: 30m
+
+loop:
+  maxIterations: 25
+  sleepBetween: 2s
+  stopOnFirstFailure: false
+
+paths:
+  prd: prd.json
+  progress: progress.txt
+  prompt: .agent/handoff/README.md
+
+hooks:
+  enabled: true
+  onStart: []
+  onIteration: []
+  onComplete: []
+  onFailure: []
+
+notifications:
+  enabled: false
+  webhook: ""

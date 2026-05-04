@@ -15,6 +15,7 @@ from typing import Any
 
 import ai_client
 from ai_client import PAGE_PARSE_PROMPT
+from commercial_ocr.service import execution_summary, provider_result_to_page_contents, run_commercial_ocr_pipeline
 import fitz
 from dotenv import load_dotenv
 from debug_writer import write_debug_bundle
@@ -93,16 +94,25 @@ def parse_extractor_with_kernel(
         return {"questions": [], "materials": [], "pdf_kind": pdf_kind}
 
     debug_dir = debug_dir or tempfile.mkdtemp(prefix="pdf-parser-kernel-")
-    pages = (
-        _pages_from_visual_fallback(
+    commercial_ocr_execution = None
+    if pdf_kind == "scanned_question_book":
+        commercial_ocr_execution = run_commercial_ocr_pipeline(
             extractor,
-            total_pages,
+            total_pages=total_pages,
             debug_dir=debug_dir,
-            retry_failed_pages_only=retry_failed_pages_only,
         )
-        if pdf_kind == "scanned_question_book"
-        else _pages_from_extractor(extractor, total_pages)
-    )
+        if commercial_ocr_execution.provider_result is not None and not commercial_ocr_execution.should_use_local_parser:
+            pages = provider_result_to_page_contents(extractor, commercial_ocr_execution.provider_result)
+        else:
+            pages = _pages_from_visual_fallback(
+                extractor,
+                total_pages,
+                debug_dir=debug_dir,
+                retry_failed_pages_only=retry_failed_pages_only,
+            )
+    else:
+        pages = _pages_from_extractor(extractor, total_pages)
+    setattr(extractor, "_commercial_ocr_execution", commercial_ocr_execution)
     visual_links = getattr(
         extractor,
         "_parser_kernel_visual_links",
@@ -222,6 +232,7 @@ def parse_extractor_with_kernel(
             "debug_dir": debug_dir,
             "vision_ai": vision_ai_stats,
             "checkpoint_recovery_report": getattr(extractor, "_parser_kernel_recovery_report", None),
+            "commercial_ocr": execution_summary(commercial_ocr_execution),
         },
     }
 

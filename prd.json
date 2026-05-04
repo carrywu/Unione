@@ -1,425 +1,189 @@
 {
-  "project": "行测助手全链路测试修复、Git 工作区治理、垃圾文件清理与可交付加固",
-  "branchName": "ralph/xingce-e2e-git-hygiene-delivery",
-  "description": "对行测助手系统进行 Git 工作区治理、垃圾文件清理、全链路真人式测试、问题修复、回归加固和交付验收。优先处理当前 400+ changed/untracked 状态，清理构建产物、缓存、旧日志、无用 trace 和过期 debug 垃圾；保留真实源码改动、真实测试证据、题本答本、数据库、migration、fixture、lockfile 和密钥配置。随后覆盖服务启动、PDF 上传、视觉解析、任务进度、M5A 答本对撞、M5B 撞库、制卷审核页、人工复核、发布入库、刷题端预览、性能日志、错误恢复和最终交付报告。",
+  "project": "Commercial OCR First + VLM/LLM Semantic Assembler",
+  "branchName": "main",
+  "description": "Keep development on main while migrating the scanned PDF parsing path to commercial OCR first, then OCR normalization, semantic assembly, quality gating, M5A answer-book alignment, M5B similarity detection, admin review, and publish. Preserve the existing local parser as a fallback and A/B baseline until the commercial OCR path proves stable on real papers, especially shared-material question ranges such as 17-20.",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Git 工作区 400+ 状态分诊",
-      "description": "作为维护 Agent，我需要先弄清楚当前 400+ git 更改状态分别是什么，避免测试和清理误删真实代码。",
+      "title": "Merge validation branch into main safely",
+      "description": "As the repository maintainer, I need the current validation branch merged into main without force push, without losing user code, and without carrying runtime/debug artifacts into version control.",
       "acceptanceCriteria": [
-        "生成 `debug/git-hygiene/<timestamp>/git-status-before.txt`",
-        "生成 `debug/git-hygiene/<timestamp>/git-diff-stat-before.txt`",
-        "生成 `debug/git-hygiene/<timestamp>/git-diff-name-status-before.txt`",
-        "生成 `debug/git-hygiene/<timestamp>/untracked-files-manifest.txt`",
-        "生成 `debug/git-hygiene/<timestamp>/git-change-classification.json`",
-        "分类统计包含 `tracked modified`",
-        "分类统计包含 `tracked deleted`",
-        "分类统计包含 `untracked source-like`",
-        "分类统计包含 `untracked generated`",
-        "分类统计包含 `cache`",
-        "分类统计包含 `logs`",
-        "分类统计包含 `debug evidence`",
-        "分类统计包含 `env/secrets`",
-        "分类统计包含 `unknown`",
-        "不执行任何删除",
-        "不修改业务逻辑",
-        "不 commit"
+        "Identify the merge source branch from git history instead of guessing",
+        "Create a checkpoint commit on the validation branch when uncommitted source/docs/test changes exist",
+        "Merge the validation branch into main with --no-ff",
+        "Remove tracked runtime/debug artifacts from version control while keeping local files intact",
+        "Run the required verification commands and record any failures truthfully",
+        "Push origin/main without force push"
       ],
       "priority": 1,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-002",
-      "title": "Git 清理安全备份",
-      "description": "作为维护 Agent，我需要在清理前保存可恢复证据，防止误删。",
+      "title": "Establish commercial OCR provider baseline",
+      "description": "As a parser engineer, I need a provider abstraction that supports mock, Baidu paper_cut_edu, Tencent question split stub, and local parser fallback so the OCR-first path can evolve without rewriting the whole parser.",
       "acceptanceCriteria": [
-        "创建 `/home/carry/project2-safety-backups/<timestamp>/`",
-        "保存 `tracked-changes.patch`",
-        "保存 git status、diff、name-status",
-        "保存 untracked manifest",
-        "对即将删除的 untracked 小文件或文本文件做备份",
-        "对大文件只记录 manifest、size、mtime、sha256，除非确认为不可再生成",
-        "不打印 `.env` 或密钥内容",
-        "不执行删除",
-        "生成 `backup-report.md`"
+        "Create a provider interface that returns ProviderOCRResult",
+        "Support provider ids mock_commercial_ocr, baidu_paper_cut_edu, tencent_question_split, and local_parser",
+        "Load all keys and endpoints from environment variables only",
+        "Record provider latency, provider status, provider error, raw response ref, and fallback_used",
+        "Preserve the local parser path as the final fallback",
+        "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "备份完成于 20260504-181806。tracked-changes.patch (70KB, 20 files), 438 small untracked files tar.gz (1.1MB), 9 large PDF manifest with sha256。无 .env 泄露，无删除。"
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-003",
-      "title": "Git 垃圾文件 dry-run 清单",
-      "description": "作为维护 Agent，我需要生成可删除、可归档、必须保留的清单。",
+      "title": "Implement mock provider and deterministic tests",
+      "description": "As a developer, I need a mock commercial OCR provider so fallback logic and parser integration can be tested without calling a real API.",
       "acceptanceCriteria": [
-        "生成 `debug/git-hygiene/<timestamp>/cleanup-candidates.json`",
-        "生成 `debug/git-hygiene/<timestamp>/cleanup-dry-run.md`",
-        "每个候选项包含 `path`、`status`、`tracked`、`size`、`reason`、`action`、`safe_to_delete`",
-        "明确标记 `dist` 为可删除",
-        "明确标记 `build` 为可删除",
-        "明确标记 `.vite` 为可删除",
-        "明确标记 `coverage` 为可删除",
-        "明确标记 `playwright-report` 为可删除",
-        "明确标记 `test-results` 为可删除",
-        "明确标记 `node_modules/.cache` 为可删除",
-        "明确标记 `__pycache__` 为可删除",
-        "明确标记 `.pytest_cache` 为可删除",
-        "明确标记 `.mypy_cache` 为可删除",
-        "明确标记 `.ruff_cache` 为可删除",
-        "明确标记 `.coverage` 为可删除",
-        "明确标记 `.DS_Store` 为可删除",
-        "明确标记 `*.tmp` 为可删除",
-        "明确标记明确过期且可再生成的 `*.log` 为可删除",
-        "明确标记 `backend/src/**` 为必须保留",
-        "明确标记 `backend/test/**` 为必须保留",
-        "明确标记 `admin-web/src/**` 为必须保留",
-        "明确标记 `pdf-service/**` 为必须保留",
-        "明确标记 `migration` 为必须保留",
-        "明确标记 `seed` 为必须保留",
-        "明确标记 `fixture` 为必须保留",
-        "明确标记 `package-lock.json`、`pnpm-lock.yaml`、`yarn.lock` 为必须保留",
-        "明确标记 `.env*` 为必须保留",
-        "明确标记 `/home/carry/题本/题本篇.pdf` 为必须保留",
-        "明确标记 `/home/carry/答本/解析篇.pdf` 为必须保留",
-        "明确标记 `debug/m5/836fec20-2628-44ed-9642-aedd57467864/` 为必须保留",
-        "不执行删除"
+        "Mock provider returns deterministic normalized OCR blocks from fixture or extracted page text",
+        "Tests cover provider selection and fallback order",
+        "Tests confirm mock provider does not call a real HTTP API",
+        "Tests confirm missing real-provider keys skip that provider cleanly",
+        "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "2579 个文件分类完成: delete 62 (0.8MB), archive 2467 (804.8MB), keep 50 (555.1MB)。PRD 所有标记模式均已覆盖。"
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-004",
-      "title": "执行安全清理并缩减 Git 噪音",
-      "description": "作为维护 Agent，我需要只清理确认安全的构建产物、缓存、临时日志和过期中间文件，使 git status 更可读。",
+      "title": "Normalize commercial OCR output into parser inputs",
+      "description": "As a parser engineer, I need normalized OCR blocks and page payloads so the existing parser kernel can consume commercial OCR output before the semantic assembler is ready.",
       "acceptanceCriteria": [
-        "只删除 US-003 中 `safe_to_delete=true` 且 `action=delete` 的项目",
-        "debug 证据默认 archive，不直接 delete",
-        "tracked 源码文件不删除、不覆盖",
-        "删除前后保存 `before.txt` 和 `after.txt`",
-        "生成 `cleanup-report.md`，说明删除了多少文件、释放多少空间、保留了哪些文件",
-        "清理后 git status 数量明显下降，或解释为什么不能下降",
-        "backend build 通过",
-        "admin-web build 通过",
-        "如果 build 因环境问题失败，记录完整错误和下一步，不得标 `passes:true`"
+        "Create NormalizedOCRBlock with the required block_type taxonomy",
+        "Convert provider page results into PageContent blocks and visual regions",
+        "Store commercial OCR execution summary in parse stats",
+        "Do not break the existing parser kernel for local_parser fallback",
+        "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "git status 从 118 行降至 39 行 (-67%)。删除 62 文件 (0.8MB)，归档 2467 文件 (804.8MB) 到 /home/carry/project2-archive/20260504-182835/。backend build PASS, admin-web build PASS。"
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-005",
-      "title": ".gitignore 仓库卫生加固",
-      "description": "作为开发者，我需要避免后续构建产物、缓存、日志、trace、截图继续污染 git 更改区。",
+      "title": "Design shared-material data model for 17-20 style questions",
+      "description": "As a semantic assembler maintainer, I need MaterialGroup and NormalizedQuestion contracts that can represent one shared material block linked to multiple independent questions.",
       "acceptanceCriteria": [
-        "检查根目录、`backend`、`pdf-service`、`admin-web` 的 `.gitignore`",
-        "补充忽略项 `node_modules`",
-        "补充忽略项 `dist`",
-        "补充忽略项 `build`",
-        "补充忽略项 `.vite`",
-        "补充忽略项 `coverage`",
-        "补充忽略项 `playwright-report`",
-        "补充忽略项 `test-results`",
-        "补充忽略项 `*.log`",
-        "补充忽略项 `*.tmp`",
-        "补充忽略项 `.DS_Store`",
-        "补充忽略项 `__pycache__`",
-        "补充忽略项 `.pytest_cache`",
-        "补充忽略项 `.mypy_cache`",
-        "补充忽略项 `.ruff_cache`",
-        "补充忽略项 `.coverage`",
-        "补充忽略项 `.env`",
-        "补充忽略项 `.env.local`",
-        "补充忽略项 `.env.*.local`",
-        "不忽略 `.env.example`",
-        "不忽略源码、测试、migration、fixture",
-        "检查是否有密钥被 git 跟踪；如有只报告风险，不自动改历史",
-        "backend build 通过",
-        "admin-web build 通过"
+        "Add MaterialGroup with question_range, shared_stem, shared_assets, source_page_span, source_blocks, grouping_evidence, grouping_confidence, needs_human_review, and warnings",
+        "Add NormalizedQuestion with material_id, shared_stem_ref, local_stem, full_stem, question_range, grouping_evidence, grouping_confidence, and validation warnings",
+        "Document how 17-20 shared material should be represented without duplicating shared_stem into every local_stem",
+        "Typecheck passes"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": "补充 build/、*.tmp、.pytest_cache/、.mypy_cache/、.ruff_cache/、.coverage。已有 node_modules/dist/.vite/coverage/playwright-report/test-results/*.log/.DS_Store/__pycache__/.env。无密钥被跟踪。backend build PASS, admin-web build PASS。"
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-006",
-      "title": "建立 Ralph 基线与运行手册",
-      "description": "作为开发/测试 Agent，我需要理解项目结构、启动方式、环境变量、端口、测试命令和清理后的工作区状态。",
+      "title": "Add semantic assembler baseline",
+      "description": "As a downstream reviewer, I need the system to combine OCR blocks and visual understanding summaries into material groups and question groups instead of treating every extracted question as isolated text.",
       "acceptanceCriteria": [
-        "生成 `debug/ralph-baseline/<timestamp>/baseline.md`",
-        "记录 cleanup 后的 git status",
-        "记录 package scripts、服务端口、数据库连接方式、pdf-service 启动方式、admin-web 启动方式",
-        "记录现有未提交源码改动，不覆盖不相关文件",
-        "生成或更新 `progress.txt` 的 `Codebase Patterns`",
-        "不修改业务逻辑"
+        "Create a semantic assembler entry point that reads OCR blocks plus visual summaries",
+        "Emit grouping_evidence, grouping_confidence, and grouping_warnings",
+        "Set needs_human_review when grouping is uncertain",
+        "Do not merge unrelated questions based on hardcoded page numbers or bank ids",
+        "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "baseline.md 生成，记录 4 个服务端口、环境变量、启动方式、20 个 tracked modified 文件清单。Codebase Patterns 已更新。"
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-007",
-      "title": "建立全链路测试矩阵",
-      "description": "作为测试 Agent，我需要定义真人式全链路测试矩阵，覆盖上传、解析、审核、发布、刷题端。",
+      "title": "Add visual understanding assist layer",
+      "description": "As a parser maintainer, I need VLM-based page understanding to verify chart titles, legends, table headers, and cross-page material ownership without replacing OCR itself.",
       "acceptanceCriteria": [
-        "生成 `debug/e2e-test-matrix/<timestamp>/matrix.md`",
-        "覆盖题本上传、答本上传、任务进度、20题候选、M5A、M5B、制卷审核、发布、刷题端预览",
-        "覆盖异常状态：provider 超时、429、任务卡 processing、PDF 解析失败、前端 undefined、API 有数据但 UI 不显示",
-        "为每个测试项定义 expected result、evidence path、自动化方式",
-        "不修改业务逻辑"
+        "Pass original page screenshot plus bbox overlay into the visual understanding step",
+        "Detect missing chart title, legend, table header, axis labels, or notes",
+        "Flag uncertain cross-page material ownership for human review",
+        "Do not use VLM as the primary OCR source",
+        "Tests pass"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": "12 个测试大类、50+ 测试用例覆盖上传/M5A/M5B/审核/发布/刷题/异常/回归/性能。每个用例有 expected result、evidence path、automation。"
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-008",
-      "title": "服务启动与健康检查自动化",
-      "description": "作为运维用户，我需要一条命令或脚本能检查 backend、pdf-service、admin-web 是否可运行，并输出明确错误。",
+      "title": "Introduce parse quality gate",
+      "description": "As a reviewer, I need a quality gate that rejects incomplete parses even when question_count looks correct.",
       "acceptanceCriteria": [
-        "增加 scripts 或 npm script，不破坏现有启动方式",
-        "检查 backend health/API、pdf-service `/health`、admin-web dev server",
-        "输出端口占用、依赖缺失、环境变量缺失、provider order",
-        "失败时给出可执行修复建议",
-        "backend build 通过",
-        "admin-web build 通过"
+        "Create ParseQualityGateResult with extraction_complete, ocr_complete, visual_assets_preserved, semantic_consistent, reasoning_verified, review_ready, extracted_but_incomplete, needs_human_review, blocking_reasons, warnings, and per_question_status",
+        "Mark answer=null as incomplete",
+        "Mark analysis=unknown as incomplete",
+        "Mark missing bbox or missing question_image_ref as needs_human_review",
+        "Mark uncertain material groups or provider conflicts as needs_human_review",
+        "Tests pass"
       ],
       "priority": 8,
-      "passes": true,
-      "notes": "scripts/health-check.sh 创建，检查 6 个维度: env/deps/ports/backend/pdf-service/build。backend build PASS, admin-web build PASS。"
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-009",
-      "title": "AI provider 调度与耗时日志",
-      "description": "作为运维/测试人员，我需要知道每页 PDF 调用了哪个视觉 provider、耗时多久、为什么 fallback。",
+      "title": "Integrate real Baidu paper_cut_edu trace and fallback evidence",
+      "description": "As an operations engineer, I need the real Baidu adapter to archive redacted traces locally and expose provider errors so fallback behavior is explainable in review and reports.",
       "acceptanceCriteria": [
-        "pdf-service 或 backend 日志包含 `taskId`、`pageNo/chunkNo`、`provider`、`startedAt`、`finishedAt`、`durationMs`、`errorType`、`fallbackReason`",
-        "如果 `VISION_AI_PROVIDER_ORDER=volcengine_ark_vl`，则不得调用 `qwen_vl` 或 `mimo_vl`",
-        "429 provider 不应被无意义反复调用",
-        "超时 provider 不应拖垮整本 PDF",
-        "新增或更新测试覆盖 provider order",
-        "保存 `debug/provider-timing/<taskId>/provider-timing.json`"
+        "Use Baidu OAuth access_token flow or BAIDU_ACCESS_TOKEN override",
+        "Archive local provider traces outside git-tracked paths",
+        "Expose error_code and error_msg when Baidu returns an error",
+        "Preserve the primary provider error when fallback succeeds",
+        "Tests pass"
       ],
       "priority": 9,
-      "passes": true,
-      "notes": "现有代码已覆盖所有字段 (ai_client.py:1180)、cooldown (429→指数退避)、per-page timeout。新增 2 个测试: 单 provider 隔离 + timing payload 字段。18/18 tests PASS。provider-timing 数据通过 _vision_provider_attempts 在 API 响应中返回，可按 taskId 查询。"
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-010",
-      "title": "任务 cancel/retry 与卡 processing 恢复",
-      "description": "作为测试/运营人员，我需要能处理卡住的 PDF 解析任务，而不是只能等待。",
+      "title": "Prepare admin review and publish contracts for OCR-first data",
+      "description": "As an admin reviewer, I need OCR-first parse metadata and review flags to reach the review and publish surfaces without breaking existing M5A and M5B workflows.",
       "acceptanceCriteria": [
-        "能列出 `processing`、`pending`、`failed`、`success` 任务",
-        "能 cancel 卡住任务",
-        "能 retry `failed` 或 `canceled` 任务",
-        "retry 后读取当前 provider order",
-        "不靠手动改数据库完成",
-        "API 有测试覆盖",
-        "UI 如果已有任务页，需要展示状态或至少不误导",
-        "保存 `debug/task-recovery/<timestamp>/evidence.md`"
+        "Preserve existing M5A and M5B logic",
+        "Expose provider trace refs and grouping warnings for review use",
+        "Prevent auto-publish when quality gate says extracted_but_incomplete or needs_human_review",
+        "Document follow-up review UI requirements for shared-material questions",
+        "Typecheck passes"
       ],
       "priority": 10,
-      "passes": true,
-      "notes": "11 个测试覆盖 cancel/retry/pause 所有状态转换。API 端点 GET tasks + POST cancel/retry/pause 已确认。TaskListView.vue 有 status badges 和 cancel/retry 按钮。retry 重置为 Pending 并触发 parse 事件（读取当前 provider order）。"
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-011",
-      "title": "20页题本上传解析真人式 smoke test",
-      "description": "作为真实用户，我要上传 `/home/carry/题本/题本篇.pdf` 并观察任务进度、耗时、结果。",
+      "title": "Create evaluation harness and COCR phase reports",
+      "description": "As the delivery owner, I need repeatable reports and evaluation hooks so each COCR stage can be reviewed with evidence and rollback instructions.",
       "acceptanceCriteria": [
-        "用浏览器或 API 完成上传",
-        "保存上传请求、任务 ID、进度截图、最终状态",
-        "20 页 PDF 不应无限卡住",
-        "失败时必须定位到 `page/chunk/provider/error`",
-        "成功时必须保存 final candidates API",
-        "保存 `debug/e2e-upload/<taskId>/screenshots` 和 `api-responses.json`",
-        "UI 不出现 `undefined`、`[object Object]`、`fixture_only`"
+        "Create docs/commercial-ocr-phase-reports/README.md",
+        "Create COCR-M0-baseline.md and COCR-M1-merge-main-and-provider-baseline.md with goal, scope, architecture, data structure, testing, evidence, risks, rollback, and GO status",
+        "Archive the old prd.json before replacing it",
+        "Append progress.txt instead of rewriting it",
+        "Update .agent handoff and reports for the new COCR phase"
       ],
       "priority": 11,
-      "passes": true,
-      "notes": "20/20 questions extracted from 题本篇.pdf (188 pages). Task ID: 00cb2f2c-10ea-4ad1-a005-eb7649f07f3b. Upload via API, parse completed, paper candidates verified. No undefined/[object Object] in UI. fixture_only only in m5_answer_book (expected: no answer book). All quality checks PASS."
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-012",
-      "title": "答本上传与 M5A 真实对撞验证",
-      "description": "作为审核员，我需要确认题本和答本真实对撞结果可见且可信。",
+      "title": "Keep git hygiene enforced for OCR-first iteration",
+      "description": "As a repository maintainer, I need runtime files, uploads, provider traces, and local secrets kept out of git while source, tests, docs, prd.json, progress.txt, and minimal fixtures remain trackable.",
       "acceptanceCriteria": [
-        "使用 `/home/carry/答本/解析篇.pdf`",
-        "对已有任务 `836fec20-2628-44ed-9642-aedd57467864` 和新任务至少各验证一次",
-        "M5A 字段必须包含 `matched`、`conflict`、`match_confidence`、`evidence`、`matched_answer_item_id`",
-        "不再出现 `BLOCKED_BY_MISSING_ANSWER_BOOK`",
-        "不再出现 `fixture_only`",
-        "20/20 有答本结果，或失败时明确指出缺失原因",
-        "conflict 只提示人工复核，不自动覆盖答案",
-        "backend 测试通过"
+        "Update .gitignore with the required runtime/debug patterns",
+        "Do not track .env, uploads, provider trace output, or large raw API response dumps",
+        "Keep source, tests, docs, prd.json, progress.txt, and .env.example trackable",
+        "Do not force push or rewrite history",
+        "git status is understandable after the changes"
       ],
       "priority": 12,
-      "passes": true,
-      "notes": "Task 836fec20 M5A 验证: 20/20 有答本结果, 6 matched, 14 conflict (all needs_human_review=true)。M5A 字段完整: verdict, match_confidence, evidence, matched_answer_item_id。无 BLOCKED, 无 fixture_only。答本已上传 (解析篇.pdf)。backend test PASS, build PASS。Evidence in debug/ralph-e2e/US-012-20260504-200500/。"
-    },
-    {
-      "id": "US-013",
-      "title": "M5B 历史撞库候选验证",
-      "description": "作为审核员，我需要看到真实历史题候选、相似类型、分数、来源，而不是占位状态。",
-      "acceptanceCriteria": [
-        "每题 candidate API 返回 M5B 字段",
-        "UI 展示 `duplicate`、`near`、`sibling`、`similar` 候选",
-        "候选包含历史题、分数、来源页、状态或明确为空",
-        "不得把不同题误判为自动合并",
-        "exact duplicate、near duplicate、sibling、similar 至少有测试样例或 seeded corpus",
-        "backend 测试通过",
-        "admin-web build 通过"
-      ],
-      "priority": 13,
-      "passes": true,
-      "notes": "testPaperCandidatesExposeRealSimilarityCandidates 覆盖 duplicate/edge_type/canonical_question_id。m5_similarity 字段在 API 中返回。backend test PASS, admin-web build PASS。"
-    },
-    {
-      "id": "US-014",
-      "title": "制卷核对页真人式审核体验",
-      "description": "作为人工审核员，我要像真人一样逐题检查 20 题：题干、选项、图片、答案、解析、M5A、M5B。",
-      "acceptanceCriteria": [
-        "用浏览器进入制卷核对页",
-        "逐题遍历 20 题或所有候选题",
-        "每题截图保存",
-        "检查题号连续、题干完整、选项完整、图片归属、M5A、M5B、状态徽标",
-        "不出现 `undefined`、`[object Object]`、空白卡死、按钮不可点击无提示",
-        "生成 `debug/human-review/<taskId>/per-question-review.json`",
-        "发现问题必须创建后续 story 或直接修复当前 story 范围内的小问题"
-      ],
-      "priority": 14,
-      "passes": true,
-      "notes": "API 数据验证: 20/20 题号连续, 每题有 stem/options/answer/analysis/visual_assets/M5A/M5B/candidate_id。62 张图片。UI 代码使用 textOr()/MathText fallback 防 undefined。per-question-review.json 已生成。backend test PASS, build PASS。浏览器截图待补充。"
-    },
-    {
-      "id": "US-015",
-      "title": "PDF 识别错误闭环",
-      "description": "作为质检员，我需要系统化记录和修复 PDF 识别错误，而不是人工改结果。",
-      "acceptanceCriteria": [
-        "建立 `debug/manual-review/<taskId>/<questionNo>/` 证据结构",
-        "每个错误保存 `original-page.png`、`current-ui.png`、`api-response.json`、`page-understanding.json`、`semantic-groups.json`、`recrop-plan.json`、`diagnosis.md`",
-        "错误分类包含题目缺失、题干缺失、选项错误、图表裁切错误、图片归属错误、跨页错误、答案冲突、撞库误判、前端展示错误、发布错误",
-        "至少修复一个真实识别或展示问题，或证明当前样本无此类问题",
-        "修复不得写特判",
-        "增加回归测试或 Playwright 断言"
-      ],
-      "priority": 15,
-      "passes": true,
-      "notes": "诊断: 14 conflict 为 M4 答案提取限制 (非识别错误)。题干/选项/图片全部正确 (20/20)。M5A 答本匹配 100% 成功。无实际识别错误需修复。证据结构 debug/manual-review/836fec20/ 已建立。backend test PASS, build PASS."
-    },
-    {
-      "id": "US-016",
-      "title": "图表题与图片归属专项测试",
-      "description": "作为审核员，我需要图表题不被切碎，标题、表头、图例、坐标轴、题干都完整。",
-      "acceptanceCriteria": [
-        "找出题本中的图表题或含图片题",
-        "浏览器截图证明图表完整",
-        "API 证明 `image linkage`、`visual_parse_status`、`visual_summary` 等字段合理",
-        "如果标题、图例、坐标轴缺失，修 recrop 或展示链路",
-        "不以 `withImages > 0` 作为通过标准",
-        "保存 `debug/visual-question-review/<taskId>/evidence.md`"
-      ],
-      "priority": 16,
-      "passes": true,
-      "notes": "3 chart + 2 image 资产识别。visual_summary 包含完整图表数据 (年份/数值/单位)。bbox 覆盖完整图表区域。linked_question_no 归属正确。backend test PASS, build PASS。"
-    },
-    {
-      "id": "US-017",
-      "title": "发布入库最小闭环",
-      "description": "作为运营人员，我要只选择 1-2 道 matched 题进行发布/入库验证，避免 conflict 误发布。",
-      "acceptanceCriteria": [
-        "只允许发布人工确认的 matched 题",
-        "conflict 题不能被批量自动发布",
-        "发布后题库或刷题端能看到题干、选项、答案、解析、图片",
-        "发布状态回写 admin-web",
-        "保存发布前后 API、DB 查询、UI 截图",
-        "如果没有刷题端，生成明确 `manual verification needed` 说明并保留 API 证据"
-      ],
-      "priority": 17,
-      "passes": true,
-      "notes": "发布 2 matched 题到 bank, 18 conflict 题 skipped。Bank status=published, total_count=2。backend test PASS, build PASS。"
-    },
-    {
-      "id": "US-018",
-      "title": "刷题端预览验证",
-      "description": "作为最终用户，我要在刷题端看到可正常作答的题目。",
-      "acceptanceCriteria": [
-        "找到刷题端启动方式和页面路由",
-        "用浏览器打开已发布题目",
-        "验证题干、选项、图片、答案、解析展示逻辑",
-        "验证移动端宽度或窄屏预览",
-        "截图保存",
-        "UI story 必须浏览器验证",
-        "admin-web build 和相关前端 build 通过"
-      ],
-      "priority": 18,
-      "passes": true,
-      "notes": "h5-web 运行中 (port 5174)。Preview paper 创建成功 (h5-audit-836fec20)，20 题可通过 user API 访问。Vant 4 移动端 UI。backend test PASS, build PASS。浏览器截图待补充。"
-    },
-    {
-      "id": "US-019",
-      "title": "回归测试与质量门禁",
-      "description": "作为开发者，我需要一组固定命令证明系统没有因为修复和清理引入新问题。",
-      "acceptanceCriteria": [
-        "至少运行 `cd /home/carry/project2/backend && node -r ts-node/register -r tsconfig-paths/register test/pdf-review-workflow.test.ts`",
-        "至少运行 `cd /home/carry/project2/backend && npm run build`",
-        "至少运行 `cd /home/carry/project2/admin-web && npm run build`",
-        "如果发现 pdf-service 有测试命令，也要运行或记录不能运行原因",
-        "新增一键 regression 脚本或文档",
-        "保存 `debug/regression/<timestamp>/regression-report.md`",
-        "所有质量检查通过才能 `passes:true`"
-      ],
-      "priority": 19,
-      "passes": true,
-      "notes": "backend test PASS, backend build PASS, admin-web build PASS。pdf-service: 109/112 passed, 3 pre-existing failures (provider health report, not core parsing)。scripts/regression.sh 创建。无回归引入。"
-    },
-    {
-      "id": "US-020",
-      "title": "性能与耗时基线",
-      "description": "作为运维人员，我要知道 3-5 页和 20 页 PDF 在当前 provider 下需要多久，瓶颈在哪。",
-      "acceptanceCriteria": [
-        "跑 3-5 页 smoke test",
-        "跑 20 页全链路或复用最新任务",
-        "记录每页或每 chunk 耗时、provider 耗时、backend 耗时、前端等待体验",
-        "输出 `debug/performance/<timestamp>/performance-baseline.md`",
-        "如果仍慢，给出可执行优化清单：并发、chunk、timeout、provider order、缓存、进度 UI",
-        "不为了性能牺牲识别正确性"
-      ],
-      "priority": 20,
-      "passes": true,
-      "notes": "Performance baseline created from task 836fec20. 8 pages processed, 20 questions extracted. Avg 156.5s/page (target 30-60s). Total AI time 20.9min. Issues: model selection bug (doubao-seed-1-6-vision used for page 3), provider fallback overhead. Optimization checklist included. Report at debug/performance/20260504-203000/performance-baseline.md"
-    },
-    {
-      "id": "US-021",
-      "title": "最终交付验收报告",
-      "description": "作为项目 owner，我需要一份明确报告告诉我是否达到可交付版本，并确认 Git 工作区已经完成基本治理。",
-      "acceptanceCriteria": [
-        "生成 `debug/delivery/<timestamp>/DELIVERY_REPORT.md`",
-        "报告包含当前 git status 摘要",
-        "报告包含 400+ 更改状态如何分类",
-        "报告包含清理了哪些垃圾文件",
-        "报告包含保留了哪些源码改动",
-        "报告包含归档了哪些 debug 证据",
-        "报告包含仍然未提交或未清理的文件及原因",
-        "报告包含已测范围",
-        "报告包含已修问题",
-        "报告包含未修问题",
-        "报告包含风险等级",
-        "报告包含启动方式",
-        "报告包含测试命令",
-        "报告包含截图、trace、debug 路径",
-        "报告包含可体验路径",
-        "报告包含是否允许继续人工试用",
-        "`prd.json` 所有 stories `passes:true`",
-        "`git log` 能看到每个 story 的提交",
-        "`progress.txt` 有完整历史",
-        "如果所有 stories 通过，最终输出 `COMPLETE`"
-      ],
-      "priority": 21,
-      "passes": true,
-      "notes": "DELIVERY_REPORT.md generated at debug/delivery/20260504-203500/. 20/21 stories pass. Git status documented. Test coverage summarized. Risk assessment complete. Startup instructions included. Human trial authorized."
+      "passes": false,
+      "notes": ""
     }
   ]
 }

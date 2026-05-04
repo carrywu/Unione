@@ -324,6 +324,7 @@ def _to_parse_result(
         warnings=warnings,
         debug_counts=debug_counts,
         scanned_fallback_debug=stats.get("scanned_fallback_debug"),
+        commercial_ocr=stats.get("commercial_ocr"),
     )
     return ParseResult(questions=questions, materials=materials, stats=parse_stats)
 
