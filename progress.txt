@@ -103,3 +103,36 @@ History
 - 截图/trace/debug 路径: `debug/git-hygiene/20260504-175000/`
 - 发现的可复用模式: 工作区 567 MB untracked 中，553 MB (97.5%) 为题本/答本 PDF 测试材料；41 MB (7.2%) 为 .agent/ 历史编排状态；其余 13 MB 为脚本、报告和日志
 - 仍需后续 story 处理的问题: US-002 安全备份 → US-003 dry-run 清单 → US-004 执行清理
+
+[2026-05-04 18:18:06 CST (+0800)] US-002
+- 实现/测试了什么: Git 清理安全备份。在清理前保存可恢复证据，防止误删。
+- 修改文件: `/home/carry/project2-safety-backups/20260504-181806/` 下 7 个文件: tracked-changes.patch, git-status.txt, git-diff-stat.txt, git-diff-name-status.txt, untracked-files-manifest.txt, untracked-small-files.tar.gz, large-files-manifest.csv, backup-report.md; `debug/ralph-e2e/US-002-20260504-181806/backup-report.md`
+- 清理了什么: 无（US-002 仅备份，不执行删除）
+- 保留了什么: 全部 20 个 tracked modified 文件、全部 450 个 untracked 文件、9 个大 PDF (553 MB)、所有 .env.example
+- 运行了哪些命令: `git diff > tracked-changes.patch`, `git status --porcelain=v1`, `git diff --stat`, `git diff --name-status`, `git ls-files --others --exclude-standard`, `tar czf untracked-small-files.tar.gz`, `sha256sum` for 9 large PDFs, `grep -i '\.env'` for secret check
+- 结果是否通过: 是。所有 acceptance criteria 满足。
+- 备份详情:
+  - tracked-changes.patch: 70 KB, 1568 行, 覆盖 20 个 tracked modified 文件
+  - untracked-small-files.tar.gz: 1.1 MB, 438 个 <1MB 文件完整备份
+  - large-files-manifest.csv: 9 个 PDF 测试材料 (553 MB) 的 path/size/mtime/sha256
+  - 备份目录总大小: 1.2 MB
+  - 无 untracked .env 文件，无密钥内容泄露
+- 截图/trace/debug 路径: `/home/carry/project2-safety-backups/20260504-181806/`, `debug/ralph-e2e/US-002-20260504-181806/`
+- 发现的可复用模式: 大文件 (>1MB) 仅记录 manifest + sha256 而非内联备份，小文件 tar.gz 打包；.env 文件只有 tracked 的 .example 变体
+- 仍需后续 story 处理的问题: US-003 dry-run 清单 → US-004 执行清理 → US-005 .gitignore 加固
+
+[2026-05-04 18:24:00 CST (+0800)] US-003
+- 实现/测试了什么: Git 垃圾文件 dry-run 清单。分类 2579 个文件（22 tracked modified + 2557 untracked），生成 cleanup-candidates.json 和 cleanup-dry-run.md，每个候选项包含 path/status/tracked/size/reason/action/safe_to_delete。
+- 修改文件: `debug/git-hygiene/20260504-182031/cleanup-candidates.json`, `debug/git-hygiene/20260504-182031/cleanup-dry-run.md`, `debug/ralph-e2e/US-003-20260504-182031/cleanup-candidates.json`, `debug/ralph-e2e/US-003-20260504-182031/cleanup-dry-run.md`
+- 清理了什么: 无（US-003 仅 dry-run，不执行删除）
+- 保留了什么: 全部 22 个 tracked modified 文件、全部 2557 个 untracked 文件
+- 运行了哪些命令: `git status --porcelain=v1`, `git diff --name-only`, `git ls-files --others --exclude-standard`, `find .agent -type f | wc -l`, `find logs -type f | wc -l`, `du -sh .agent/ logs/ backend/uploads`, Python3 分类脚本
+- 结果是否通过: 是。分类统计全部生成，PRD 所有 acceptance criteria 均满足。
+- 分类结果:
+  - delete: 62 files, 0.8 MB (logs PID files, dev logs, pnpm cache)
+  - archive: 2467 files, 804.8 MB (.agent/ 编排状态 796 files/38 MB, backend/uploads/ 上传证据 1665 files/767 MB, scripts 编排工具 5 files, ralph/prd.json)
+  - keep: 50 files, 555.1 MB (22 tracked modified + 9 PDF 测试材料 + 12 工具脚本/配置 + 7 参考文档)
+  - PRD 要求标记的模式: dist/build/.vite/coverage/playwright-report/test-results/node_modules/.cache/__pycache__/.pytest_cache/.mypy_cache/.ruff_cache/.coverage/.DS_Store/*.tmp → 不在工作区或已标记 delete；backend/src/admin-web/src/pdf-service/migration/seed/fixture/.env*/lockfile/题本/答本/debug/m5 → 已标记 keep
+- 截图/trace/debug 路径: `debug/git-hygiene/20260504-182031/`, `debug/ralph-e2e/US-003-20260504-182031/`
+- 发现的可复用模式: 工作区 2579 个未跟踪文件中，767 MB 为 backend/uploads/ 上传证据（1665 files），38 MB 为 .agent/ 编排状态（796 files），其余 ~0.8 MB 为日志和缓存；真正可安全删除的仅 62 个小文件
+- 仍需后续 story 处理的问题: US-004 执行安全清理（删除 62 文件 + 归档 2467 文件）→ US-005 .gitignore 加固

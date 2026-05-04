@@ -46,8 +46,8 @@
         "生成 `backup-report.md`"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "备份完成于 20260504-181806。tracked-changes.patch (70KB, 20 files), 438 small untracked files tar.gz (1.1MB), 9 large PDF manifest with sha256。无 .env 泄露，无删除。"
     },
     {
       "id": "US-003",
@@ -87,8 +87,8 @@
         "不执行删除"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2579 个文件分类完成: delete 62 (0.8MB), archive 2467 (804.8MB), keep 50 (555.1MB)。PRD 所有标记模式均已覆盖。"
     },
     {
       "id": "US-004",
