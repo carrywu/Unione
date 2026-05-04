@@ -1,53 +1,59 @@
 # Verifier Report
 
-- task_id: 836fec20-2628-44ed-9642-aedd57467864
-- m2_verdict: M2_PASS
-- m3_verdict: M3_PASS
-- m4_verdict: M4_FAIL
-- produced_question_count: 20/20
-- missing_question_numbers: []
-- fallback_failed_pages: []
-- debug_live_consistency: pass
-
-## M2 Checks
-
-- task_status=done
-- progress=100
-- produced_question_count=20/20
-- fallback_failed_pages=[]
-- missing_question_numbers=[]
-- page_5_questions_16_20_recovered
-- debug_live_consistency=pass
-- manualForceAddAllowed_true_count=0
-- warning_or_failed_can_add_count=0
-- provider_health:qwen+ark=pass
-- backend_test:pdf-review-workflow=pass
-- pdf-service:test_scanned_question_book_kernel=pass
-- pdf-service:test_ai_client_page_visual_fallbacks=pass
-- pdf-service:test_provider_health_report=pass
-
-## Failed Checks
-
-- none
+- task_id: `836fec20-2628-44ed-9642-aedd57467864`
+- current_milestone: `M4`
+- m2_verdict: `M2_PASS`
+- m3_verdict: `M3_PASS`
+- m4_verdict: `M4_PASS`
+- debug_live_consistency: `pass`
+- next_action: `M4_COMPLETE`
 
 ## M4 Metrics
 
-- ai_audit_status_present: 20/20
-- answer_suggestion_present: 0/20
-- answer_unknown_reason_present: 20/20
-- analysis_suggestion_present: 0/20
-- analysis_unknown_reason_present: 20/20
-- visual_summary_present: 0/20
-- image_linkage_complete: 0/20
+- ai_audit_status_present: `20/20`
+- ai_audit_verdict_present: `20/20`
+- ai_audit_summary_present: `20/20`
+- answer_suggestion_present: `3/20`
+- answer_suggestion_or_reason_present: `20/20`
+- analysis_suggestion_present: `3/20`
+- analysis_suggestion_or_reason_present: `20/20`
+- visual_summary_present: `20/20`
+- visual_parse_status_present: `20/20`
+- ai_reviewed_before_human_true: `20/20`
+- risk_flags_present: `20/20`
+- risk_flags_non_empty: `20/20`
+- with_visual_assets: `3/20`
+- image_linkage_complete: `20/20`
+- playwright_m4_api_coverage: `true`
+- playwright_debug_live_consistency: `pass`
 
-## Evidence Paths
+## Passed Checks
 
-- /home/carry/project2/backend/debug/pdf-ai-preaudit/836fec20-2628-44ed-9642-aedd57467864/final-questions.json
-- /home/carry/project2/backend/debug/pdf-ai-preaudit/836fec20-2628-44ed-9642-aedd57467864/fallback-recovery.json
-- /home/carry/project2/backend/debug/pdf-ai-preaudit/836fec20-2628-44ed-9642-aedd57467864/question-number-scan.json
-- /home/carry/project2/backend/debug/pdf-ai-preaudit/836fec20-2628-44ed-9642-aedd57467864/paper-candidate-payload.json
-- /home/carry/project2/.agent/reports/provider-health-report.json
-- /home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-recognition-audit.json
-- /home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-live-paper-candidates-api.json
-- /home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/admin-paper-review.png
-- /home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-trace.zip
+- `produced_question_count=20/20`
+- `fallback_failed_pages=[]`
+- `missing_question_numbers=[]`
+- `provider_health:qwen+ark=pass`
+- `warning_or_failed_can_add_count=0`
+- `manualForceAddAllowed_true_count=0`
+- `m4_ai_audit_fields=20/20`
+- `m4_visual_summary=20/20`
+- `m4_image_linkage_complete=20/20`
+- `m4_answer_suggestion_or_reason=20/20`
+- `m4_analysis_suggestion_or_reason=20/20`
+- `m4_risk_flags_field=20/20`
+- `playwright:admin_m4_review=pass`
+
+## Evidence
+
+- `/home/carry/project2/backend/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/ai-audit-results.json`
+- `/home/carry/project2/backend/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/m4-ai-preaudit-summary.json`
+- `/home/carry/project2/backend/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/api-responses.json`
+- `/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-recognition-audit.json`
+- `/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/admin-paper-review.png`
+- `/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-trace.zip`
+
+## Commit
+
+- code_commit_hash: `fc910a8`
+- code_commit_message: `feat(pdf): add M4 AI preaudit pipeline`
+- code_commit_pushed: `true`

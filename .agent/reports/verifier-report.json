@@ -3,7 +3,7 @@
   "current_milestone": "M4",
   "m2_verdict": "M2_PASS",
   "m3_verdict": "M3_PASS",
-  "m4_verdict": "M4_FAIL",
+  "m4_verdict": "M4_PASS",
   "m3_allowed": true,
   "provider_recovery": {
     "primary": "qwen_vl:qwen3-vl-plus",
@@ -19,26 +19,8 @@
   "produced_question_count": 20,
   "expected_question_count": 20,
   "produced_question_numbers": [
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
-    17,
-    18,
-    19,
-    20
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    11, 12, 13, 14, 15, 16, 17, 18, 19, 20
   ],
   "debug_live_consistency": "pass",
   "live_api_counts": {
@@ -58,47 +40,64 @@
     "warning_or_failed_can_add_count=0",
     "provider_health:qwen+ark=pass",
     "backend_test:pdf-review-workflow=pass",
-    "pdf-service:test_scanned_question_book_kernel=pass",
-    "pdf-service:test_ai_client_page_visual_fallbacks=pass",
-    "pdf-service:test_provider_health_report=pass"
+    "playwright:admin_m4_review=pass",
+    "m4_ai_audit_fields=20/20",
+    "m4_visual_summary=20/20",
+    "m4_image_linkage_complete=20/20",
+    "m4_answer_suggestion_or_reason=20/20",
+    "m4_analysis_suggestion_or_reason=20/20",
+    "m4_risk_flags_field=20/20",
+    "m4_admin_ui_placeholder_check=pass"
   ],
   "repair_actions": [
-    "收紧 backend fail-closed gate，warning/need_manual_fix 题禁止 manualForceAddAllowed=true",
-    "backend -> pdf-service 透传稳定 kernel debug_dir，为断电恢复提供固定落盘位置",
-    "parser kernel 新增 checkpoint-manifest / sha256 / recovery report / 成功页 cache 复用",
-    "vision provider 调整为 qwen 主、Ark 备、mimo cooldown，并新增 provider cache / hedged request",
-    "补充回归测试并验证 Playwright admin review 页面可达"
+    "backend 在 getAiPreauditDebug/getPaperCandidates 阶段补齐 M4 规范化视图，统一合并 final_preview_payload、final_questions、ai_audit_results 与 semantic_groups",
+    "live candidate 回填 visual_summary、visual_confidence、ai_reviewed_before_human、answer/analysis suggestion 或 unknown_reason",
+    "为 visual_assets 补齐 asset_id/page/bbox/image_role/belongs_to_question/linked_by/link_reason/visual_hash",
+    "将 M4 结果落盘到 debug/pdf-semantic/<taskId>/ai-audit-results.json、m4-ai-preaudit-summary.json、api-responses.json",
+    "admin-web 审核页新增视觉理解、风险标签与 image linkage 面板",
+    "Playwright 审核脚本升级为 M4 覆盖率与 debug/live 一致性验收"
   ],
   "root_cause": [
-    "旧 M2 阻塞已从 page 5 提取失败收敛为 fail-closed gate 误放行",
-    "page 5 已恢复成功后，最新 blocker 是 manualForceAddAllowed 对 warning/need_manual_fix 题放开",
-    "M4 仍未通过，主因是 visual_summary、answer_suggestion、analysis_suggestion 为空，且 image linkage 关键字段未回填"
+    "M4 失败并非 provider 能力不足，而是 backend live candidate 聚合阶段丢失了 final-questions 与 semantic-groups 中已存在的答案、解析、视觉摘要和 linkage 元数据",
+    "admin-web 原先只能展示残缺字段，Playwright 也只覆盖到 M2 级检查，没有拦住 M4 字段缺失",
+    "修复后 live API、debug ai-audit-results 与 admin 页面已统一到同一份 M4 规范化结果"
   ],
   "evidence_paths": [
     "/home/carry/project2/backend/debug/pdf-ai-preaudit/836fec20-2628-44ed-9642-aedd57467864/final-questions.json",
-    "/home/carry/project2/backend/debug/pdf-ai-preaudit/836fec20-2628-44ed-9642-aedd57467864/fallback-recovery.json",
-    "/home/carry/project2/backend/debug/pdf-ai-preaudit/836fec20-2628-44ed-9642-aedd57467864/question-number-scan.json",
-    "/home/carry/project2/backend/debug/pdf-ai-preaudit/836fec20-2628-44ed-9642-aedd57467864/paper-candidate-payload.json",
-    "/home/carry/project2/.agent/reports/provider-health-report.json",
+    "/home/carry/project2/backend/debug/pdf-ai-preaudit/836fec20-2628-44ed-9642-aedd57467864/final-preview-payload.json",
+    "/home/carry/project2/backend/debug/pdf-ai-preaudit/836fec20-2628-44ed-9642-aedd57467864/ai-audit-results.json",
+    "/home/carry/project2/backend/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/ai-audit-results.json",
+    "/home/carry/project2/backend/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/m4-ai-preaudit-summary.json",
+    "/home/carry/project2/backend/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/api-responses.json",
     "/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-recognition-audit.json",
     "/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/admin-paper-review.png",
-    "/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-trace.zip",
-    "/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-live-paper-candidates-api.json"
+    "/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-trace.zip"
   ],
   "m4_metrics": {
     "total": 20,
     "ai_audit_status_present": 20,
     "ai_audit_verdict_present": 20,
-    "ai_audit_summary_present": 10,
-    "answer_suggestion_present": 0,
-    "answer_unknown_reason_present": 20,
-    "analysis_suggestion_present": 0,
-    "analysis_unknown_reason_present": 20,
-    "risk_flags_present": 0,
-    "visual_summary_present": 0,
+    "ai_audit_summary_present": 20,
+    "answer_suggestion_present": 3,
+    "answer_unknown_reason_present": 17,
+    "analysis_suggestion_present": 3,
+    "analysis_unknown_reason_present": 17,
+    "risk_flags_present": 20,
+    "risk_flags_non_empty": 20,
+    "visual_summary_present": 20,
     "visual_parse_status_present": 20,
-    "with_visual_assets": 20,
-    "image_linkage_complete": 0
+    "ai_reviewed_before_human_true": 20,
+    "with_visual_assets": 3,
+    "image_linkage_complete": 20,
+    "playwright_m4_api_coverage": true,
+    "playwright_debug_live_consistency": "pass"
   },
-  "next_action": "M4_FIX_VISUAL_SUMMARY_AND_LINKAGE_FIELDS"
+  "commit": {
+    "code_commit_hash": "fc910a8",
+    "code_commit_message": "feat(pdf): add M4 AI preaudit pipeline",
+    "code_commit_pushed": true,
+    "branch": "main",
+    "remote": "origin -> git@github.com:carrywu/Unione.git"
+  },
+  "next_action": "M4_COMPLETE"
 }
