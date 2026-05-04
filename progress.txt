@@ -193,3 +193,27 @@ History
 - 截图/trace/debug 路径: `debug/ralph-baseline/20260504-183932/baseline.md`, `debug/ralph-e2e/US-006-20260504-183932/`
 - 发现的可复用模式: pdf-service 使用 uvicorn 启动（不在 main.py 中调用），admin-web/h5-web 都代理 /api 到 backend；backend .env.example 包含完整的环境变量文档
 - 仍需后续 story 处理的问题: US-007 建立全链路测试矩阵
+
+[2026-05-04 18:45:00 CST (+0800)] US-007
+- 实现/测试了什么: 建立全链路测试矩阵。覆盖 12 个测试大类、50+ 测试用例，包括题本上传、答本上传、M5A、M5B、制卷核对、PDF 识别错误、图表题、发布入库、刷题端、异常状态、cancel/retry、回归测试、性能基线。
+- 修改文件: `debug/e2e-test-matrix/20260504-184300/matrix.md`, `debug/ralph-e2e/US-007-20260504-184300/matrix.md`
+- 清理了什么: 无
+- 保留了什么: 无
+- 运行了哪些命令: Agent 子任务收集 API 路由和页面信息
+- 结果是否通过: 是。测试矩阵生成。
+- 矩阵覆盖:
+  - 1. 题本上传 (6 cases): API 上传、进度轮询、最终状态、候选数量、UI 展示、无 undefined
+  - 2. 答本上传与 M5A (8 cases): 上传、触发匹配、结果完整性、无 BLOCKED、20/20 覆盖、conflict 人工复核
+  - 3. M5B 历史撞库 (5 cases): 字段存在、候选类型、来源、不误判、UI 展示
+  - 4. 制卷核对页 (10 cases): 页面加载、逐题遍历、题号连续、题干/选项完整、图片归属、M5A/M5B、按钮可点击
+  - 5. PDF 识别错误 (3 cases): 错误分类、证据结构、修复验证
+  - 6. 图表题 (5 cases): 识别、完整性、visual_parse_status、visual_summary、image linkage
+  - 7. 发布入库 (5 cases): matched 发布、conflict 拦截、题库可见、状态回写、刷题端可见
+  - 8. 刷题端 (5 cases): 启动、打开题目、渲染、答案逻辑、窄屏响应
+  - 9. 异常状态 (6 cases): provider 超时、429、卡 processing、解析失败、前端 undefined、API/UI 一致性
+  - 10. Cancel/Retry (4 cases): 列出状态、cancel、retry、UI 状态
+  - 11. 回归测试 (4 cases): backend test、backend build、admin-web build、pdf-service test
+  - 12. 性能基线 (3 cases): 小 PDF smoke、20 页全链路、瓶颈分析
+- 截图/trace/debug 路径: `debug/e2e-test-matrix/20260504-184300/matrix.md`, `debug/ralph-e2e/US-007-20260504-184300/`
+- 发现的可复用模式: API 端点可通过 curl 或 fetch 脚本自动化；browser 测试需 Playwright 或手动截图；cancel/retry 端点已存在可直接测试
+- 仍需后续 story 处理的问题: US-008 服务启动与健康检查自动化

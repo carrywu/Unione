@@ -171,8 +171,8 @@
         "不修改业务逻辑"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "12 个测试大类、50+ 测试用例覆盖上传/M5A/M5B/审核/发布/刷题/异常/回归/性能。每个用例有 expected result、evidence path、automation。"
     },
     {
       "id": "US-008",
