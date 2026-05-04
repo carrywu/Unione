@@ -4,9 +4,9 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
@@ -464,6 +464,16 @@ export class PdfService {
     if (!debugPayload && !finalPreviewPayload && !aiAuditResults) {
       throw new NotFoundException('AI 预审核调试产物不存在');
     }
+    const normalizedM4 = this.normalizeM4DebugPayload({
+      taskId: task.id,
+      debugDir,
+      finalPreviewPayload,
+      finalQuestions,
+      aiAuditResults,
+      semanticGroups,
+      pageUnderstanding,
+      recropPlan,
+    });
     return {
       taskId: task.id,
       bankId: task.bank_id,
@@ -472,9 +482,15 @@ export class PdfService {
       qwen_vl_enabled: Boolean(debugPayload?.qwen_vl_enabled),
       qwen_vl_call_count: Number(debugPayload?.qwen_vl_call_count_after || 0),
       final_verdict: debugPayload?.final_verdict || null,
-      final_preview_payload: finalPreviewPayload || debugPayload?.final_preview_payload || null,
+      final_preview_payload:
+        normalizedM4.final_preview_payload ||
+        finalPreviewPayload ||
+        debugPayload?.final_preview_payload ||
+        null,
       final_questions: finalQuestions || debugPayload?.final_questions_after_audit || [],
-      ai_audit_results: aiAuditResults || debugPayload?.ai_audit_results || [],
+      ai_audit_results:
+        normalizedM4.ai_audit_results || aiAuditResults || debugPayload?.ai_audit_results || [],
+      m4_ai_preaudit_summary: normalizedM4.m4_ai_preaudit_summary,
       page_understanding: pageUnderstanding || debugPayload?.page_understanding || [],
       semantic_groups: semanticGroups || debugPayload?.semantic_groups || [],
       recrop_plan: recropPlan || debugPayload?.recrop_plan || [],
@@ -502,6 +518,27 @@ export class PdfService {
         page_understanding_recovered: join(debugDir, 'page-understanding-recovered.json'),
         source_text_span_report: join(debugDir, 'source-text-span-report.json'),
         material_group_binding_report: join(debugDir, 'material-group-binding-report.json'),
+        m4_ai_audit_results: join(
+          process.cwd(),
+          'debug',
+          'pdf-semantic',
+          task.id,
+          'ai-audit-results.json',
+        ),
+        m4_ai_preaudit_summary: join(
+          process.cwd(),
+          'debug',
+          'pdf-semantic',
+          task.id,
+          'm4-ai-preaudit-summary.json',
+        ),
+        m4_api_responses: join(
+          process.cwd(),
+          'debug',
+          'pdf-semantic',
+          task.id,
+          'api-responses.json',
+        ),
       },
     };
   }
@@ -595,6 +632,7 @@ export class PdfService {
       },
     };
     await this.writePaperCandidateArtifact(task.id, payload);
+    await this.writeM4SemanticArtifacts(task.id, debug, payload);
     return payload;
   }
 
@@ -946,24 +984,43 @@ export class PdfService {
       question_no: questionNo,
       stem: stem || null,
       options,
-      answer_suggestion: audit.answer_suggestion || question.answer_suggestion || question.ai_candidate_answer || null,
+      answer_suggestion:
+        audit.answer_suggestion ||
+        question.answer_suggestion ||
+        question.ai_candidate_answer ||
+        (question.ai_audit_status === 'passed' ? question.answer : null) ||
+        null,
       answer_confidence: audit.answer_confidence ?? question.answer_confidence ?? null,
       answer_unknown_reason:
         audit.answer_unknown_reason ||
         question.answer_unknown_reason ||
-        (audit.answer_suggestion || question.answer_suggestion ? null : '模型未给出可验证答案建议'),
+        (audit.answer_suggestion ||
+        question.answer_suggestion ||
+        question.ai_candidate_answer ||
+        (question.ai_audit_status === 'passed' ? question.answer : null)
+          ? null
+          : '模型未给出可验证答案建议'),
       analysis_suggestion:
         audit.analysis_suggestion ||
         question.analysis_suggestion ||
         question.ai_candidate_analysis ||
+        (question.ai_audit_status === 'passed' ? question.analysis : null) ||
         null,
       analysis_confidence: audit.analysis_confidence ?? question.analysis_confidence ?? null,
       analysis_unknown_reason:
         audit.analysis_unknown_reason ||
         question.analysis_unknown_reason ||
-        (audit.analysis_suggestion || question.analysis_suggestion ? null : '模型未给出可验证解析建议'),
+        (audit.analysis_suggestion ||
+        question.analysis_suggestion ||
+        question.ai_candidate_analysis ||
+        (question.ai_audit_status === 'passed' ? question.analysis : null)
+          ? null
+          : '模型未给出可验证解析建议'),
       visual_assets: visualAssets,
       preview_image_path: question.preview_image_path || null,
+      visual_summary: question.visual_summary || audit.visual_summary || null,
+      visual_confidence:
+        question.visual_confidence ?? audit.visual_confidence ?? null,
       source_page_refs: sourcePageRefs,
       source_bbox: sourceBbox,
       source_text_span: sourceTextSpan,
@@ -976,6 +1033,9 @@ export class PdfService {
       ai_audit_status: aiStatus,
       ai_audit_verdict: audit.ai_audit_verdict || question.ai_audit_verdict || null,
       ai_audit_summary: audit.ai_audit_summary || question.ai_audit_summary || null,
+      ai_reviewed_before_human: Boolean(
+        question.ai_reviewed_before_human ?? audit.ai_reviewed_before_human,
+      ),
       risk_flags: riskFlags,
       need_manual_fix: needManualFix,
       can_add_to_paper: canAdd,
@@ -991,6 +1051,781 @@ export class PdfService {
         ...(debug.artifact_refs || {}),
       },
     };
+  }
+
+  private normalizeM4DebugPayload(input: {
+    taskId: string;
+    debugDir: string;
+    finalPreviewPayload: Record<string, any> | null;
+    finalQuestions: unknown;
+    aiAuditResults: unknown;
+    semanticGroups: unknown;
+    pageUnderstanding: unknown;
+    recropPlan: unknown;
+  }) {
+    const previewPayload =
+      input.finalPreviewPayload && typeof input.finalPreviewPayload === 'object'
+        ? { ...input.finalPreviewPayload }
+        : {};
+    const previewQuestions = Array.isArray(previewPayload.questions)
+      ? (previewPayload.questions as Array<Record<string, any>>)
+      : [];
+    const finalQuestions = Array.isArray(input.finalQuestions)
+      ? (input.finalQuestions as Array<Record<string, any>>)
+      : [];
+    const auditResults = Array.isArray(input.aiAuditResults)
+      ? (input.aiAuditResults as Array<Record<string, any>>)
+      : [];
+    const semanticGroups = Array.isArray(input.semanticGroups)
+      ? (input.semanticGroups as Array<Record<string, any>>)
+      : [];
+    const pageUnderstanding = Array.isArray(input.pageUnderstanding)
+      ? (input.pageUnderstanding as Array<Record<string, any>>)
+      : [];
+
+    const previewByKey = new Map<string, Record<string, any>>();
+    const finalByKey = new Map<string, Record<string, any>>();
+    const auditByKey = new Map<string, Record<string, any>>();
+    const orderedKeys: Array<{ key: string; questionNo: unknown; index: number }> = [];
+    const seenKeys = new Set<string>();
+
+    const rememberKey = (questionNo: unknown, index: number) => {
+      const key = this.paperCandidateQuestionKey(questionNo, index);
+      if (seenKeys.has(key)) return key;
+      seenKeys.add(key);
+      orderedKeys.push({ key, questionNo, index });
+      return key;
+    };
+
+    previewQuestions.forEach((question, index) => {
+      previewByKey.set(rememberKey(question?.question_no, index), question || {});
+    });
+    finalQuestions.forEach((question, index) => {
+      finalByKey.set(rememberKey(question?.question_no, index), question || {});
+    });
+    auditResults.forEach((audit, index) => {
+      auditByKey.set(rememberKey(audit?.question_no, index), audit || {});
+    });
+
+    const normalizedQuestions = orderedKeys.map(({ key, questionNo, index }) =>
+      this.buildNormalizedM4PreviewQuestion({
+        questionNo,
+        previewQuestion: previewByKey.get(key) || previewQuestions[index] || {},
+        finalQuestion: finalByKey.get(key) || finalQuestions[index] || {},
+        audit: auditByKey.get(key) || auditResults[index] || {},
+        semanticGroup: this.findSemanticGroup(semanticGroups, questionNo, index),
+        pageUnderstanding,
+      }),
+    );
+    const normalizedAudits = normalizedQuestions.map((question, index) =>
+      this.buildNormalizedM4AuditRecord(
+        question,
+        auditByKey.get(this.paperCandidateQuestionKey(question.question_no, index)) ||
+          auditResults[index] ||
+          {},
+      ),
+    );
+
+    return {
+      final_preview_payload: {
+        ...previewPayload,
+        questions: normalizedQuestions,
+      },
+      ai_audit_results: normalizedAudits,
+      m4_ai_preaudit_summary: this.buildM4ArtifactSummary(normalizedQuestions),
+    };
+  }
+
+  private buildNormalizedM4PreviewQuestion(input: {
+    questionNo: unknown;
+    previewQuestion: Record<string, any>;
+    finalQuestion: Record<string, any>;
+    audit: Record<string, any>;
+    semanticGroup: Record<string, any> | null;
+    pageUnderstanding: Array<Record<string, any>>;
+  }) {
+    const previewQuestion = input.previewQuestion || {};
+    const finalQuestion = input.finalQuestion || {};
+    const audit = input.audit || {};
+    const semanticGroup = input.semanticGroup;
+    const questionNo =
+      input.questionNo ??
+      previewQuestion.question_no ??
+      finalQuestion.question_no ??
+      audit.question_no ??
+      null;
+    const mergedSource = { ...finalQuestion, ...previewQuestion };
+    const stemText =
+      this.firstMeaningfulText(
+        previewQuestion.stem,
+        finalQuestion.stem,
+        finalQuestion.content,
+        input.semanticGroup?.stem_group?.text,
+      ) || null;
+    const options = {
+      ...this.optionsFromSemanticGroup(semanticGroup),
+      ...this.normalizeCandidateOptions({
+        ...(finalQuestion.options || {}),
+        A: finalQuestion.option_a,
+        B: finalQuestion.option_b,
+        C: finalQuestion.option_c,
+        D: finalQuestion.option_d,
+      }),
+      ...this.normalizeCandidateOptions(previewQuestion.options),
+    };
+    const visualAssets = this.normalizeM4VisualAssets({
+      assets:
+        (Array.isArray(previewQuestion.visual_assets) && previewQuestion.visual_assets) ||
+        (Array.isArray(previewQuestion.images) && previewQuestion.images) ||
+        (Array.isArray(finalQuestion.visual_assets) && finalQuestion.visual_assets) ||
+        (Array.isArray(finalQuestion.images) && finalQuestion.images) ||
+        [],
+      questionNo,
+      semanticGroup,
+      sourcePageRefs: this.paperCandidateSourcePageRefs(mergedSource, semanticGroup),
+    });
+    const hasMeaningfulVisualAsset = this.paperCandidateHasMeaningfulVisualAsset(
+      visualAssets,
+      semanticGroup,
+    );
+    const visualSummary = this.buildNormalizedVisualSummary({
+      previewQuestion,
+      finalQuestion,
+      semanticGroup,
+      visualAssets,
+      hasMeaningfulVisualAsset,
+    });
+    const answerSuggestion = this.firstMeaningfulText(
+      audit.answer_suggestion,
+      previewQuestion.answer_suggestion,
+      finalQuestion.answer_suggestion,
+      finalQuestion.ai_candidate_answer,
+      this.safeDisplayText(
+        audit.ai_audit_status ||
+          previewQuestion.ai_audit_status ||
+          finalQuestion.ai_audit_status,
+        'skipped',
+      ) === 'passed'
+        ? finalQuestion.answer
+        : null,
+    );
+    const analysisSuggestion = this.firstMeaningfulText(
+      audit.analysis_suggestion,
+      previewQuestion.analysis_suggestion,
+      finalQuestion.analysis_suggestion,
+      finalQuestion.ai_candidate_analysis,
+      this.safeDisplayText(
+        audit.ai_audit_status ||
+          previewQuestion.ai_audit_status ||
+          finalQuestion.ai_audit_status,
+        'skipped',
+      ) === 'passed'
+        ? finalQuestion.analysis
+        : null,
+    );
+    const answerConfidence = this.toOptionalNumber(
+      audit.answer_confidence ??
+        previewQuestion.answer_confidence ??
+        finalQuestion.answer_confidence ??
+        finalQuestion.ai_answer_confidence,
+    );
+    const analysisConfidence = this.toOptionalNumber(
+      audit.analysis_confidence ??
+        previewQuestion.analysis_confidence ??
+        finalQuestion.analysis_confidence ??
+        finalQuestion.ai_analysis_confidence,
+    );
+    const visualConfidenceCandidates = [
+      this.toOptionalNumber(previewQuestion.visual_confidence),
+      this.toOptionalNumber(finalQuestion.visual_confidence),
+      this.toOptionalNumber(audit.visual_confidence),
+      ...visualAssets
+        .map((asset) => this.toOptionalNumber(asset.visual_confidence))
+        .filter((value): value is number => value !== null),
+      ...((Array.isArray(semanticGroup?.visual_group?.blocks)
+        ? semanticGroup?.visual_group?.blocks
+        : []) as Array<Record<string, any>>)
+        .map((block) => this.toOptionalNumber(block.confidence))
+        .filter((value): value is number => value !== null),
+    ].filter((value): value is number => value !== null);
+    const visualConfidence = visualConfidenceCandidates.length
+      ? Math.max(...visualConfidenceCandidates)
+      : null;
+    const aiAuditStatus = this.safeDisplayText(
+      audit.ai_audit_status ||
+        previewQuestion.ai_audit_status ||
+        finalQuestion.ai_audit_status,
+      'skipped',
+    );
+    const answerUnknownReason =
+      answerSuggestion ||
+      this.firstMeaningfulText(
+        audit.answer_unknown_reason,
+        previewQuestion.answer_unknown_reason,
+        finalQuestion.answer_unknown_reason,
+      )
+        ? this.firstMeaningfulText(
+            audit.answer_unknown_reason,
+            previewQuestion.answer_unknown_reason,
+            finalQuestion.answer_unknown_reason,
+          )
+        : '模型未给出可验证答案建议';
+    const analysisUnknownReason =
+      analysisSuggestion ||
+      this.firstMeaningfulText(
+        audit.analysis_unknown_reason,
+        previewQuestion.analysis_unknown_reason,
+        finalQuestion.analysis_unknown_reason,
+      )
+        ? this.firstMeaningfulText(
+            audit.analysis_unknown_reason,
+            previewQuestion.analysis_unknown_reason,
+            finalQuestion.analysis_unknown_reason,
+          )
+        : '模型未给出可验证解析建议';
+
+    const riskFlags = Array.from(
+      new Set(
+        [
+          ...this.toStringArray(previewQuestion.risk_flags),
+          ...this.toStringArray(audit.risk_flags),
+          ...this.toStringArray(finalQuestion.ai_risk_flags),
+          ...this.toStringArray(finalQuestion.visual_risk_flags),
+          ...this.toStringArray(finalQuestion.parse_warnings),
+          ...this.toStringArray(previewQuestion.parse_warnings),
+          ...this.toStringArray(finalQuestion.question_quality?.risk_flags),
+          ...this.toStringArray(finalQuestion.question_quality?.review_reasons),
+          ...this.toStringArray(semanticGroup?.risk_flags),
+        ].filter(Boolean),
+      ),
+    );
+    if (!hasMeaningfulVisualAsset && !riskFlags.includes('no_visual_context')) {
+      riskFlags.push('no_visual_context');
+    }
+    if (visualSummary === 'visual_summary_missing' && !riskFlags.includes('visual_summary_missing')) {
+      riskFlags.push('visual_summary_missing');
+    }
+    if (aiAuditStatus !== 'passed' && !riskFlags.includes('need_manual_fix')) {
+      riskFlags.push('need_manual_fix');
+    }
+    if (answerConfidence !== null && answerConfidence < 0.75 && !riskFlags.includes('low_ai_answer_confidence')) {
+      riskFlags.push('low_ai_answer_confidence');
+    }
+    if (
+      analysisConfidence !== null &&
+      analysisConfidence < 0.75 &&
+      !riskFlags.includes('low_ai_analysis_confidence')
+    ) {
+      riskFlags.push('low_ai_analysis_confidence');
+    }
+    if (visualConfidence !== null && visualConfidence < 0.75 && !riskFlags.includes('low_visual_confidence')) {
+      riskFlags.push('low_visual_confidence');
+    }
+
+    const sourcePageRefs = this.paperCandidateSourcePageRefs(mergedSource, semanticGroup);
+    const sourceBbox = this.firstBbox(
+      previewQuestion.source_bbox,
+      finalQuestion.source_bbox,
+      semanticGroup?.stem_group?.bbox,
+      semanticGroup?.bbox,
+    );
+    const sourceTextSpan =
+      this.firstMeaningfulText(
+        previewQuestion.source_text_span,
+        finalQuestion.source_text_span,
+        semanticGroup?.source_text_span,
+        semanticGroup?.stem_group?.source_text_span,
+      ) || null;
+    const materialGroupId =
+      this.firstMeaningfulText(
+        previewQuestion.material_group_id,
+        finalQuestion.material_group_id,
+        semanticGroup?.material_group_id,
+      ) || null;
+    const materialGroupQuestionIndexes =
+      this.toNumberArray(
+        previewQuestion.material_group_question_indexes ||
+          finalQuestion.material_group_question_indexes ||
+          semanticGroup?.material_group_question_indexes,
+      ) || [];
+    const materialGroupConfidence = this.toOptionalNumber(
+      previewQuestion.material_group_confidence ??
+        finalQuestion.material_group_confidence ??
+        semanticGroup?.material_group_confidence,
+    );
+    const materialGroupReason =
+      this.firstMeaningfulText(
+        previewQuestion.material_group_reason,
+        finalQuestion.material_group_reason,
+        semanticGroup?.material_group_reason,
+      ) || null;
+    const sharedMaterial = Boolean(
+      previewQuestion.shared_material ??
+        finalQuestion.shared_material ??
+        semanticGroup?.shared_material ??
+        (materialGroupQuestionIndexes.length > 1),
+    );
+    const sourceLocatorAvailable = Boolean(sourcePageRefs.length > 0 && sourceBbox && sourceTextSpan);
+    const sourceReview = this.paperCandidateManualReviewDecision({
+      riskFlags,
+      stem: stemText || '',
+      sourcePageRefs,
+      sourceBbox,
+      sourceTextSpan,
+      sourceLocatorAvailable,
+      semanticGroup,
+      materialGroupId,
+      sharedMaterial,
+    });
+    sourceReview.riskFlags.forEach((flag) => {
+      if (!riskFlags.includes(flag)) riskFlags.push(flag);
+    });
+    const previewImagePath =
+      this.firstMeaningfulText(
+        previewQuestion.preview_image_path,
+        finalQuestion.preview_image_path,
+        ...visualAssets.map((asset: Record<string, any>) =>
+          this.isMeaningfulVisualRole(asset)
+            ? this.firstMeaningfulText(asset.url, asset.image_url, asset.src)
+            : null,
+        ),
+      ) ||
+      this.firstMeaningfulText(
+        ...visualAssets.map((asset: Record<string, any>) =>
+          this.firstMeaningfulText(asset.url, asset.image_url, asset.src),
+        ),
+      );
+    const pageRecord =
+      input.pageUnderstanding.find((item) => sourcePageRefs.includes(Number(item.page_no || item.page_num))) ||
+      null;
+
+    return {
+      ...previewQuestion,
+      answer: finalQuestion.answer || previewQuestion.answer || null,
+      analysis: finalQuestion.analysis || previewQuestion.analysis || null,
+      ai_candidate_answer:
+        finalQuestion.ai_candidate_answer || previewQuestion.ai_candidate_answer || null,
+      ai_candidate_analysis:
+        finalQuestion.ai_candidate_analysis || previewQuestion.ai_candidate_analysis || null,
+      question_no: questionNo,
+      stem: stemText,
+      options,
+      visual_assets: visualAssets,
+      preview_image_path: previewImagePath || null,
+      source_page_refs: sourcePageRefs,
+      source_bbox: sourceBbox,
+      source_text_span: sourceTextSpan,
+      material_group_id: materialGroupId,
+      material_group_question_indexes: materialGroupQuestionIndexes,
+      material_group_confidence: materialGroupConfidence,
+      material_group_reason: materialGroupReason,
+      shared_material: sharedMaterial,
+      visual_summary: visualSummary,
+      visual_confidence: visualConfidence,
+      visual_parse_status: this.normalizedVisualParseStatus(
+        previewQuestion.visual_parse_status || finalQuestion.visual_parse_status,
+        hasMeaningfulVisualAsset,
+      ),
+      answer_suggestion: answerSuggestion,
+      answer_confidence: answerConfidence,
+      answer_unknown_reason: answerSuggestion ? null : answerUnknownReason,
+      analysis_suggestion: analysisSuggestion,
+      analysis_confidence: analysisConfidence,
+      analysis_unknown_reason: analysisSuggestion ? null : analysisUnknownReason,
+      ai_audit_status: aiAuditStatus,
+      ai_audit_verdict:
+        this.firstMeaningfulText(
+          audit.ai_audit_verdict,
+          previewQuestion.ai_audit_verdict,
+          finalQuestion.ai_audit_verdict,
+        ) || this.defaultAuditVerdictForStatus(aiAuditStatus),
+      ai_audit_summary:
+        this.firstMeaningfulText(
+          audit.ai_audit_summary,
+          previewQuestion.ai_audit_summary,
+          finalQuestion.ai_audit_summary,
+        ) ||
+        this.defaultAuditSummary({
+          aiAuditStatus,
+          visualSummary,
+          answerSuggestion,
+          answerUnknownReason: answerSuggestion ? null : answerUnknownReason,
+          analysisSuggestion,
+          analysisUnknownReason: analysisSuggestion ? null : analysisUnknownReason,
+          riskFlags,
+        }),
+      ai_reviewed_before_human: Boolean(
+        finalQuestion.ai_reviewed_before_human ??
+          previewQuestion.ai_reviewed_before_human ??
+          audit.ai_reviewed_before_human ??
+          true,
+      ),
+      risk_flags: riskFlags,
+      source_artifacts_refs: {
+        ...(previewQuestion.source_artifacts_refs || {}),
+        ...(pageRecord?.raw_output_ref
+          ? { page_understanding_raw_output: pageRecord.raw_output_ref }
+          : {}),
+      },
+    };
+  }
+
+  private buildNormalizedM4AuditRecord(
+    question: Record<string, any>,
+    rawAudit: Record<string, any>,
+  ) {
+    return {
+      ...rawAudit,
+      question_no: question.question_no ?? rawAudit.question_no ?? null,
+      ai_audit_status: question.ai_audit_status,
+      ai_audit_verdict: question.ai_audit_verdict,
+      ai_audit_summary: question.ai_audit_summary,
+      ai_reviewed_before_human: Boolean(question.ai_reviewed_before_human),
+      visual_parse_status: question.visual_parse_status,
+      visual_summary: question.visual_summary,
+      visual_confidence: question.visual_confidence ?? null,
+      answer_suggestion: question.answer_suggestion,
+      answer_confidence: question.answer_confidence ?? null,
+      answer_unknown_reason: question.answer_unknown_reason,
+      analysis_suggestion: question.analysis_suggestion,
+      analysis_confidence: question.analysis_confidence ?? null,
+      analysis_unknown_reason: question.analysis_unknown_reason,
+      risk_flags: this.toStringArray(question.risk_flags),
+      image_linkage: Array.isArray(question.visual_assets)
+        ? question.visual_assets.map((asset: Record<string, any>) => ({
+            asset_id: asset.asset_id || null,
+            page: asset.page ?? null,
+            bbox: Array.isArray(asset.bbox) ? asset.bbox : null,
+            image_role: asset.image_role || null,
+            belongs_to_question: Boolean(asset.belongs_to_question),
+            linked_by: asset.linked_by || null,
+            link_reason: asset.link_reason || null,
+            visual_hash: asset.visual_hash || null,
+          }))
+        : [],
+    };
+  }
+
+  private normalizeM4VisualAssets(input: {
+    assets: Array<Record<string, any> | string>;
+    questionNo: unknown;
+    semanticGroup: Record<string, any> | null;
+    sourcePageRefs: number[];
+  }) {
+    const semanticVisualBlocks = Array.isArray(input.semanticGroup?.visual_group?.blocks)
+      ? (input.semanticGroup?.visual_group?.blocks as Array<Record<string, any>>)
+      : [];
+    return input.assets.map((asset, index) => {
+      const item =
+        typeof asset === 'string'
+          ? ({ url: asset } as Record<string, any>)
+          : { ...(asset || {}) };
+      const role = this.safeDisplayText(item.image_role || item.role, 'unknown');
+      const meaningfulVisual = this.isMeaningfulVisualRole(item);
+      const semanticVisualBlock = meaningfulVisual ? semanticVisualBlocks[0] || null : null;
+      const page =
+        this.toOptionalNumber(item.page ?? item.page_no ?? semanticVisualBlock?.page_no) ??
+        input.sourcePageRefs[0] ??
+        null;
+      const bbox = this.firstBbox(
+        item.bbox,
+        item.raw_bbox,
+        item.expanded_bbox,
+        semanticVisualBlock?.bbox,
+      );
+      const imageRole =
+        role !== 'unknown'
+          ? role
+          : meaningfulVisual
+            ? 'question_visual'
+            : 'question_crop';
+      const visualSummary =
+        this.firstMeaningfulText(
+          item.visual_summary,
+          item.caption,
+          item.ai_desc,
+          semanticVisualBlock?.visual_summary,
+          meaningfulVisual ? semanticVisualBlock?.text : null,
+        ) || null;
+      const visualConfidence = this.toOptionalNumber(
+        item.visual_confidence ??
+          item.assignment_confidence ??
+          semanticVisualBlock?.confidence,
+      );
+      const assetId =
+        this.firstMeaningfulText(
+        item.asset_id,
+        item.assetId,
+        item.ref,
+        item.url,
+        item.image_url,
+        item.src,
+      ) || `q${input.questionNo || 'unknown'}-asset-${index + 1}`;
+      const linkReason =
+        this.firstMeaningfulText(
+          item.link_reason,
+          meaningfulVisual
+            ? `语义视觉块与第 ${input.questionNo || '?'} 题材料组绑定`
+            : `题干/选项裁切图已绑定到第 ${input.questionNo || '?'} 题`,
+        ) || null;
+      const hashPayload = JSON.stringify({
+        assetId,
+        page,
+        bbox,
+        imageRole,
+        visualSummary,
+        url: item.url || item.image_url || item.src || null,
+      });
+      return {
+        ...item,
+        asset_id: assetId,
+        page,
+        bbox,
+        image_role: imageRole,
+        belongs_to_question: Boolean(item.belongs_to_question ?? true),
+        linked_question_no: item.linked_question_no ?? input.questionNo ?? null,
+        linked_by: item.linked_by || 'm4_normalizer',
+        link_reason: linkReason,
+        visual_summary: visualSummary,
+        visual_confidence: visualConfidence,
+        visual_hash: createHash('sha256').update(hashPayload).digest('hex'),
+      };
+    });
+  }
+
+  private paperCandidateHasMeaningfulVisualAsset(
+    visualAssets: Array<Record<string, any>>,
+    semanticGroup: Record<string, any> | null,
+  ) {
+    if (visualAssets.some((asset) => this.isMeaningfulVisualRole(asset))) {
+      return true;
+    }
+    return Boolean(
+      Array.isArray(semanticGroup?.visual_group?.blocks) &&
+        semanticGroup.visual_group.blocks.length > 0,
+    );
+  }
+
+  private isMeaningfulVisualRole(asset: Record<string, any>) {
+    const role = `${asset?.role || ''} ${asset?.image_role || ''}`.toLowerCase();
+    return /chart|table|figure|diagram|visual|question_visual|image/.test(role) &&
+      !/question_stem|question_options/.test(role);
+  }
+
+  private buildNormalizedVisualSummary(input: {
+    previewQuestion: Record<string, any>;
+    finalQuestion: Record<string, any>;
+    semanticGroup: Record<string, any> | null;
+    visualAssets: Array<Record<string, any>>;
+    hasMeaningfulVisualAsset: boolean;
+  }) {
+    const direct = this.firstMeaningfulText(
+      input.previewQuestion.visual_summary,
+      input.finalQuestion.visual_summary,
+    );
+    if (direct && !this.isGenericVisualSummary(direct)) return direct;
+
+    const assetSummary = this.firstMeaningfulText(
+      ...input.visualAssets
+        .filter((asset) => this.isMeaningfulVisualRole(asset))
+        .map((asset) =>
+          this.firstMeaningfulText(
+            asset.visual_summary,
+            asset.caption,
+            asset.ai_desc,
+          ),
+        ),
+    );
+    if (assetSummary) return assetSummary;
+
+    const semanticSummary = this.firstMeaningfulText(
+      input.semanticGroup?.visual_group?.text,
+      ...((Array.isArray(input.semanticGroup?.visual_group?.blocks)
+        ? input.semanticGroup?.visual_group?.blocks
+        : []) as Array<Record<string, any>>).map((block) =>
+        this.firstMeaningfulText(block.visual_summary, block.text),
+      ),
+      input.semanticGroup?.title_group?.text,
+      input.semanticGroup?.table_header_group?.text,
+    );
+    if (semanticSummary) return semanticSummary;
+
+    return input.hasMeaningfulVisualAsset ? 'visual_summary_missing' : 'no_visual_context';
+  }
+
+  private isGenericVisualSummary(value: unknown) {
+    const text = this.safeDisplayText(value, '').toLowerCase();
+    return ['question stem', 'question options', 'unknown', 'none', 'null'].includes(text);
+  }
+
+  private normalizedVisualParseStatus(rawStatus: unknown, hasMeaningfulVisualAsset: boolean) {
+    const text = this.safeDisplayText(rawStatus, '').toLowerCase();
+    if (['failed', 'partial', 'unavailable'].includes(text)) return text;
+    if (!hasMeaningfulVisualAsset) return 'no_visual_context';
+    return text || 'success';
+  }
+
+  private defaultAuditVerdictForStatus(status: string) {
+    if (status === 'passed') return '可通过';
+    if (status === 'warning' || status === 'skipped') return '需复核';
+    return '不建议入库';
+  }
+
+  private defaultAuditSummary(input: {
+    aiAuditStatus: string;
+    visualSummary: string | null;
+    answerSuggestion: string | null;
+    answerUnknownReason: string | null;
+    analysisSuggestion: string | null;
+    analysisUnknownReason: string | null;
+    riskFlags: string[];
+  }) {
+    if (input.aiAuditStatus === 'passed') {
+      return '题干、选项和视觉上下文已补齐，可进入人工终审。';
+    }
+    const firstReason = this.firstMeaningfulText(
+      input.answerUnknownReason,
+      input.analysisUnknownReason,
+      input.visualSummary === 'visual_summary_missing'
+        ? '图表摘要缺失'
+        : null,
+      input.riskFlags[0],
+    );
+    if (input.aiAuditStatus === 'failed') {
+      return `题目存在阻塞问题，当前不建议入库${firstReason ? `：${firstReason}` : ''}。`;
+    }
+    return `AI 预审核已执行，但仍需人工复核${firstReason ? `：${firstReason}` : ''}。`;
+  }
+
+  private buildM4ArtifactSummary(questions: Array<Record<string, any>>) {
+    const total = questions.length;
+    const imageLinkageComplete = questions.filter((question) => {
+      const visualAssets = Array.isArray(question.visual_assets)
+        ? (question.visual_assets as Array<Record<string, any>>)
+        : [];
+      const meaningfulVisualAssets = visualAssets.filter((asset) =>
+        this.isMeaningfulVisualRole(asset),
+      );
+      if (!meaningfulVisualAssets.length) {
+        return question.visual_summary === 'no_visual_context';
+      }
+      return meaningfulVisualAssets.every((asset) =>
+        Boolean(
+          asset.asset_id &&
+            asset.page &&
+            Array.isArray(asset.bbox) &&
+            asset.bbox.length === 4 &&
+            asset.image_role &&
+            asset.linked_by &&
+            asset.link_reason &&
+            asset.visual_hash,
+        ),
+      );
+    }).length;
+    return {
+      total,
+      ai_audit_status_present: questions.filter((question) =>
+        Boolean(question.ai_audit_status),
+      ).length,
+      ai_audit_verdict_present: questions.filter((question) =>
+        Boolean(question.ai_audit_verdict),
+      ).length,
+      ai_audit_summary_present: questions.filter((question) =>
+        Boolean(this.firstMeaningfulText(question.ai_audit_summary)),
+      ).length,
+      answer_suggestion_present: questions.filter((question) =>
+        Boolean(question.answer_suggestion),
+      ).length,
+      answer_unknown_reason_present: questions.filter((question) =>
+        Boolean(question.answer_unknown_reason),
+      ).length,
+      analysis_suggestion_present: questions.filter((question) =>
+        Boolean(question.analysis_suggestion),
+      ).length,
+      analysis_unknown_reason_present: questions.filter((question) =>
+        Boolean(question.analysis_unknown_reason),
+      ).length,
+      risk_flags_present: questions.filter((question) =>
+        Array.isArray(question.risk_flags),
+      ).length,
+      risk_flags_non_empty: questions.filter((question) =>
+        Array.isArray(question.risk_flags) && question.risk_flags.length > 0,
+      ).length,
+      visual_summary_present: questions.filter((question) =>
+        Boolean(question.visual_summary),
+      ).length,
+      visual_parse_status_present: questions.filter((question) =>
+        Boolean(question.visual_parse_status),
+      ).length,
+      ai_reviewed_before_human_true: questions.filter((question) =>
+        Boolean(question.ai_reviewed_before_human),
+      ).length,
+      with_visual_assets: questions.filter((question) => {
+        const visualAssets = Array.isArray(question.visual_assets)
+          ? (question.visual_assets as Array<Record<string, any>>)
+          : [];
+        return visualAssets.some((asset) => this.isMeaningfulVisualRole(asset));
+      }).length,
+      image_linkage_complete: imageLinkageComplete,
+    };
+  }
+
+  private async writeM4SemanticArtifacts(
+    taskId: string,
+    debug: Record<string, any>,
+    paperCandidatesPayload: Record<string, any>,
+  ) {
+    const semanticDir = resolve(process.cwd(), 'debug', 'pdf-semantic', taskId);
+    await mkdir(semanticDir, { recursive: true });
+    const questions = Array.isArray(paperCandidatesPayload.questions)
+      ? (paperCandidatesPayload.questions as Array<Record<string, any>>)
+      : [];
+    const aiAuditResults = questions.map((question) =>
+      this.buildNormalizedM4AuditRecord(question, {}),
+    );
+    const summary = this.buildM4ArtifactSummary(questions);
+    await writeFile(
+      join(semanticDir, 'ai-audit-results.json'),
+      `${JSON.stringify(aiAuditResults, null, 2)}\n`,
+      'utf-8',
+    );
+    await writeFile(
+      join(semanticDir, 'm4-ai-preaudit-summary.json'),
+      `${JSON.stringify(summary, null, 2)}\n`,
+      'utf-8',
+    );
+    await writeFile(
+      join(semanticDir, 'api-responses.json'),
+      `${JSON.stringify(
+        {
+          task_id: taskId,
+          generated_at: new Date().toISOString(),
+          paper_candidates: paperCandidatesPayload,
+          ai_preaudit_debug: {
+            taskId: debug.taskId,
+            status: debug.status,
+            debug_dir: debug.debug_dir,
+            artifact_refs: debug.artifact_refs,
+            m4_ai_preaudit_summary: summary,
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      'utf-8',
+    );
+  }
+
+  private firstMeaningfulText(...values: unknown[]) {
+    for (const value of values) {
+      const text = this.safeDisplayText(value, '');
+      if (!text) continue;
+      if (this.containsForbiddenPlaceholder(text)) continue;
+      if (this.isGenericVisualSummary(text)) continue;
+      if (/^(unknown|none|null|n\/a|na)$/i.test(text)) continue;
+      return text;
+    }
+    return null;
   }
 
   private findSemanticGroup(value: unknown, questionNo: unknown, index: number) {

@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import * as assert from 'node:assert/strict';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import axios from 'axios';
 import { BankStatus } from '../src/modules/bank/entities/question-bank.entity';
@@ -231,6 +231,7 @@ async function run() {
   await testMergeAdjacentQuestionImagesMarksSharedGroup();
   await testAiRepairReturnsProposalWithoutPersisting();
   await testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts();
+  await testPaperCandidatesFillM4CoverageAndSemanticArtifacts();
   await testPaperCandidatesDoNotTreatMaterialBindingFailureAsMissingPreviousPage();
   await testPaperCandidatesRejectQuestionNumberGapsFailClosed();
   await testPaperCandidatesRejectManualForceAddWhenSourceTextSpanMissing();
@@ -603,6 +604,239 @@ async function testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts() {
         rm(join(draftRoot, `${paperId}.json`), { force: true }),
       ),
     );
+  }
+}
+
+async function testPaperCandidatesFillM4CoverageAndSemanticArtifacts() {
+  const h = harness();
+  const debugDir = join(process.cwd(), 'debug', 'pdf-ai-preaudit', 'task-1');
+  const semanticDir = join(process.cwd(), 'debug', 'pdf-semantic', 'task-1');
+
+  await rm(debugDir, { recursive: true, force: true });
+  await rm(semanticDir, { recursive: true, force: true });
+  await mkdir(debugDir, { recursive: true });
+
+  try {
+    await writeFile(
+      join(debugDir, 'ai-preaudit-debug.json'),
+      JSON.stringify(
+        {
+          qwen_vl_enabled: true,
+          qwen_vl_call_count_after: 2,
+          final_verdict: { total_count: 2, done_count: 2 },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'final-preview-payload.json'),
+      JSON.stringify(
+        {
+          questions: [
+            {
+              question_no: 1,
+              stem: '根据图表，2021年指标最高的是：',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              preview_image_path: 'chart.png',
+              visual_assets: [
+                {
+                  url: 'chart.png',
+                  ref: 'chart-p1-1',
+                  role: 'chart',
+                  image_role: 'question_visual',
+                  page: 1,
+                  bbox: [10, 20, 220, 180],
+                  caption: '2021年各地区收入柱状图',
+                },
+              ],
+              visual_summary: 'question stem',
+              visual_parse_status: 'success',
+              source_page_refs: [1],
+              source_bbox: [10, 20, 220, 90],
+              source_text_span: '根据图表，2021年指标最高的是：',
+              risk_flags: [],
+            },
+            {
+              question_no: 2,
+              stem: '普通文字题',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              visual_assets: [
+                {
+                  url: 'stem.png',
+                  ref: 'question-stem-p2-1',
+                  role: 'question_stem',
+                  page: 2,
+                  bbox: [12, 120, 230, 188],
+                },
+              ],
+              visual_parse_status: 'success',
+              source_page_refs: [2],
+              source_bbox: [12, 120, 230, 188],
+              source_text_span: '普通文字题',
+              risk_flags: [],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'final-questions.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            answer: 'D',
+            analysis: '根据柱状图比较最高值，选择 D。',
+            visual_summary: 'question stem',
+            visual_confidence: 0.88,
+            ai_audit_status: 'passed',
+            ai_audit_verdict: '可通过',
+            ai_audit_summary: '图表与题干绑定完整。',
+            ai_reviewed_before_human: true,
+            images: [
+              {
+                url: 'chart.png',
+                ref: 'chart-p1-1',
+                role: 'chart',
+                image_role: 'question_visual',
+                page: 1,
+                bbox: [10, 20, 220, 180],
+                caption: '2021年各地区收入柱状图',
+              },
+            ],
+            parse_warnings: [],
+            ai_risk_flags: [],
+          },
+          {
+            question_no: 2,
+            ai_audit_status: 'warning',
+            ai_audit_verdict: '需复核',
+            ai_reviewed_before_human: true,
+            parse_warnings: ['question_quality_review_required'],
+            ai_risk_flags: [],
+            images: [
+              {
+                url: 'stem.png',
+                ref: 'question-stem-p2-1',
+                role: 'question_stem',
+                page: 2,
+                bbox: [12, 120, 230, 188],
+              },
+            ],
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'semantic-groups.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            source_page_start: 1,
+            source_page_end: 1,
+            source_text_span: '根据图表，2021年指标最高的是：',
+            stem_group: {
+              text: '根据图表，2021年指标最高的是：',
+              bbox: [10, 20, 220, 90],
+              source_text_span: '根据图表，2021年指标最高的是：',
+            },
+            visual_group: {
+              blocks: [
+                {
+                  page_no: 1,
+                  kind: 'chart',
+                  bbox: [10, 20, 220, 180],
+                  text: '2021年各地区收入柱状图',
+                  visual_summary: '2021年各地区收入柱状图',
+                  confidence: 0.91,
+                },
+              ],
+            },
+          },
+          {
+            question_no: 2,
+            source_page_start: 2,
+            source_page_end: 2,
+            source_text_span: '普通文字题',
+            stem_group: {
+              text: '普通文字题',
+              bbox: [12, 120, 230, 188],
+              source_text_span: '普通文字题',
+            },
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'ai-audit-results.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            ai_audit_status: 'passed',
+            ai_audit_verdict: '可通过',
+          },
+          {
+            question_no: 2,
+            ai_audit_status: 'warning',
+            ai_audit_verdict: '需复核',
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const candidates = await h.pdfService.getPaperCandidates('task-1');
+    assert.equal(candidates.questions.length, 2);
+    assert.equal(candidates.questions[0].visual_summary, '2021年各地区收入柱状图');
+    assert.equal(candidates.questions[0].answer_suggestion, 'D');
+    assert.match(candidates.questions[0].analysis_suggestion || '', /柱状图/);
+    assert.equal(candidates.questions[0].ai_reviewed_before_human, true);
+    const linkedAsset = (candidates.questions[0].visual_assets || []).find(
+      (asset: Record<string, any>) => asset.image_role === 'question_visual',
+    );
+    assert.ok(linkedAsset?.asset_id);
+    assert.equal(linkedAsset?.linked_by, 'm4_normalizer');
+    assert.ok(linkedAsset?.link_reason);
+    assert.ok(linkedAsset?.visual_hash);
+
+    assert.equal(candidates.questions[1].visual_summary, 'no_visual_context');
+    assert.equal(candidates.questions[1].answer_suggestion, null);
+    assert.ok(candidates.questions[1].answer_unknown_reason);
+    assert.ok(candidates.questions[1].analysis_unknown_reason);
+    assert.ok((candidates.questions[1].risk_flags || []).includes('no_visual_context'));
+
+    const semanticAudit = JSON.parse(
+      await readFile(join(semanticDir, 'ai-audit-results.json'), 'utf-8'),
+    );
+    const semanticSummary = JSON.parse(
+      await readFile(join(semanticDir, 'm4-ai-preaudit-summary.json'), 'utf-8'),
+    );
+    const apiResponses = JSON.parse(
+      await readFile(join(semanticDir, 'api-responses.json'), 'utf-8'),
+    );
+    assert.equal(semanticAudit[0].visual_summary, '2021年各地区收入柱状图');
+    assert.equal(semanticAudit[0].answer_suggestion, 'D');
+    assert.equal(semanticSummary.visual_summary_present, 2);
+    assert.equal(semanticSummary.image_linkage_complete, 2);
+    assert.equal(apiResponses.paper_candidates.questions[0].answer_suggestion, 'D');
+  } finally {
+    await rm(debugDir, { recursive: true, force: true });
+    await rm(semanticDir, { recursive: true, force: true });
   }
 }
 

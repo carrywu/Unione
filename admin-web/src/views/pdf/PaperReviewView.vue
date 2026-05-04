@@ -185,6 +185,27 @@
                 {{ textOr(selectedCandidate.visual_parse_status, '图表预览缺失') }}：{{ textOr(selectedCandidate.cannot_add_reason, '未返回可展示图片，需查看 debug artifact') }}
               </div>
             </section>
+            <section data-testid="visual-summary-panel">
+              <h2>视觉理解</h2>
+              <dl class="evidence-list">
+                <div>
+                  <dt>visual_parse_status</dt>
+                  <dd>{{ textOr(selectedCandidate.visual_parse_status, '未提供') }}</dd>
+                </div>
+                <div>
+                  <dt>visual_summary</dt>
+                  <dd><MathText :text="selectedCandidate.visual_summary" fallback="未提供视觉摘要" /></dd>
+                </div>
+                <div>
+                  <dt>visual_confidence</dt>
+                  <dd>{{ confidenceText(selectedCandidate.visual_confidence) }}</dd>
+                </div>
+                <div>
+                  <dt>ai_reviewed_before_human</dt>
+                  <dd>{{ booleanText(selectedCandidate.ai_reviewed_before_human) }}</dd>
+                </div>
+              </dl>
+            </section>
             <section class="suggestion-grid">
               <div>
                 <h2>答案建议</h2>
@@ -202,6 +223,13 @@
               <h2>AI 预审核摘要</h2>
               <p><MathText :text="selectedCandidate.ai_audit_summary" fallback="AI 预审核未给出摘要" /></p>
               <p class="muted">结论：{{ textOr(selectedCandidate.ai_audit_verdict, '未给出结论') }}</p>
+            </section>
+            <section data-testid="risk-flag-list">
+              <h2>风险标签</h2>
+              <div class="candidate-tags">
+                <span v-for="flag in (selectedCandidate.risk_flags || [])" :key="flag">{{ flag }}</span>
+                <span v-if="!(selectedCandidate.risk_flags || []).length">无</span>
+              </div>
             </section>
             <section>
               <h2>证据关联</h2>
@@ -223,6 +251,22 @@
                   <dd>{{ textOr(selectedCandidate.source_text_span, '未提供') }}</dd>
                 </div>
                 <div>
+                  <dt>material_group_id</dt>
+                  <dd>{{ textOr(selectedCandidate.material_group_id, '未绑定') }}</dd>
+                </div>
+                <div>
+                  <dt>material_group_question_indexes</dt>
+                  <dd>{{ joinList(selectedCandidate.material_group_question_indexes) }}</dd>
+                </div>
+                <div>
+                  <dt>shared_material</dt>
+                  <dd>{{ selectedCandidate.shared_material ? 'true' : 'false' }}</dd>
+                </div>
+                <div>
+                  <dt>material_group_reason</dt>
+                  <dd>{{ textOr(selectedCandidate.material_group_reason, '未提供') }}</dd>
+                </div>
+                <div>
                   <dt>page-understanding</dt>
                   <dd>{{ textOr(selectedCandidate.source_artifacts_refs?.page_understanding, '未关联') }}</dd>
                 </div>
@@ -235,6 +279,53 @@
                   <dd>{{ textOr(selectedCandidate.source_artifacts_refs?.recrop_plan, '未关联') }}</dd>
                 </div>
               </dl>
+            </section>
+            <section data-testid="image-linkage-list">
+              <h2>Image Linkage</h2>
+              <div v-if="(selectedCandidate.visual_assets || []).length" class="image-linkage-list">
+                <article
+                  v-for="(asset, assetIndex) in selectedCandidate.visual_assets || []"
+                  :key="asset.asset_id || asset.ref || asset.url || assetIndex"
+                  class="image-linkage-card"
+                >
+                  <strong>{{ textOr(asset.asset_id || asset.ref, `asset-${assetIndex + 1}`) }}</strong>
+                  <dl class="evidence-list compact">
+                    <div>
+                      <dt>page</dt>
+                      <dd>{{ textOr(asset.page, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>bbox</dt>
+                      <dd>{{ joinList(asset.bbox) }}</dd>
+                    </div>
+                    <div>
+                      <dt>image_role</dt>
+                      <dd>{{ textOr(asset.image_role || asset.role, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>belongs_to_question</dt>
+                      <dd>{{ booleanText(asset.belongs_to_question) }}</dd>
+                    </div>
+                    <div>
+                      <dt>linked_by</dt>
+                      <dd>{{ textOr(asset.linked_by, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>link_reason</dt>
+                      <dd>{{ textOr(asset.link_reason, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>visual_hash</dt>
+                      <dd>{{ textOr(asset.visual_hash, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>visual_summary</dt>
+                      <dd><MathText :text="asset.visual_summary || asset.caption || asset.ai_desc" fallback="未提供" /></dd>
+                    </div>
+                  </dl>
+                </article>
+              </div>
+              <p v-else class="muted">未返回 image linkage。</p>
             </section>
           </article>
         </template>
@@ -594,6 +685,12 @@ function confidenceText(value?: number | null) {
   return value === null || value === undefined ? '置信度未提供' : `置信度 ${Number(value).toFixed(2)}`;
 }
 
+function booleanText(value: unknown) {
+  if (value === true) return 'true';
+  if (value === false) return 'false';
+  return '未提供';
+}
+
 function joinList(value: unknown) {
   if (!Array.isArray(value) || !value.length) return '无';
   return value.map((item) => textOr(item, '')).filter(Boolean).join('、') || '无';
@@ -851,6 +948,24 @@ onMounted(loadCandidates);
 .evidence-list dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.evidence-list.compact div {
+  grid-template-columns: 120px minmax(0, 1fr);
+}
+
+.image-linkage-list {
+  display: grid;
+  gap: 10px;
+}
+
+.image-linkage-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: var(--admin-surface-soft);
+  padding: 10px;
 }
 
 .paper-title-input,
