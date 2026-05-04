@@ -221,8 +221,8 @@
         "保存 `debug/task-recovery/<timestamp>/evidence.md`"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "11 个测试覆盖 cancel/retry/pause 所有状态转换。API 端点 GET tasks + POST cancel/retry/pause 已确认。TaskListView.vue 有 status badges 和 cancel/retry 按钮。retry 重置为 Pending 并触发 parse 事件（读取当前 provider order）。"
     },
     {
       "id": "US-011",

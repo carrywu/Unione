@@ -257,3 +257,32 @@ History
 - 截图/trace/debug 路径: `pdf-service/tests/test_ai_client_page_visual_fallbacks.py`
 - 发现的可复用模式: ai_client.py 使用 hedged launch (并发主备 provider)、cooldown (429/timeout 指数退避)、page timeout budget (单页不拖垮整本) 三层保护；_vision_provider_attempts 完整记录每次尝试
 - 仍需后续 story 处理的问题: US-010 任务 cancel/retry 与卡 processing 恢复
+
+[2026-05-04 18:58:00 CST (+0800)] US-010
+- 实现/测试了什么: 任务 cancel/retry 与卡 processing 恢复。新增 11 个测试覆盖 cancel (from Processing/Pending/Paused, reject Done)、retry (from Failed/Canceled/Paused, reject Done/Processing)、pause (from Processing, reject Done)。
+- 修改文件: `backend/test/pdf-review-workflow.test.ts` (新增 11 tests), `prd.json`, `progress.txt`
+- 清理了什么: 无
+- 保留了什么: 现有 24 个测试 + PdfService cancel/retry/pause 实现
+- 运行了哪些命令: `node -r ts-node/register -r tsconfig-paths/register test/pdf-review-workflow.test.ts` (EXIT: 0)
+- 结果是否通过: 是。全部测试通过 (exit 0)。
+- 新增测试:
+  - testCancelTaskFromProcessing: Processing → Canceled
+  - testCancelTaskFromPending: Pending → Canceled
+  - testCancelTaskFromPaused: Paused → Canceled
+  - testCancelTaskRejectsDoneTask: Done 不能 cancel
+  - testRetryTaskFromFailed: Failed → Pending, attempt++, error cleared
+  - testRetryTaskFromCanceled: Canceled → Pending, attempt++
+  - testRetryTaskFromPaused: Paused → Pending, attempt++
+  - testRetryTaskRejectsDoneTask: Done 不能 retry
+  - testRetryTaskRejectsProcessingTask: Processing 不能 retry
+  - testPauseTaskFromProcessing: Processing → Paused
+  - testPauseTaskRejectsDoneTask: Done 不能 pause
+- API 端点确认:
+  - POST admin/pdf/cancel/:taskId (pdf.controller.ts:213)
+  - POST admin/pdf/retry/:taskId (pdf.controller.ts:201)
+  - POST admin/pdf/pause/:taskId (pdf.controller.ts:207)
+  - GET admin/pdf/tasks (列出所有任务及状态)
+- UI 确认: TaskListView.vue 有 status badges (pending/processing/done/failed/paused/canceled) + cancel/retry 按钮
+- 截图/trace/debug 路径: `backend/test/pdf-review-workflow.test.ts`
+- 发现的可复用模式: 测试使用 mock repository + 直接调用 service 方法；retry 触发异步 parse 事件（后台错误不影响同步断言）
+- 仍需后续 story 处理的问题: US-011 20页题本上传解析真人式 smoke test
