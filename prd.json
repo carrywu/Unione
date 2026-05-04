@@ -106,8 +106,8 @@
         "Tests pass"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": "Visual understanding remains a follow-up phase. This round preserved existing visual link outputs and added shared-asset placeholders, but did not add a new VLM verification layer. Follow-up: COCR-M5 visual understanding."
+      "passes": true,
+      "notes": "Selected-case visual understanding is now wired into the commercial OCR execution path as a mock assist layer. It triggers for shared-material / chart / low-confidence / incomplete cases, emits grouping and asset warnings, and reaches backend review DTOs. Evidence: pdf-service/commercial_ocr/visual_understanding.py, tests/test_commercial_ocr_visual_understanding.py, docs/commercial-ocr-phase-reports/COCR-M5-visual-understanding-backend.md."
     },
     {
       "id": "US-008",
@@ -152,8 +152,8 @@
         "Typecheck passes"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": "Admin review and publish hard-gates are not yet wired to semantic assembly and quality-gate outputs. Existing M5A/M5B paths remain preserved. Follow-up: COCR-M9 review UI and publish policy."
+      "passes": true,
+      "notes": "Backend review and preview-publish DTOs now expose provider trace refs, material groups, quality gate, and visual understanding; admin review blocks non-review-ready candidates from draft/publish and h5 preview preserves shared materials after publish-preview. Existing M5A/M5B flows remain intact. Evidence: backend/src/modules/pdf/pdf.service.ts, admin-web/src/views/pdf/PaperReviewView.vue, e2e/commercial-ocr-admin.spec.ts, e2e/commercial-ocr-h5.spec.ts, docs/commercial-ocr-phase-reports/COCR-M8b-backend-provider-wiring.md, COCR-M9-admin-review-ui-publish-gate.md, COCR-M10-full-chain-playwright-e2e.md."
     },
     {
       "id": "US-011",
@@ -168,7 +168,7 @@
       ],
       "priority": 11,
       "passes": true,
-      "notes": "Phase README, M0/M1/M2/M3/M4/M7/M8 reports, progress append, overnight handoff, and mock-only eval script are now in place. Evidence: docs/commercial-ocr-phase-reports/, .agent/handoff/, .agent/reports/, pdf-service/scripts/eval_commercial_ocr.py."
+      "notes": "Phase README plus M0/M1/M2/M3/M4/M5/M7/M8/M8b/M9/M10/M11b/M12 reports, progress append, overnight handoff, full-chain E2E report, and mock-only eval script are now in place. Evidence: docs/commercial-ocr-phase-reports/, .agent/handoff/, .agent/reports/, pdf-service/scripts/eval_commercial_ocr.py."
     },
     {
       "id": "US-012",

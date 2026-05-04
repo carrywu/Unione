@@ -614,3 +614,41 @@ History
   - `COCR-M5` visual understanding 还未实现，当前仅预留 shared assets / human review 标记
   - `COCR-M9` admin review / publish hard gate 还未吃 semantic assembly 和 quality gate
   - Baidu Key 曾在对话中明文暴露，必须尽快轮换；Tencent `SecretId/SecretKey` 严禁写入仓库、fixture、debug、报告
+
+[2026-05-05 01:47:00 CST (+0800)] COCR-M5/M8b/M9/M10/M11b/M12
+- 实现/测试了什么: 把 mock-first commercial OCR 真正接进 `backend -> admin -> preview publish -> h5` 主链。新增 selected-case `visual_understanding` mock assist layer，backend review/publish gate 吃到 provider/material/quality gate/visual warnings，admin review 展示 provider/grouping/quality/similarity，h5 preview 验证 17-20 shared material 连续做题，Playwright 固化 admin+h5 真人式证据，修复 Ark provider health 与 visual smoke retry cache 3 条既有回归。
+- 修改文件: `backend/src/modules/pdf/pdf.service.ts`, `backend/src/modules/question/question.service.ts`, `backend/src/modules/system/system.service.ts`, `backend/test/pdf-review-workflow.test.ts`, `pdf-service/commercial_ocr/config.py`, `pdf-service/commercial_ocr/visual_understanding.py`, `pdf-service/commercial_ocr/service.py`, `pdf-service/commercial_ocr/adapters.py`, `pdf-service/commercial_ocr/fixtures.py`, `pdf-service/commercial_ocr/tencent_provider.py`, `pdf-service/commercial_ocr/types.py`, `pdf-service/ai_client.py`, `pdf-service/tools/visual_api_smoke.py`, `admin-web/src/views/pdf/PaperReviewView.vue`, `h5-web/src/views/QuizView.vue`, `e2e/commercial-ocr-*.spec.ts`, `playwright.config.ts`, `docs/commercial-ocr-phase-reports/*`, `.agent/reports/commercial-ocr-full-chain-e2e-report.md`, `.agent/handoff/commercial-ocr-full-chain-e2e-20260505-0147.md`, `prd.json`
+- 运行了哪些命令:
+  - `cd pdf-service && ./.venv/bin/python -m pytest tests/test_commercial_ocr_pipeline.py tests/test_commercial_ocr_kernel_integration.py -v`
+  - `cd pdf-service && ./.venv/bin/python -m pytest tests/test_commercial_ocr_semantic_assembler.py tests/test_commercial_ocr_quality_gate.py tests/test_tencent_ocr_provider.py tests/test_commercial_ocr_visual_understanding.py -v`
+  - `cd pdf-service && ./.venv/bin/python -m pytest tests/ -v`
+  - `cd backend && pnpm build`
+  - `cd backend && pnpm exec ts-node -r tsconfig-paths/register test/pdf-review-workflow.test.ts`
+  - `cd admin-web && pnpm build`
+  - `cd h5-web && pnpm build`
+  - `E2E_ARTIFACT_DIR=debug/e2e-commercial-ocr/20260505-014457 pnpm exec playwright test e2e/commercial-ocr-admin.spec.ts`
+  - `E2E_ARTIFACT_DIR=debug/e2e-commercial-ocr/20260505-014457 pnpm exec playwright test e2e/commercial-ocr-h5.spec.ts`
+- 结果是否通过:
+  - `pdf-service targeted`: `10 passed`
+  - `pdf-service semantic/quality/tencent/visual`: `16 passed / 1 skipped`
+  - `pdf-service full pytest`: `144 passed / 2 skipped`
+  - `backend build`: 通过
+  - `backend pdf-review-workflow test`: 通过
+  - `admin-web build`: 通过
+  - `h5-web build`: 通过
+  - `Playwright admin`: `2 passed`
+  - `Playwright h5`: `1 passed`
+- 关键结论:
+  - blocked fixture 会在 UI 和 backend 双重 gate 下被拦截，不能入卷
+  - publishable 17-20 fixture 可 preview publish，`shared_stem` 不重复灌入 `local_stem`
+  - h5 preview 对 17/18/19/20 保留 shared material、共享图表和答案解析体验
+  - 既有 3 条 provider health / visual smoke 回归已清零
+- 证据路径:
+  - `debug/e2e-commercial-ocr/20260505-014457/admin/blocked-review-gate/`
+  - `debug/e2e-commercial-ocr/20260505-014457/admin/complete-preview-publish/`
+  - `debug/e2e-commercial-ocr/20260505-014457/h5/preview-paper-mobile/`
+- 仍需后续 story 处理的问题:
+  - 真实 VLM selected-case hardening
+  - 真实 Tencent/Baidu single-page smoke 与 429/backoff
+  - backend 独立 `/api/health` 探针
+  - Baidu Key 曾在对话中明文暴露，必须尽快轮换；Tencent SecretId/SecretKey 仍禁止进入仓库或 debug

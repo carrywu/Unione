@@ -11,33 +11,35 @@
 | M2 | `COCR-M2-mock-provider.md` | 已完成 | `GO` |
 | M3 | `COCR-M3-ocr-normalizer.md` | 已完成 | `GO_WITH_RISK` |
 | M4 | `COCR-M4-semantic-assembler.md` | 已完成 | `GO_WITH_RISK` |
-| M5 | `COCR-M5-visual-understanding.md` | 规划中 | Pending |
+| M5 | `COCR-M5-visual-understanding-backend.md` | 已完成 | `GO_WITH_RISK` |
 | M6 | `COCR-M6-data-model.md` | 规划中 | Pending |
 | M7 | `COCR-M7-quality-gate.md` | 已完成 | `GO_WITH_RISK` |
 | M8 | `COCR-M8-tencent-ocr-adapter.md` | 已完成 | `GO_WITH_RISK` |
-| M9 | `COCR-M9-review-ui.md` | 规划中 | Pending |
-| M10 | `COCR-M10-eval-harness.md` | 规划中 | Pending |
-| M11 | `COCR-M11-git-hygiene.md` | 规划中 | Pending |
-| M12 | `COCR-M12-final-handoff.md` | 规划中 | Pending |
+| M8b | `COCR-M8b-backend-provider-wiring.md` | 已完成 | `GO_WITH_RISK` |
+| M9 | `COCR-M9-admin-review-ui-publish-gate.md` | 已完成 | `GO_WITH_RISK` |
+| M10 | `COCR-M10-full-chain-playwright-e2e.md` | 已完成 | `GO_WITH_RISK` |
+| M11b | `COCR-M11b-known-regression-cleanup.md` | 已完成 | `GO` |
+| M12 | `COCR-M12-overnight-final-report.md` | 已完成 | `GO_WITH_RISK` |
 
 ## 证据与归档
 
 - 旧 `prd.json` 归档：`archive/prd-before-commercial-ocr-20260504-223958.json`
 - 主 handoff：`/home/carry/project2/.agent/handoff/README.md`
-- 夜间 handoff：`/home/carry/project2/.agent/handoff/commercial-ocr-overnight-20260504-2335.md`
+- 夜间 handoff：`/home/carry/project2/.agent/handoff/commercial-ocr-full-chain-e2e-20260505-0147.md`
 - Agent phase 摘要：`/home/carry/project2/.agent/reports/commercial-ocr-main-handoff.md`
+- Full-chain E2E 摘要：`/home/carry/project2/.agent/reports/commercial-ocr-full-chain-e2e-report.md`
 - Mock-only eval：`/home/carry/project2/pdf-service/debug/commercial-ocr-eval/20260504-233354/evaluation.json`
 
 ## 本轮范围
 
-- 把 `ralph/xingce-e2e-git-hygiene-delivery` 安全合并到 `main`
-- 清理 merge 历史中误跟踪的 `debug/**` runtime/raw response
-- 读取本地百度 `paper_cut_edu` 示例代码并抽象 provider adapter
-- 在 `pdf-service` 新增 `commercial_ocr` provider interface、fallback orchestrator、mock provider、百度 adapter、腾讯 SDK adapter、layout-only fallback
-- 固化 deterministic fixture，并把 OCR normalizer、semantic assembler、quality gate 接入 commercial OCR execution summary
+- 在 backend 接入 provider/material/quality gate/visual understanding DTO，并把 publish gate 前推到 review / draft / preview publish
+- 在 admin-web 展示 provider、shared material、quality gate、grouping evidence、similarity 空状态/候选状态
+- 在 h5-web 验证 17-20 shared material 预览做题体验
+- 用 Playwright 保存 admin + h5 全链路截图 / trace / console / network 证据
+- 清理 provider health / visual smoke 既有回归，`pdf-service` 全量 pytest 重新回到绿色
 
 ## 下一步
 
-1. M5 引入 VLM visual understanding，只做图表/表头/跨页归属核验，不替代 OCR。
-2. M8 后续 hardening：补真实 Tencent single-page smoke、429/backoff、更多 provider conflict 证据。
-3. M9/M10 把 review UI / publish hard gate / eval harness 正式前推到业务链路。
+1. 用真实 VLM 替换 selected-case mock visual understanding，并补跨页 / 图例 / 表头核验。
+2. 做 M8 真实 adapter hardening：补 Tencent/Baidu single-page smoke、429/backoff、provider conflict 证据。
+3. 收敛 warning case 的人工放行策略，并决定是否允许正式 publish。
