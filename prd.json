@@ -338,8 +338,8 @@
         "如果没有刷题端，生成明确 `manual verification needed` 说明并保留 API 证据"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "发布 2 matched 题到 bank, 18 conflict 题 skipped。Bank status=published, total_count=2。backend test PASS, build PASS。"
     },
     {
       "id": "US-018",
@@ -419,7 +419,7 @@
       ],
       "priority": 21,
       "passes": false,
-      "notes": "DELIVERY_REPORT.md 生成 (16/21 stories PASS)。5 stories (US-017/018/020/021) 需运行中服务或浏览器验证。git log 有 16 个 story 提交。progress.txt 有完整历史。"
+      "notes": "DELIVERY_REPORT.md 生成 (17/21 stories PASS)。4 stories (US-018/020/021) 需运行中服务或浏览器验证。git log 有 17 个 story 提交。progress.txt 有完整历史。"
     }
   ]
 }

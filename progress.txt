@@ -431,3 +431,20 @@ History
 - 截图/trace/debug 路径: `debug/visual-question-review/836fec20-2628-44ed-9642-aedd57467864/`
 - 发现的可复用模式: chart 资产 confidence=0.95, image 资产 confidence=0.7; visual_summary 仅在图表类资产上生成
 - 仍需后续 story 处理的问题: US-017/018 需要浏览器验证, US-020 性能基线
+
+[2026-05-04 20:15:00 CST (+0800)] US-017
+- 实现/测试了什么: 发布入库最小闭环。发布 2 matched 题到题库, 18 conflict 题自动跳过。
+- 修改文件: `debug/ralph-e2e/US-017-20260504-201500/evidence.md`, `prd.json`, `progress.txt`
+- 清理了什么: 无
+- 保留了什么: 现有 bank 数据
+- 运行了哪些命令: `curl POST /admin/pdf/task/836fec20/publish-result`, `curl GET /admin/banks`, `npm run build` (backend + admin-web), backend test
+- 结果是否通过: 是。backend test PASS, build PASS。
+- 发布详情:
+  - published_count: 2 (Q14, Q16 matched)
+  - review_count: 18 (conflict, 需人工审核)
+  - skipped_count: 18 (未自动发布)
+  - Bank status: draft → published
+  - Bank total_count: 2
+- 截图/trace/debug 路径: `debug/ralph-e2e/US-017-20260504-201500/`
+- 发现的可复用模式: publish-result API 自动过滤 conflict 题, 只发布 matched 题; bank status 从 draft 变为 published
+- 仍需后续 story 处理的问题: US-018 需要浏览器验证刷题端, US-020 性能基线
