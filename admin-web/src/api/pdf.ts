@@ -74,9 +74,12 @@ export interface AiPreauditDebug {
 
 export interface PaperCandidate {
   candidate_id: string;
+  question_id?: string | null;
   question_no?: number | string | null;
   stem?: string | null;
   options: Record<'A' | 'B' | 'C' | 'D', string>;
+  answer?: string | null;
+  analysis?: string | null;
   answer_suggestion?: string | null;
   answer_confidence?: number | null;
   answer_unknown_reason?: string | null;
@@ -111,12 +114,56 @@ export interface PaperCandidate {
   recommendedAction?: string | null;
   source_locator_available?: boolean;
   source_artifacts_refs?: Record<string, string>;
+  material?: {
+    id?: string;
+    content?: string;
+    images?: Array<Record<string, any>>;
+    source_page?: number;
+    source?: string;
+  } | null;
+  m5_answer_book?: {
+    verdict?: string;
+    empty_state_text?: string | null;
+    answer_from_answer_book?: string | null;
+    analysis_from_answer_book?: string | null;
+    final_answer_suggestion?: string | null;
+    final_analysis_suggestion?: string | null;
+    match_confidence?: number | null;
+    match_method?: string | null;
+    evidence?: string[];
+    conflict_reason?: string | null;
+    needs_human_review?: boolean;
+    fixture_only?: boolean;
+    decision_status?: string | null;
+    candidates?: Array<Record<string, any>>;
+  } | null;
+  m5_similarity?: {
+    duplicate_status?: string;
+    duplicate_cluster_id?: string | null;
+    canonical_question_id?: string | null;
+    similarity_candidates?: Array<Record<string, any>>;
+    edge_type?: string | null;
+    final_similarity_score?: number | null;
+    decision_status?: string | null;
+    empty_state_text?: string | null;
+  } | null;
+  final_answer_suggestion?: string | null;
+  final_analysis_suggestion?: string | null;
+  answer_override?: string | null;
+  analysis_override?: string | null;
+  approved_for_publish?: boolean;
+  quarantined?: boolean;
+  review_decision_status?: string | null;
+  audit_events?: Array<Record<string, any>>;
 }
 
 export interface PaperCandidatesResponse {
   taskId: string;
   bankId: string;
   status: string;
+  m5a_verdict?: string;
+  m5b_verdict?: string;
+  publish_preview?: Record<string, any> | null;
   debug_dir?: string;
   provider?: string | null;
   model?: string | null;
@@ -128,8 +175,18 @@ export interface PaperCandidatesResponse {
     ai_warning_count: number;
     ai_failed_count: number;
   };
+  review_audit_events?: Array<Record<string, any>>;
+  non_blocking_warnings?: string[];
   questions: PaperCandidate[];
   artifact_refs?: Record<string, string>;
+}
+
+export interface ReviewActionResponse {
+  task_id: string;
+  candidate_id: string;
+  review_decision: Record<string, any>;
+  audit_event: Record<string, any>;
+  audit_events: Array<Record<string, any>>;
 }
 
 export interface DraftPaper {
@@ -181,6 +238,20 @@ export function updateDraftPaper(paperId: string, payload: Record<string, unknow
 
 export function getDraftPaperPreview(paperId: string) {
   return http.get<DraftPaper, DraftPaper>(`/admin/pdf/papers/${paperId}/preview`);
+}
+
+export function applyPaperReviewAction(taskId: string, payload: Record<string, unknown>) {
+  return http.post<ReviewActionResponse, ReviewActionResponse>(
+    `/admin/pdf/task/${taskId}/review-action`,
+    payload,
+  );
+}
+
+export function publishDraftPaperPreview(paperId: string, payload: Record<string, unknown> = {}) {
+  return http.post<Record<string, any>, Record<string, any>>(
+    `/admin/pdf/papers/${paperId}/publish-preview`,
+    payload,
+  );
 }
 
 export function ocrPdfRegion(payload: OcrRegionPayload) {

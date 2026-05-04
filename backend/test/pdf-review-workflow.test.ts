@@ -3,6 +3,7 @@ import * as assert from 'node:assert/strict';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import axios from 'axios';
+import { AnswerSourceStatus } from '../src/modules/answer-book/entities/answer-source.entity';
 import { BankStatus } from '../src/modules/bank/entities/question-bank.entity';
 import { ParseTaskStatus } from '../src/modules/pdf/entities/parse-task.entity';
 import { PdfService } from '../src/modules/pdf/pdf.service';
@@ -183,6 +184,7 @@ function harness() {
   ] as Question[];
   const materials: Row[] = [];
   const aiActionLogs: Row[] = [];
+  const answerSources: Row[] = [];
   const configs: Row[] = [];
   const taskRepository = createRepository(tasks as Row[]);
   const questionRepository = createRepository(questions as unknown as Row[]);
@@ -190,6 +192,7 @@ function harness() {
   const materialRepository = createRepository(materials);
   const bankRepository = createRepository(banks as Row[]);
   const configRepository = createRepository(configs);
+  const answerSourceRepository = createRepository(answerSources);
   const configService = { get: (_key: string, fallback?: string) => fallback } as any;
   const uploadService = {
     uploadBuffer: async () => ({ url: 'manual.png' }),
@@ -200,6 +203,7 @@ function harness() {
     tasks,
     questions,
     aiActionLogs,
+    answerSources,
     configs,
     pdfService: new PdfService(
       taskRepository as any,
@@ -207,6 +211,7 @@ function harness() {
       materialRepository as any,
       bankRepository as any,
       configRepository as any,
+      answerSourceRepository as any,
       configService,
       uploadService as any,
     ),
@@ -232,10 +237,13 @@ async function run() {
   await testAiRepairReturnsProposalWithoutPersisting();
   await testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts();
   await testPaperCandidatesFillM4CoverageAndSemanticArtifacts();
+  await testPaperCandidatesExposeM5EmptyStateAndSeededFixture();
+  await testBuildTaskConsistencyPreviewIncludesAllQuestions();
   await testPaperCandidatesDoNotTreatMaterialBindingFailureAsMissingPreviousPage();
   await testPaperCandidatesRejectQuestionNumberGapsFailClosed();
   await testPaperCandidatesRejectManualForceAddWhenSourceTextSpanMissing();
   await testPaperDraftRejectsForgedManualForceAddWithoutSourceEvidence();
+  await testReviewActionsPersistAuditEventsAndPreviewPublish();
   await testPdfSavePersistsVisionAiCorrectionFields();
   await testPdfSavePersistsAiSolverCandidateFields();
   await testPdfSavePersistsAiPreauditFields();
@@ -837,6 +845,454 @@ async function testPaperCandidatesFillM4CoverageAndSemanticArtifacts() {
   } finally {
     await rm(debugDir, { recursive: true, force: true });
     await rm(semanticDir, { recursive: true, force: true });
+  }
+}
+
+async function testPaperCandidatesExposeM5EmptyStateAndSeededFixture() {
+  const h = harness();
+  const debugDir = join(process.cwd(), 'debug', 'pdf-ai-preaudit', 'task-1');
+
+  await rm(debugDir, { recursive: true, force: true });
+  await mkdir(debugDir, { recursive: true });
+
+  try {
+    await writeFile(
+      join(debugDir, 'ai-preaudit-debug.json'),
+      JSON.stringify({ qwen_vl_enabled: true, qwen_vl_call_count_after: 1 }, null, 2),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'final-preview-payload.json'),
+      JSON.stringify(
+        {
+          questions: [
+            {
+              question_no: 1,
+              stem: '带 seeded fixture 的题目',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              visual_parse_status: 'success',
+              source_page_refs: [1],
+              source_bbox: [10, 20, 220, 90],
+              source_text_span: '带 seeded fixture 的题目',
+              risk_flags: [],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'semantic-groups.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            source_page_start: 1,
+            source_page_end: 1,
+            source_text_span: '带 seeded fixture 的题目',
+            stem_group: {
+              text: '带 seeded fixture 的题目',
+              bbox: [10, 20, 220, 90],
+              source_text_span: '带 seeded fixture 的题目',
+            },
+            options_group: {
+              blocks: [
+                { label: 'A', text: '甲' },
+                { label: 'B', text: '乙' },
+                { label: 'C', text: '丙' },
+                { label: 'D', text: '丁' },
+              ],
+            },
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'ai-audit-results.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            ai_audit_status: 'passed',
+            ai_audit_verdict: '可通过',
+            ai_audit_summary: '结构完整。',
+            answer_suggestion: 'A',
+            analysis_suggestion: '沿用当前题目已有解析作为 seeded fixture。',
+            risk_flags: [],
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const candidates = await h.pdfService.getPaperCandidates('task-1');
+    assert.equal(candidates.m5a_verdict, 'M5A_BLOCKED_BY_MISSING_ANSWER_BOOK');
+    assert.equal(candidates.m5b_verdict, 'M5B_FAIL');
+    assert.match((candidates.non_blocking_warnings || []).join(' '), /未提供答本\/解析本/);
+    assert.match((candidates.non_blocking_warnings || []).join(' '), /相似题服务/);
+    assert.equal(candidates.questions[0].m5_answer_book?.verdict, 'fixture_only');
+    assert.equal(candidates.questions[0].m5_answer_book?.fixture_only, true);
+    assert.equal(candidates.questions[0].m5_answer_book?.answer_from_answer_book, 'A');
+    assert.equal(candidates.questions[0].m5_answer_book?.analysis_from_answer_book, '旧官方解析');
+    assert.match(candidates.questions[0].m5_answer_book?.empty_state_text || '', /未提供答本\/解析本/);
+    assert.equal(candidates.questions[0].m5_similarity?.duplicate_status, 'no_similarity_candidates');
+    assert.match(candidates.questions[0].m5_similarity?.empty_state_text || '', /尚未接入历史题库相似题候选/);
+  } finally {
+    await rm(debugDir, { recursive: true, force: true });
+  }
+}
+
+async function testBuildTaskConsistencyPreviewIncludesAllQuestions() {
+  const h = harness();
+  const debugDir = join(process.cwd(), 'debug', 'pdf-ai-preaudit', 'task-1');
+  const m6Root = join(process.cwd(), 'debug', 'm6', 'task-1');
+  const previewRoot = join(process.cwd(), 'debug', 'm6-preview-papers');
+
+  await rm(debugDir, { recursive: true, force: true });
+  await rm(m6Root, { recursive: true, force: true });
+  await rm(previewRoot, { recursive: true, force: true });
+  await mkdir(debugDir, { recursive: true });
+
+  try {
+    await writeFile(
+      join(debugDir, 'ai-preaudit-debug.json'),
+      JSON.stringify({ qwen_vl_enabled: true, qwen_vl_call_count_after: 1 }, null, 2),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'final-preview-payload.json'),
+      JSON.stringify(
+        {
+          questions: [
+            {
+              question_no: 1,
+              stem: 'H5 预览题 1',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              visual_parse_status: 'success',
+              source_page_refs: [1],
+              source_bbox: [10, 20, 220, 90],
+              source_text_span: 'H5 预览题 1',
+              risk_flags: [],
+            },
+            {
+              question_no: 2,
+              stem: 'H5 预览题 2',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              visual_parse_status: 'success',
+              source_page_refs: [1],
+              source_bbox: [12, 120, 230, 188],
+              source_text_span: 'H5 预览题 2',
+              risk_flags: ['need_manual_fix'],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'semantic-groups.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            source_page_start: 1,
+            source_page_end: 1,
+            source_text_span: 'H5 预览题 1',
+            stem_group: {
+              text: 'H5 预览题 1',
+              bbox: [10, 20, 220, 90],
+              source_text_span: 'H5 预览题 1',
+            },
+            options_group: {
+              blocks: [
+                { label: 'A', text: '甲' },
+                { label: 'B', text: '乙' },
+                { label: 'C', text: '丙' },
+                { label: 'D', text: '丁' },
+              ],
+            },
+          },
+          {
+            question_no: 2,
+            source_page_start: 1,
+            source_page_end: 1,
+            source_text_span: 'H5 预览题 2',
+            stem_group: {
+              text: 'H5 预览题 2',
+              bbox: [12, 120, 230, 188],
+              source_text_span: 'H5 预览题 2',
+            },
+            options_group: {
+              blocks: [
+                { label: 'A', text: '甲' },
+                { label: 'B', text: '乙' },
+                { label: 'C', text: '丙' },
+                { label: 'D', text: '丁' },
+              ],
+            },
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'ai-audit-results.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            ai_audit_status: 'passed',
+            ai_audit_verdict: '可通过',
+            answer_suggestion: 'A',
+            analysis_suggestion: '解析 1',
+            risk_flags: [],
+          },
+          {
+            question_no: 2,
+            ai_audit_status: 'warning',
+            ai_audit_verdict: '需复核',
+            answer_unknown_reason: '暂无可靠答案',
+            analysis_unknown_reason: '暂无可靠解析',
+            risk_flags: ['need_manual_fix'],
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const preview = await h.pdfService.buildTaskConsistencyPreview(
+      'task-1',
+      { reason: 'M6B consistency preview' },
+      'admin-user',
+    );
+    assert.equal(preview.preview_scope, 'task_consistency_audit');
+    assert.equal(preview.question_count, 2);
+    assert.equal(preview.questions.length, 2);
+    assert.equal(preview.preview_route, '/quiz-preview/h5-audit-task-1');
+    assert.equal(preview.questions[1].answer, null);
+    assert.equal(preview.questions[1].answer_unknown_reason, '暂无可靠答案');
+  } finally {
+    await rm(debugDir, { recursive: true, force: true });
+    await rm(m6Root, { recursive: true, force: true });
+    await rm(previewRoot, { recursive: true, force: true });
+  }
+}
+
+async function testReviewActionsPersistAuditEventsAndPreviewPublish() {
+  const h = harness();
+  const debugDir = join(process.cwd(), 'debug', 'pdf-ai-preaudit', 'task-1');
+  const draftRoot = join(process.cwd(), 'debug', 'paper-drafts');
+  const m6Root = join(process.cwd(), 'debug', 'm6', 'task-1');
+  const previewRoot = join(process.cwd(), 'debug', 'm6-preview-papers');
+  const draftIds: string[] = [];
+
+  await rm(debugDir, { recursive: true, force: true });
+  await rm(draftRoot, { recursive: true, force: true });
+  await rm(m6Root, { recursive: true, force: true });
+  await rm(previewRoot, { recursive: true, force: true });
+  await mkdir(debugDir, { recursive: true });
+
+  try {
+    h.answerSources.push({
+      id: 'answer-source-1',
+      bank_id: 'bank-1',
+      question_index: 1,
+      answer: 'A',
+      analysis_text: '答本解析',
+      match_score: 0.96,
+      source_pdf_url: 'https://example.test/answer-book.pdf',
+      source_page_num: 1,
+      status: AnswerSourceStatus.Matched,
+      created_at: new Date('2026-04-29T10:10:00.000Z'),
+    });
+
+    await writeFile(
+      join(debugDir, 'ai-preaudit-debug.json'),
+      JSON.stringify({ qwen_vl_enabled: true, qwen_vl_call_count_after: 1 }, null, 2),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'final-preview-payload.json'),
+      JSON.stringify(
+        {
+          questions: [
+            {
+              question_no: 1,
+              stem: '可进入 preview publish 的题目',
+              options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+              preview_image_path: 'chart.png',
+              visual_assets: [{ url: 'chart.png', ref: 'p1-img1', image_role: 'question_visual' }],
+              visual_parse_status: 'success',
+              source_page_refs: [1],
+              source_bbox: [10, 20, 220, 90],
+              source_text_span: '可进入 preview publish 的题目',
+              risk_flags: [],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'semantic-groups.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            source_page_start: 1,
+            source_page_end: 1,
+            source_text_span: '可进入 preview publish 的题目',
+            stem_group: {
+              text: '可进入 preview publish 的题目',
+              bbox: [10, 20, 220, 90],
+              source_text_span: '可进入 preview publish 的题目',
+            },
+            options_group: {
+              blocks: [
+                { label: 'A', text: '甲' },
+                { label: 'B', text: '乙' },
+                { label: 'C', text: '丙' },
+                { label: 'D', text: '丁' },
+              ],
+            },
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'ai-audit-results.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            ai_audit_status: 'passed',
+            ai_audit_verdict: '可通过',
+            ai_audit_summary: '结构完整。',
+            answer_suggestion: 'A',
+            analysis_suggestion: 'AI 建议解析',
+            risk_flags: [],
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const candidates = await h.pdfService.getPaperCandidates('task-1');
+    const candidate = candidates.questions[0];
+    assert.equal(candidates.m5a_verdict, 'M5A_PASS');
+    assert.equal(candidate.m5_answer_book?.answer_from_answer_book, 'A');
+
+    await h.pdfService.applyReviewAction('task-1', {
+      action: 'accept_match',
+      candidate_id: candidate.candidate_id,
+      reason: '人工接受答本匹配',
+    }, 'admin-user');
+    await h.pdfService.applyReviewAction('task-1', {
+      action: 'keep_both',
+      candidate_id: candidate.candidate_id,
+      reason: '当前无真实相似题服务，仅保留人工决策',
+    }, 'admin-user');
+    await h.pdfService.applyReviewAction('task-1', {
+      action: 'override_answer',
+      candidate_id: candidate.candidate_id,
+      answer: 'D',
+      reason: '人工改判答案',
+    }, 'admin-user');
+    await h.pdfService.applyReviewAction('task-1', {
+      action: 'override_analysis',
+      candidate_id: candidate.candidate_id,
+      analysis: '人工确认后的解析',
+      reason: '人工补写解析',
+    }, 'admin-user');
+    await h.pdfService.applyReviewAction('task-1', {
+      action: 'approve_for_publish',
+      candidate_id: candidate.candidate_id,
+      reason: '允许进入 preview-only 发布',
+    }, 'admin-user');
+
+    const reviewState = await h.pdfService.getReviewState('task-1');
+    assert.equal(reviewState.review_decisions[candidate.candidate_id].answer_book_decision, 'accepted');
+    assert.equal(reviewState.review_decisions[candidate.candidate_id].similarity_decision, 'keep_both');
+    assert.equal(reviewState.review_decisions[candidate.candidate_id].answer_override, 'D');
+    assert.equal(reviewState.review_decisions[candidate.candidate_id].analysis_override, '人工确认后的解析');
+    assert.equal(reviewState.review_decisions[candidate.candidate_id].approved_for_publish, true);
+    assert.equal(reviewState.audit_events.length, 5);
+
+    const auditFile = JSON.parse(
+      await readFile(join(m6Root, 'review-audit-events.json'), 'utf-8'),
+    );
+    assert.equal(auditFile.length, 5);
+    assert.equal(auditFile[0].actor, 'admin-user');
+
+    const draft = await h.pdfService.createDraftPaper({
+      source_task_id: 'task-1',
+      title: 'M6 preview draft',
+      questions: [candidate],
+    });
+    draftIds.push(draft.paper_id);
+    const preview = await h.pdfService.publishDraftPaperPreview(
+      draft.paper_id,
+      { dry_run: true, reason: 'M6C preview smoke' },
+      'admin-user',
+    );
+    assert.equal(preview.publish_status, 'preview_ready');
+    assert.equal(preview.preview_only, true);
+    assert.equal(preview.production_published, false);
+    assert.equal(preview.preview_route, `/quiz-preview/${draft.paper_id}`);
+    assert.equal(preview.preview_api_path, `/api/preview-papers/${draft.paper_id}`);
+    assert.equal(preview.questions[0].answer, 'D');
+    assert.equal(preview.questions[0].analysis, '人工确认后的解析');
+
+    const previewPaper = await h.pdfService.getPreviewPaperForH5(draft.paper_id);
+    assert.equal(previewPaper.question_count, 1);
+    assert.equal(previewPaper.questions[0].answer, 'D');
+
+    const submitResult = await h.pdfService.submitPreviewPaperAnswer(
+      draft.paper_id,
+      { question_id: previewPaper.questions[0].id, user_answer: 'D' },
+      'student-1',
+    );
+    assert.equal(submitResult.is_correct, true);
+    assert.equal(submitResult.answer, 'D');
+    assert.equal(submitResult.analysis, '人工确认后的解析');
+    assert.equal(submitResult.answer_unknown_reason, null);
+    assert.equal(submitResult.analysis_unknown_reason, null);
+
+    const submitLog = JSON.parse(
+      await readFile(join(m6Root, 'preview-submit-log.json'), 'utf-8'),
+    );
+    assert.equal(submitLog.length, 1);
+    assert.equal(submitLog[0].user_id, 'student-1');
+  } finally {
+    await rm(debugDir, { recursive: true, force: true });
+    await Promise.all(
+      draftIds.map((paperId) =>
+        rm(join(draftRoot, `${paperId}.json`), { force: true }),
+      ),
+    );
+    await rm(draftRoot, { recursive: true, force: true });
+    await rm(m6Root, { recursive: true, force: true });
+    await rm(previewRoot, { recursive: true, force: true });
   }
 }
 

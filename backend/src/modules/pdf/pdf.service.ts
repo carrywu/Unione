@@ -6,13 +6,17 @@ import {
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
 import { EventEmitter } from 'events';
 import { Response } from 'express';
 import { Repository } from 'typeorm';
+import {
+  AnswerSource,
+  AnswerSourceStatus,
+} from '../answer-book/entities/answer-source.entity';
 import { BankStatus, QuestionBank } from '../bank/entities/question-bank.entity';
 import { Material } from '../question/entities/material.entity';
 import {
@@ -62,6 +66,8 @@ export class PdfService {
     private readonly bankRepository: Repository<QuestionBank>,
     @InjectRepository(SystemConfig)
     private readonly systemConfigRepository: Repository<SystemConfig>,
+    @InjectRepository(AnswerSource)
+    private readonly answerSourceRepository: Repository<AnswerSource>,
     private readonly configService: ConfigService,
     private readonly uploadService: UploadService,
   ) {
@@ -548,26 +554,94 @@ export class PdfService {
     if (!task) throw new NotFoundException('解析任务不存在');
 
     const debug = await this.getAiPreauditDebug(taskId);
+    const finalQuestions = Array.isArray(debug.final_questions)
+      ? (debug.final_questions as Array<Record<string, any>>)
+      : [];
     const previewQuestions = Array.isArray(debug.final_preview_payload?.questions)
       ? debug.final_preview_payload.questions
       : [];
     const auditResults = Array.isArray(debug.ai_audit_results)
       ? debug.ai_audit_results
       : [];
+    const sourceQuestions = await this.questionRepository.find({
+      where: { parse_task_id: task.id },
+      relations: ['material'],
+      order: { index_num: 'ASC', created_at: 'ASC' },
+    });
+    const sourceQuestionsByNo = new Map(
+      sourceQuestions.map((question) => [String(question.index_num), question]),
+    );
+    const finalQuestionsByNo = new Map<string, Record<string, any>>();
+    finalQuestions.forEach((question, index) => {
+      finalQuestionsByNo.set(
+        this.paperCandidateQuestionKey(
+          question?.question_no ?? question?.index_num,
+          index,
+        ),
+        question || {},
+      );
+    });
     const auditsByNo = new Map<string, Record<string, any>>();
     auditResults.forEach((audit, index) => {
       const key = this.paperCandidateQuestionKey(audit?.question_no, index);
       auditsByNo.set(key, audit);
     });
+    const answerSources = await this.answerSourceRepository.find({
+      where: { bank_id: task.bank_id },
+      order: { question_index: 'ASC', created_at: 'ASC' },
+    });
+    const answerSourcesByIndex = new Map<number, AnswerSource[]>();
+    answerSources.forEach((source) => {
+      const list = answerSourcesByIndex.get(source.question_index) || [];
+      list.push(source);
+      answerSourcesByIndex.set(source.question_index, list);
+    });
+    const reviewState = await this.readReviewState(task.id);
+    const pageMaterialContext = await this.buildPageMaterialContext(
+      debug.page_understanding,
+    );
+    const reviewEventsByCandidateId = new Map<string, Array<Record<string, any>>>();
+    this.toArrayOfObjects(reviewState.audit_events).forEach((event) => {
+      const key = this.safeDisplayText(event.entity_id, '');
+      if (!key) return;
+      const list = reviewEventsByCandidateId.get(key) || [];
+      list.push(event);
+      reviewEventsByCandidateId.set(key, list);
+    });
 
     const sequenceDiagnostics = this.paperCandidateQuestionSequenceDiagnostics(previewQuestions);
     const questions = previewQuestions.map((question, index) => {
       const questionNo = question?.question_no ?? null;
+      const key = this.paperCandidateQuestionKey(questionNo, index);
       const audit =
-        auditsByNo.get(this.paperCandidateQuestionKey(questionNo, index)) ||
+        auditsByNo.get(key) ||
         auditResults[index] ||
         {};
-      return this.buildPaperCandidate(task, question || {}, audit || {}, index, debug, sequenceDiagnostics);
+      const baseCandidate = this.buildPaperCandidate(
+        task,
+        {
+          ...(finalQuestionsByNo.get(key) || {}),
+          ...(question || {}),
+        },
+        audit || {},
+        index,
+        debug,
+        sequenceDiagnostics,
+      );
+      const sourceQuestion =
+        sourceQuestionsByNo.get(String(questionNo)) || sourceQuestions[index] || null;
+      return this.decoratePaperCandidateForM6({
+        task,
+        candidate: baseCandidate,
+        sourceQuestion,
+        answerSources:
+          questionNo !== null ? answerSourcesByIndex.get(Number(questionNo)) || [] : [],
+        pageMaterialContext,
+        reviewDecision:
+          reviewState.review_decisions?.[baseCandidate.candidate_id] || {},
+        questionEvents:
+          reviewEventsByCandidateId.get(String(baseCandidate.candidate_id)) || [],
+      });
     });
     const summary = {
       total: questions.length,
@@ -614,11 +688,23 @@ export class PdfService {
       taskId: task.id,
       bankId: task.bank_id,
       status: task.status,
+      m5a_verdict: answerSources.length
+        ? 'M5A_PASS'
+        : 'M5A_BLOCKED_BY_MISSING_ANSWER_BOOK',
+      m5b_verdict: 'M5B_FAIL',
+      publish_preview: reviewState.publish_preview || null,
       debug_dir: debug.debug_dir,
       provider: this.firstNonEmptyProvider(debug),
       model: this.firstNonEmptyModel(debug),
       summary,
       diagnostics,
+      review_audit_events: reviewState.audit_events || [],
+      non_blocking_warnings: [
+        answerSources.length
+          ? null
+          : '未提供答本/解析本，M5A 当前仅展示 empty-state 与 seeded fixture，不写入正式库',
+        '尚未接入历史题库相似题服务，M5B 当前仅展示空状态与人工决策留痕',
+      ].filter(Boolean),
       questions,
       artifact_refs: {
         ...debug.artifact_refs,
@@ -708,6 +794,351 @@ export class PdfService {
         sections: paper.sections || [],
         questions: paper.questions || [],
       },
+    };
+  }
+
+  async getReviewState(taskId: string) {
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('解析任务不存在');
+    return this.readReviewState(task.id);
+  }
+
+  async applyReviewAction(
+    taskId: string,
+    body: Record<string, unknown>,
+    actorId?: string,
+  ) {
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('解析任务不存在');
+
+    const candidates = await this.getPaperCandidates(task.id);
+    const candidateId = this.safeDisplayText(body.candidate_id, '');
+    const questionNo = this.toOptionalNumber(body.question_no);
+    const candidate =
+      candidates.questions.find((item: Record<string, any>) =>
+        candidateId ? item.candidate_id === candidateId : false,
+      ) ||
+      candidates.questions.find((item: Record<string, any>) =>
+        questionNo !== null ? Number(item.question_no) === questionNo : false,
+      );
+    if (!candidate) {
+      throw new NotFoundException('候选题不存在或不属于当前任务');
+    }
+
+    const action = this.safeDisplayText(body.action, '');
+    if (!action) throw new BadRequestException('action 必填');
+    const reason =
+      this.firstMeaningfulText(body.reason, body.note, body.comment) ||
+      'managed-mode review action';
+    const evidenceIds = this.toStringArray(body.evidence_ids || body.evidenceIds);
+    const state = await this.readReviewState(task.id);
+    const key = String(candidate.candidate_id);
+    const before = this.cloneJson(state.review_decisions[key] || {});
+    const next = { ...before };
+    const answerValue =
+      this.firstMeaningfulText(body.answer, body.value, body.answer_value) || null;
+    const analysisValue =
+      this.firstMeaningfulText(body.analysis, body.value, body.analysis_value) ||
+      null;
+
+    switch (action) {
+      case 'accept_match':
+        next.answer_book_decision = 'accepted';
+        next.decision_status = 'answer_book_accepted';
+        break;
+      case 'reject_match':
+        next.answer_book_decision = 'rejected';
+        next.decision_status = 'answer_book_rejected';
+        break;
+      case 'override_answer':
+        if (!answerValue) {
+          throw new BadRequestException('override_answer 需要 answer');
+        }
+        next.answer_override = answerValue;
+        next.decision_status = 'answer_overridden';
+        break;
+      case 'override_analysis':
+        if (!analysisValue) {
+          throw new BadRequestException('override_analysis 需要 analysis');
+        }
+        next.analysis_override = analysisValue;
+        next.decision_status = 'analysis_overridden';
+        break;
+      case 'mark_duplicate':
+        next.similarity_decision = 'mark_duplicate';
+        next.duplicate_status = 'duplicate_marked';
+        next.duplicate_cluster_id =
+          this.firstMeaningfulText(body.duplicate_cluster_id, body.cluster_id) ||
+          key;
+        next.canonical_question_id =
+          this.firstMeaningfulText(body.canonical_question_id, body.target_question_id) ||
+          null;
+        next.decision_status = 'duplicate_marked';
+        break;
+      case 'keep_both':
+        next.similarity_decision = 'keep_both';
+        next.duplicate_status = 'keep_both';
+        next.decision_status = 'keep_both';
+        break;
+      case 'mark_sibling':
+        next.similarity_decision = 'mark_sibling';
+        next.duplicate_status = 'sibling';
+        next.decision_status = 'sibling_marked';
+        break;
+      case 'ignore_similarity':
+        next.similarity_decision = 'ignore_similarity';
+        next.duplicate_status = 'ignored';
+        next.decision_status = 'similarity_ignored';
+        break;
+      case 'quarantine_question':
+        next.quarantined = true;
+        next.approved_for_publish = false;
+        next.decision_status = 'quarantined';
+        break;
+      case 'approve_for_publish':
+        next.approved_for_publish = true;
+        next.quarantined = false;
+        next.decision_status = 'approved_for_publish';
+        break;
+      default:
+        throw new BadRequestException('不支持的 review action');
+    }
+
+    next.updated_at = new Date().toISOString();
+    next.last_reason = reason;
+    if (evidenceIds.length) {
+      next.evidence_ids = evidenceIds;
+    }
+    state.review_decisions[key] = next;
+
+    const event = {
+      id: randomUUID(),
+      actor: actorId || 'managed-mode',
+      action,
+      entity_type: 'paper_candidate',
+      entity_id: key,
+      question_no: candidate.question_no ?? null,
+      before,
+      after: this.cloneJson(next),
+      reason,
+      evidence_ids: evidenceIds,
+      created_at: next.updated_at,
+    };
+    state.audit_events = [...state.audit_events, event].slice(-800);
+    const saved = await this.writeReviewState(task.id, state);
+
+    return {
+      task_id: task.id,
+      candidate_id: key,
+      review_decision: saved.review_decisions[key],
+      audit_event: event,
+      audit_events: saved.audit_events.filter(
+        (item: Record<string, any>) => item.entity_id === key,
+      ),
+    };
+  }
+
+  async publishDraftPaperPreview(
+    paperId: string,
+    body: Record<string, unknown>,
+    actorId?: string,
+  ) {
+    const paper = await this.readDraftPaper(paperId);
+    const taskId = this.safeDisplayText(paper.source_task_id, '');
+    if (!taskId) {
+      throw new BadRequestException('试卷草稿缺少 source_task_id');
+    }
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('解析任务不存在');
+
+    const now = new Date().toISOString();
+    const previewQuestions = Array.isArray(paper.questions)
+      ? (paper.questions as Array<Record<string, any>>).map((question, index) =>
+          this.buildPreviewPaperQuestion(question, index),
+        )
+      : [];
+    const previewPayload = {
+      paper_id: paper.paper_id,
+      task_id: task.id,
+      source_bank_id: paper.source_bank_id || task.bank_id,
+      title: paper.title,
+      preview_only: true,
+      publish_status: 'preview_ready',
+      production_published: false,
+      question_count: previewQuestions.length,
+      debug_dir: paper.debug_dir || null,
+      created_at: paper.created_at,
+      updated_at: now,
+      questions: previewQuestions,
+    };
+    await mkdir(this.previewPaperRoot(), { recursive: true });
+    await this.writePrettyJson(this.previewPaperPath(paper.paper_id), previewPayload);
+
+    const state = await this.readReviewState(task.id);
+    const publishPreview = {
+      paper_id: paper.paper_id,
+      preview_api_path: `/api/preview-papers/${paper.paper_id}`,
+      preview_route: `/quiz-preview/${paper.paper_id}`,
+      publish_status: 'preview_ready',
+      question_count: previewQuestions.length,
+      dry_run: Boolean(body.dry_run ?? true),
+      production_published: false,
+      created_at: now,
+    };
+    state.publish_preview = publishPreview;
+    state.audit_events = [
+      ...state.audit_events,
+      {
+        id: randomUUID(),
+        actor: actorId || 'managed-mode',
+        action: 'publish_preview',
+        entity_type: 'paper_preview',
+        entity_id: paper.paper_id,
+        before: null,
+        after: publishPreview,
+        reason: this.firstMeaningfulText(body.reason, 'preview-only publish') ||
+          'preview-only publish',
+        evidence_ids: this.toStringArray(body.evidence_ids || body.evidenceIds),
+        created_at: now,
+      },
+    ].slice(-800);
+    await this.writeReviewState(task.id, state);
+    return {
+      ...previewPayload,
+      ...publishPreview,
+    };
+  }
+
+  async buildTaskConsistencyPreview(
+    taskId: string,
+    body: Record<string, unknown>,
+    actorId?: string,
+  ) {
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('解析任务不存在');
+
+    const candidates = await this.getPaperCandidates(task.id);
+    const now = new Date().toISOString();
+    const paperId = `h5-audit-${task.id}`;
+    const previewQuestions = Array.isArray(candidates.questions)
+      ? candidates.questions.map((question: Record<string, any>, index: number) =>
+          this.buildPreviewPaperQuestion(question, index),
+        )
+      : [];
+    const previewPayload = {
+      paper_id: paperId,
+      task_id: task.id,
+      source_bank_id: task.bank_id,
+      title:
+        this.firstMeaningfulText(body.title) ||
+        `H5 一致性预览 ${task.id}`,
+      preview_only: true,
+      preview_scope: 'task_consistency_audit',
+      publish_status: 'preview_ready',
+      production_published: false,
+      question_count: previewQuestions.length,
+      debug_dir: candidates.debug_dir || null,
+      created_at: now,
+      updated_at: now,
+      questions: previewQuestions,
+    };
+    await mkdir(this.previewPaperRoot(), { recursive: true });
+    await this.writePrettyJson(this.previewPaperPath(paperId), previewPayload);
+
+    const state = await this.readReviewState(task.id);
+    const previewMeta = {
+      paper_id: paperId,
+      preview_api_path: `/api/preview-papers/${paperId}`,
+      preview_route: `/quiz-preview/${paperId}`,
+      publish_status: 'preview_ready',
+      preview_scope: 'task_consistency_audit',
+      question_count: previewQuestions.length,
+      production_published: false,
+      created_at: now,
+    };
+    state.h5_consistency_preview = previewMeta;
+    state.audit_events = [
+      ...state.audit_events,
+      {
+        id: randomUUID(),
+        actor: actorId || 'managed-mode',
+        action: 'build_h5_consistency_preview',
+        entity_type: 'paper_preview',
+        entity_id: paperId,
+        before: null,
+        after: previewMeta,
+        reason:
+          this.firstMeaningfulText(body.reason, 'build H5 consistency preview') ||
+          'build H5 consistency preview',
+        evidence_ids: this.toStringArray(body.evidence_ids || body.evidenceIds),
+        created_at: now,
+      },
+    ].slice(-800);
+    await this.writeReviewState(task.id, state);
+    return {
+      ...previewPayload,
+      ...previewMeta,
+    };
+  }
+
+  async getPreviewPaperForH5(paperId: string) {
+    return this.readPreviewPaper(paperId);
+  }
+
+  async submitPreviewPaperAnswer(
+    paperId: string,
+    body: Record<string, unknown>,
+    userId?: string,
+  ) {
+    const preview = await this.readPreviewPaper(paperId);
+    const questionId = this.safeDisplayText(
+      body.question_id || body.candidate_id || body.id,
+      '',
+    );
+    if (!questionId) throw new BadRequestException('question_id 必填');
+    const question = Array.isArray(preview.questions)
+      ? (preview.questions as Array<Record<string, any>>).find(
+          (item) =>
+            this.safeDisplayText(item.id || item.candidate_id, '') === questionId,
+        )
+      : null;
+    if (!question) throw new NotFoundException('预发布题目不存在');
+
+    const normalizedUserAnswer = this.normalizeAnswerForPreview(
+      this.safeDisplayText(body.user_answer, ''),
+    );
+    const normalizedAnswer = this.normalizeAnswerForPreview(
+      this.safeDisplayText(question.answer, ''),
+    );
+    const isCorrect = Boolean(
+      normalizedAnswer && normalizedUserAnswer && normalizedUserAnswer === normalizedAnswer,
+    );
+    const now = new Date().toISOString();
+    const submitLogPath = join(
+      this.m6TaskRoot(String(preview.task_id || 'preview')),
+      'preview-submit-log.json',
+    );
+    const submitLog = ((await this.readJsonIfExists(submitLogPath)) || []) as Array<Record<string, any>>;
+    submitLog.push({
+      paper_id: preview.paper_id,
+      question_id: questionId,
+      user_id: userId || null,
+      user_answer: normalizedUserAnswer,
+      is_correct: isCorrect,
+      created_at: now,
+    });
+    await this.writePrettyJson(submitLogPath, submitLog.slice(-500));
+
+    return {
+      is_correct: isCorrect,
+      answer: question.answer || null,
+      analysis: question.analysis || null,
+      answer_unknown_reason: question.answer_unknown_reason || null,
+      analysis_unknown_reason: question.analysis_unknown_reason || null,
+      analysis_image_url: null,
+      analysis_image_urls: [],
+      visual_summary: question.visual_summary || null,
+      ai_audit_summary: question.ai_audit_summary || null,
     };
   }
 
@@ -1050,6 +1481,266 @@ export class PdfService {
         ...(question.source_artifacts_refs || {}),
         ...(debug.artifact_refs || {}),
       },
+    };
+  }
+
+  private async buildPageMaterialContext(pageUnderstanding: unknown) {
+    const byPage = new Map<number, Array<Record<string, any>>>();
+    if (!Array.isArray(pageUnderstanding)) return byPage;
+    for (const item of pageUnderstanding as Array<Record<string, any>>) {
+      const pageNo = this.toOptionalNumber(item.page_no ?? item.page_num);
+      const rawOutputRef = this.safeDisplayText(item.raw_output_ref, '');
+      if (!pageNo || !rawOutputRef) continue;
+      const raw = await this.readJsonIfExists(rawOutputRef);
+      const materials = Array.isArray(raw?.raw_output?.materials)
+        ? raw.raw_output.materials
+        : Array.isArray(raw?.parsed_json?.materials)
+          ? raw.parsed_json.materials
+          : [];
+      if (materials.length) {
+        byPage.set(
+          pageNo,
+          materials.map((material: Record<string, any>) => ({ ...material })),
+        );
+      }
+    }
+    return byPage;
+  }
+
+  private decoratePaperCandidateForM6(input: {
+    task: ParseTask;
+    candidate: Record<string, any>;
+    sourceQuestion: Question | null;
+    answerSources: AnswerSource[];
+    pageMaterialContext: Map<number, Array<Record<string, any>>>;
+    reviewDecision: Record<string, any>;
+    questionEvents: Array<Record<string, any>>;
+  }) {
+    const sourceQuestion = input.sourceQuestion;
+    const answerBook = this.buildPaperCandidateAnswerBook({
+      candidate: input.candidate,
+      sourceQuestion,
+      answerSources: input.answerSources,
+      reviewDecision: input.reviewDecision,
+    });
+    const similarity = this.buildPaperCandidateSimilarity({
+      reviewDecision: input.reviewDecision,
+    });
+    const material = this.buildPaperCandidateMaterial({
+      candidate: input.candidate,
+      sourceQuestion,
+      pageMaterialContext: input.pageMaterialContext,
+    });
+    const finalAnswerSuggestion =
+      this.firstMeaningfulText(
+        input.reviewDecision.answer_override,
+        input.reviewDecision.answer_book_decision === 'accepted'
+          ? answerBook.answer_from_answer_book
+          : null,
+        input.reviewDecision.final_answer_suggestion,
+        input.candidate.answer_suggestion,
+        sourceQuestion?.answer,
+      ) || null;
+    const finalAnalysisSuggestion =
+      this.firstMeaningfulText(
+        input.reviewDecision.analysis_override,
+        input.reviewDecision.answer_book_decision === 'accepted'
+          ? answerBook.analysis_from_answer_book
+          : null,
+        input.reviewDecision.final_analysis_suggestion,
+        input.candidate.analysis_suggestion,
+        sourceQuestion?.analysis,
+      ) || null;
+
+    return {
+      ...input.candidate,
+      question_id: sourceQuestion?.id || null,
+      answer: sourceQuestion?.answer || null,
+      analysis: sourceQuestion?.analysis || null,
+      answer_unknown_reason:
+        input.candidate.answer_unknown_reason ||
+        sourceQuestion?.answer_unknown_reason ||
+        null,
+      analysis_unknown_reason:
+        input.candidate.analysis_unknown_reason ||
+        sourceQuestion?.analysis_unknown_reason ||
+        null,
+      material,
+      m5_answer_book: {
+        ...answerBook,
+        final_answer_suggestion: finalAnswerSuggestion,
+        final_analysis_suggestion: finalAnalysisSuggestion,
+      },
+      m5_similarity: similarity,
+      final_answer_suggestion: finalAnswerSuggestion,
+      final_analysis_suggestion: finalAnalysisSuggestion,
+      answer_override: input.reviewDecision.answer_override || null,
+      analysis_override: input.reviewDecision.analysis_override || null,
+      approved_for_publish: Boolean(input.reviewDecision.approved_for_publish),
+      quarantined: Boolean(input.reviewDecision.quarantined),
+      review_decision_status:
+        this.firstMeaningfulText(input.reviewDecision.decision_status) || null,
+      audit_events: input.questionEvents,
+    };
+  }
+
+  private buildPaperCandidateMaterial(input: {
+    candidate: Record<string, any>;
+    sourceQuestion: Question | null;
+    pageMaterialContext: Map<number, Array<Record<string, any>>>;
+  }) {
+    if (input.sourceQuestion?.material?.content) {
+      return {
+        id: input.sourceQuestion.material.id,
+        content: this.cleanParsedText(input.sourceQuestion.material.content),
+        images: Array.isArray(input.sourceQuestion.material.images)
+          ? input.sourceQuestion.material.images
+          : [],
+      };
+    }
+    const groupId = this.safeDisplayText(input.candidate.material_group_id, '');
+    if (!groupId) return null;
+    const materialTempId = groupId.replace(/^sg_/, '');
+    const pageRefs = Array.isArray(input.candidate.source_page_refs)
+      ? input.candidate.source_page_refs
+      : [];
+    for (const page of pageRefs) {
+      const materials = input.pageMaterialContext.get(Number(page)) || [];
+      const matched = materials.find(
+        (item) =>
+          this.safeDisplayText(item.temp_id, '') === materialTempId &&
+          this.firstMeaningfulText(item.content),
+      );
+      if (matched) {
+        return {
+          id: groupId,
+          content: this.cleanParsedText(matched.content),
+          images: [],
+          source_page: Number(page),
+          source: 'page_understanding_raw_material',
+        };
+      }
+    }
+    return null;
+  }
+
+  private buildPaperCandidateAnswerBook(input: {
+    candidate: Record<string, any>;
+    sourceQuestion: Question | null;
+    answerSources: AnswerSource[];
+    reviewDecision: Record<string, any>;
+  }) {
+    const primarySource = input.answerSources[0] || null;
+    const fixtureAnswer =
+      !primarySource &&
+      (this.firstMeaningfulText(
+        input.sourceQuestion?.answer,
+        input.candidate.answer,
+        input.candidate.answer_suggestion,
+      ) ||
+        null);
+    const fixtureAnalysis =
+      !primarySource &&
+      (this.firstMeaningfulText(
+        input.sourceQuestion?.analysis,
+        input.candidate.analysis,
+        input.candidate.analysis_suggestion,
+      ) ||
+        null);
+    const fixtureOnly = Boolean(!primarySource && (fixtureAnswer || fixtureAnalysis));
+    const verdict = primarySource
+      ? primarySource.status === AnswerSourceStatus.Matched
+        ? 'matched'
+        : primarySource.status === AnswerSourceStatus.Ambiguous
+          ? 'ambiguous'
+          : 'available'
+      : fixtureOnly
+        ? 'fixture_only'
+        : 'blocked';
+    const conflictReason =
+      input.reviewDecision.answer_book_decision === 'rejected'
+        ? '人工拒绝答本候选'
+        : primarySource &&
+            input.sourceQuestion?.answer &&
+            primarySource.answer &&
+            input.sourceQuestion.answer !== primarySource.answer
+          ? '答本候选答案与当前题目答案不一致'
+          : fixtureOnly
+            ? '当前仅提供 seeded fixture，未写入正式答案源'
+            : null;
+    return {
+      verdict,
+      empty_state_text: primarySource
+        ? null
+        : '未提供答本/解析本，暂无答本候选',
+      answer_from_answer_book:
+        primarySource?.answer || fixtureAnswer || null,
+      analysis_from_answer_book:
+        primarySource?.analysis_text || fixtureAnalysis || null,
+      match_confidence: primarySource?.match_score ?? null,
+      match_method: primarySource
+        ? primarySource.status === AnswerSourceStatus.Matched
+          ? 'answer_source_match'
+          : 'answer_source_ambiguous'
+        : fixtureOnly
+          ? 'seeded_fixture'
+          : null,
+      evidence: primarySource
+        ? [
+            this.safeDisplayText(primarySource.source_pdf_url, ''),
+            primarySource.source_page_num
+              ? `page:${primarySource.source_page_num}`
+              : '',
+          ].filter(Boolean)
+        : fixtureOnly
+          ? ['seeded_fixture:not_from_formal_answer_book']
+          : [],
+      conflict_reason: conflictReason,
+      needs_human_review:
+        !primarySource ||
+        primarySource.status !== AnswerSourceStatus.Matched ||
+        Boolean(conflictReason),
+      fixture_only: fixtureOnly,
+      decision_status:
+        this.firstMeaningfulText(input.reviewDecision.answer_book_decision) ||
+        'pending',
+      candidates: input.answerSources.map((source) => ({
+        id: source.id,
+        status: source.status,
+        answer: source.answer || null,
+        analysis: source.analysis_text || null,
+        match_confidence: source.match_score ?? null,
+        source_page_num: source.source_page_num,
+      })),
+    };
+  }
+
+  private buildPaperCandidateSimilarity(input: {
+    reviewDecision: Record<string, any>;
+  }) {
+    return {
+      duplicate_status:
+        this.firstMeaningfulText(input.reviewDecision.duplicate_status) ||
+        'no_similarity_candidates',
+      duplicate_cluster_id:
+        this.firstMeaningfulText(input.reviewDecision.duplicate_cluster_id) ||
+        null,
+      canonical_question_id:
+        this.firstMeaningfulText(input.reviewDecision.canonical_question_id) ||
+        null,
+      similarity_candidates: Array.isArray(input.reviewDecision.similarity_candidates)
+        ? input.reviewDecision.similarity_candidates
+        : [],
+      edge_type:
+        this.firstMeaningfulText(input.reviewDecision.edge_type) || null,
+      final_similarity_score: this.toOptionalNumber(
+        input.reviewDecision.final_similarity_score,
+      ),
+      decision_status:
+        this.firstMeaningfulText(input.reviewDecision.similarity_decision) ||
+        'not_reviewed',
+      empty_state_text:
+        '尚未接入历史题库相似题候选，当前仅支持空状态审核与人工决策留痕',
     };
   }
 
@@ -2087,6 +2778,120 @@ export class PdfService {
     );
   }
 
+  private m6TaskRoot(taskId: string) {
+    return join(process.cwd(), 'debug', 'm6', taskId);
+  }
+
+  private reviewStatePath(taskId: string) {
+    return join(this.m6TaskRoot(taskId), 'review-state.json');
+  }
+
+  private reviewAuditPath(taskId: string) {
+    return join(this.m6TaskRoot(taskId), 'review-audit-events.json');
+  }
+
+  private previewPaperRoot() {
+    return join(process.cwd(), 'debug', 'm6-preview-papers');
+  }
+
+  private previewPaperPath(paperId: string) {
+    return join(this.previewPaperRoot(), `${paperId}.json`);
+  }
+
+  private emptyReviewState(taskId: string) {
+    return {
+      task_id: taskId,
+      updated_at: null,
+      m5a_verdict: 'M5A_BLOCKED_BY_MISSING_ANSWER_BOOK',
+      m5b_verdict: 'M5B_FAIL',
+      review_decisions: {} as Record<string, Record<string, any>>,
+      audit_events: [] as Array<Record<string, any>>,
+      publish_preview: null as Record<string, any> | null,
+    };
+  }
+
+  private async readJsonIfExists(path: string) {
+    try {
+      return JSON.parse(await readFile(path, 'utf-8'));
+    } catch {
+      return null;
+    }
+  }
+
+  private async writePrettyJson(path: string, payload: unknown) {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, JSON.stringify(payload, null, 2), 'utf-8');
+  }
+
+  private async readReviewState(taskId: string) {
+    const fallback = this.emptyReviewState(taskId);
+    const loaded = await this.readJsonIfExists(this.reviewStatePath(taskId));
+    if (!loaded || typeof loaded !== 'object') return fallback;
+    return {
+      ...fallback,
+      ...loaded,
+      task_id: taskId,
+      review_decisions:
+        loaded.review_decisions && typeof loaded.review_decisions === 'object'
+          ? loaded.review_decisions
+          : {},
+      audit_events: Array.isArray(loaded.audit_events)
+        ? loaded.audit_events
+        : [],
+      publish_preview:
+        loaded.publish_preview && typeof loaded.publish_preview === 'object'
+          ? loaded.publish_preview
+          : null,
+    };
+  }
+
+  private async writeReviewState(taskId: string, state: Record<string, any>) {
+    const next = {
+      ...this.emptyReviewState(taskId),
+      ...state,
+      task_id: taskId,
+      updated_at: new Date().toISOString(),
+      review_decisions:
+        state.review_decisions && typeof state.review_decisions === 'object'
+          ? state.review_decisions
+          : {},
+      audit_events: Array.isArray(state.audit_events) ? state.audit_events : [],
+      publish_preview:
+        state.publish_preview && typeof state.publish_preview === 'object'
+          ? state.publish_preview
+          : null,
+    };
+    await mkdir(this.m6TaskRoot(taskId), { recursive: true });
+    await this.writePrettyJson(this.reviewStatePath(taskId), next);
+    await this.writePrettyJson(this.reviewAuditPath(taskId), next.audit_events);
+    return next;
+  }
+
+  private cloneJson<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
+  }
+
+  private normalizePreviewPaperId(paperId: string) {
+    if (
+      !paperId ||
+      paperId.includes('/') ||
+      paperId.includes('\\') ||
+      paperId.includes('\0')
+    ) {
+      throw new BadRequestException('非法 paperId');
+    }
+    return paperId;
+  }
+
+  private async readPreviewPaper(paperId: string) {
+    const safePaperId = this.normalizePreviewPaperId(paperId);
+    const preview = await this.readJsonIfExists(this.previewPaperPath(safePaperId));
+    if (!preview || typeof preview !== 'object') {
+      throw new NotFoundException('预发布试卷不存在');
+    }
+    return preview;
+  }
+
   private normalizeDraftSections(value: unknown, questions: Array<Record<string, any>>) {
     if (Array.isArray(value) && value.length) {
       return value.map((section, index) => {
@@ -2109,15 +2914,27 @@ export class PdfService {
 
   private normalizeDraftQuestions(value: Array<Record<string, any>>, defaultSectionId: string) {
     return value.map((item, index) => ({
+      ...item,
       candidate_id: String(item.candidate_id || item.id || `candidate-${index + 1}`),
+      id: String(item.question_id || item.id || item.candidate_id || `candidate-${index + 1}`),
       question_no: item.question_no ?? null,
       stem: this.safeDisplayText(item.stem, ''),
       options: this.normalizeCandidateOptions(item.options),
+      answer: item.answer || null,
+      analysis: item.analysis || null,
       answer_suggestion: item.answer_suggestion || null,
+      answer_unknown_reason: item.answer_unknown_reason || null,
       analysis_suggestion: item.analysis_suggestion || null,
+      analysis_unknown_reason: item.analysis_unknown_reason || null,
       preview_image_path: item.preview_image_path || null,
       visual_assets: Array.isArray(item.visual_assets) ? item.visual_assets : [],
+      material: item.material || null,
+      visual_summary: item.visual_summary || null,
+      visual_confidence: item.visual_confidence ?? null,
       ai_audit_status: this.safeDisplayText(item.ai_audit_status, 'unknown'),
+      ai_audit_verdict: item.ai_audit_verdict || null,
+      ai_audit_summary: item.ai_audit_summary || null,
+      ai_reviewed_before_human: Boolean(item.ai_reviewed_before_human),
       risk_flags: this.toStringArray(item.risk_flags),
       need_manual_fix: Boolean(item.need_manual_fix),
       can_add_to_paper: Boolean(item.can_add_to_paper),
@@ -2127,11 +2944,122 @@ export class PdfService {
       manualForceAddAllowed: Boolean(item.manualForceAddAllowed),
       missingContextReason: item.missingContextReason || null,
       recommendedAction: item.recommendedAction || null,
+      m5_answer_book: item.m5_answer_book || null,
+      m5_similarity: item.m5_similarity || null,
+      final_answer_suggestion: item.final_answer_suggestion || null,
+      final_analysis_suggestion: item.final_analysis_suggestion || null,
+      answer_override: item.answer_override || null,
+      analysis_override: item.analysis_override || null,
+      approved_for_publish: Boolean(item.approved_for_publish),
+      quarantined: Boolean(item.quarantined),
+      review_decision_status: item.review_decision_status || null,
+      audit_events: Array.isArray(item.audit_events) ? item.audit_events : [],
       section_id: String(item.section_id || defaultSectionId),
       score: Number(item.score || 1),
       order: Number(item.order || index + 1),
       source_page_refs: Array.isArray(item.source_page_refs) ? item.source_page_refs : [],
     }));
+  }
+
+  private buildPreviewPaperQuestion(
+    question: Record<string, any>,
+    index: number,
+  ) {
+    const answer =
+      this.firstMeaningfulText(
+        question.answer_override,
+        question.final_answer_suggestion,
+        question.answer_suggestion,
+        question.answer,
+      ) || null;
+    const analysis =
+      this.firstMeaningfulText(
+        question.analysis_override,
+        question.final_analysis_suggestion,
+        question.analysis_suggestion,
+        question.analysis,
+      ) || null;
+    return {
+      id: String(question.id || question.question_id || question.candidate_id || `preview-${index + 1}`),
+      candidate_id: String(
+        question.candidate_id || question.question_id || question.id || `preview-${index + 1}`,
+      ),
+      question_no: question.question_no ?? index + 1,
+      type: this.safeDisplayText(question.type, 'single') || 'single',
+      content: this.safeDisplayText(question.stem, ''),
+      option_a: question.options?.A || '',
+      option_b: question.options?.B || '',
+      option_c: question.options?.C || '',
+      option_d: question.options?.D || '',
+      answer,
+      analysis,
+      answer_unknown_reason:
+        answer
+          ? null
+          : this.firstMeaningfulText(
+              question.answer_unknown_reason,
+              question.m5_answer_book?.empty_state_text,
+            ) || '待人工复核：暂无可靠答案',
+      analysis_unknown_reason:
+        analysis
+          ? null
+          : this.firstMeaningfulText(question.analysis_unknown_reason) ||
+            '待人工复核：暂无可靠解析',
+      images: Array.isArray(question.visual_assets)
+        ? question.visual_assets.map((asset: Record<string, any>) => ({
+            asset_id:
+              this.firstMeaningfulText(asset.asset_id, asset.ref, asset.id) ||
+              null,
+            ref:
+              this.firstMeaningfulText(asset.ref, asset.asset_id, asset.id) ||
+              null,
+            src:
+              this.firstMeaningfulText(asset.url, asset.image_url, asset.src) ||
+              '',
+            url:
+              this.firstMeaningfulText(asset.url, asset.image_url, asset.src) ||
+              '',
+            caption:
+              this.firstMeaningfulText(
+                asset.visual_summary,
+                asset.caption,
+                asset.ai_desc,
+              ) || null,
+            role:
+              this.safeDisplayText(asset.image_role || asset.role, 'question_visual') ||
+              'question_visual',
+            image_role:
+              this.safeDisplayText(asset.image_role || asset.role, 'question_visual') ||
+              'question_visual',
+            visual_hash:
+              this.firstMeaningfulText(asset.visual_hash) || null,
+          }))
+        : [],
+      material:
+        question.material && typeof question.material === 'object'
+          ? question.material
+          : null,
+      visual_summary: question.visual_summary || null,
+      visual_confidence: question.visual_confidence ?? null,
+      ai_audit_status: question.ai_audit_status || null,
+      ai_audit_verdict: question.ai_audit_verdict || null,
+      ai_audit_summary: question.ai_audit_summary || null,
+      ai_reviewed_before_human: Boolean(question.ai_reviewed_before_human),
+      risk_flags: this.toStringArray(question.risk_flags),
+      review_decision_status: question.review_decision_status || null,
+      approved_for_publish: Boolean(question.approved_for_publish),
+      source_page_refs: Array.isArray(question.source_page_refs)
+        ? question.source_page_refs
+        : [],
+    };
+  }
+
+  private normalizeAnswerForPreview(value: string) {
+    return String(value || '')
+      .trim()
+      .replace(/[（）()]/g, '')
+      .replace(/\s+/g, '')
+      .toUpperCase();
   }
 
   private sumDraftScore(questions: Array<Record<string, any>>) {
@@ -3733,6 +4661,14 @@ export class PdfService {
   private toStringArray(value: unknown) {
     if (!Array.isArray(value)) return [];
     return value.map((item) => String(item)).filter(Boolean);
+  }
+
+  private toArrayOfObjects(value: unknown) {
+    if (!Array.isArray(value)) return [];
+    return value.filter(
+      (item): item is Record<string, any> =>
+        Boolean(item) && typeof item === 'object',
+    );
   }
 
   private cleanParsedText(value: unknown) {

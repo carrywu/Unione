@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -107,6 +108,22 @@ export class PdfController {
     return this.pdfService.getPaperCandidates(taskId);
   }
 
+  @Get('task/:taskId/review-state')
+  @ApiOperation({ summary: '读取 M6 审核闭环状态' })
+  getReviewState(@Param('taskId') taskId: string) {
+    return this.pdfService.getReviewState(taskId);
+  }
+
+  @Post('task/:taskId/review-action')
+  @ApiOperation({ summary: '记录 M6 人工审核动作并写入审计事件' })
+  applyReviewAction(
+    @Param('taskId') taskId: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') operatorId?: string,
+  ) {
+    return this.pdfService.applyReviewAction(taskId, body, operatorId);
+  }
+
   @Post('papers/draft')
   @ApiOperation({ summary: '创建试卷草稿' })
   createDraftPaper(@Body() body: Record<string, unknown>) {
@@ -132,6 +149,26 @@ export class PdfController {
   @ApiOperation({ summary: '预览试卷草稿' })
   previewDraftPaper(@Param('paperId') paperId: string) {
     return this.pdfService.previewDraftPaper(paperId);
+  }
+
+  @Post('papers/:paperId/publish-preview')
+  @ApiOperation({ summary: '将试卷草稿发布为 preview-only 试卷' })
+  publishDraftPaperPreview(
+    @Param('paperId') paperId: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') operatorId?: string,
+  ) {
+    return this.pdfService.publishDraftPaperPreview(paperId, body, operatorId);
+  }
+
+  @Post('task/:taskId/h5-consistency-preview')
+  @ApiOperation({ summary: '基于解析任务生成 H5 一致性预览题本' })
+  buildTaskConsistencyPreview(
+    @Param('taskId') taskId: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') operatorId?: string,
+  ) {
+    return this.pdfService.buildTaskConsistencyPreview(taskId, body, operatorId);
   }
 
   @Get('task/:taskId/debug/artifact')
@@ -177,5 +214,29 @@ export class PdfController {
   @ApiOperation({ summary: '删除解析任务记录' })
   remove(@Param('taskId') taskId: string) {
     return this.pdfService.remove(taskId);
+  }
+}
+
+@ApiTags('Preview Papers')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller('api/preview-papers')
+export class ApiPreviewPaperController {
+  constructor(private readonly pdfService: PdfService) {}
+
+  @Get(':paperId')
+  @ApiOperation({ summary: '读取 preview-only 试卷' })
+  getPreviewPaper(@Param('paperId') paperId: string) {
+    return this.pdfService.getPreviewPaperForH5(paperId);
+  }
+
+  @Post(':paperId/submit')
+  @ApiOperation({ summary: '提交 preview-only 试卷答题结果' })
+  submitPreviewPaper(
+    @Param('paperId') paperId: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser('sub') userId?: string,
+  ) {
+    return this.pdfService.submitPreviewPaperAnswer(paperId, body, userId);
   }
 }

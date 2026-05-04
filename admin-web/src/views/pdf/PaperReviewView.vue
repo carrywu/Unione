@@ -14,6 +14,9 @@
           保存草稿
         </el-button>
         <el-button type="success" :disabled="!paperId" @click="openPreview">预览试卷</el-button>
+        <el-button type="warning" :disabled="!paperId" :loading="publishingPreview" @click="handlePublishPreview">
+          Preview 发布
+        </el-button>
       </div>
     </header>
 
@@ -65,6 +68,15 @@
       data-testid="paper-review-failure"
       :title="failureMessage"
       :description="failureDescription"
+    />
+    <el-alert
+      v-if="candidates?.non_blocking_warnings?.length"
+      class="failure-alert"
+      type="info"
+      :closable="false"
+      show-icon
+      title="M5 非阻塞提示"
+      :description="candidates?.non_blocking_warnings?.join('；')"
     />
 
     <main class="review-grid">
@@ -138,6 +150,17 @@
                 无法人工核验
               </el-button>
             </el-tooltip>
+            <el-button
+              size="small"
+              type="success"
+              data-testid="approve-for-publish-button"
+              @click="runReviewAction('approve_for_publish')"
+            >
+              批准预发布
+            </el-button>
+            <el-button size="small" type="danger" @click="runReviewAction('quarantine_question')">
+              隔离题目
+            </el-button>
           </div>
         </div>
 
@@ -327,6 +350,158 @@
               </div>
               <p v-else class="muted">未返回 image linkage。</p>
             </section>
+            <section data-testid="answer-book-panel">
+              <h2>M5A 答本 / 解析本对撞</h2>
+              <div class="options-grid">
+                <div>
+                  <span>状态</span>
+                  <p>{{ textOr(selectedCandidate.m5_answer_book?.verdict, candidates?.m5a_verdict || 'blocked') }}</p>
+                </div>
+                <div>
+                  <span>匹配方式</span>
+                  <p>{{ textOr(selectedCandidate.m5_answer_book?.match_method, '未提供') }}</p>
+                </div>
+                <div>
+                  <span>答本答案</span>
+                  <p><MathText :text="selectedCandidate.m5_answer_book?.answer_from_answer_book" fallback="未提供答本候选" /></p>
+                </div>
+                <div>
+                  <span>答本解析</span>
+                  <p><MathText :text="selectedCandidate.m5_answer_book?.analysis_from_answer_book" fallback="未提供答本候选" /></p>
+                </div>
+                <div>
+                  <span>最终答案建议</span>
+                  <p><MathText :text="selectedCandidate.m5_answer_book?.final_answer_suggestion" fallback="未生成最终建议" /></p>
+                </div>
+                <div>
+                  <span>最终解析建议</span>
+                  <p><MathText :text="selectedCandidate.m5_answer_book?.final_analysis_suggestion" fallback="未生成最终建议" /></p>
+                </div>
+              </div>
+              <p class="muted">
+                {{ textOr(selectedCandidate.m5_answer_book?.empty_state_text, '未提供答本/解析本，暂无答本候选') }}
+              </p>
+              <p v-if="selectedCandidate.m5_answer_book?.fixture_only" class="muted">
+                当前为 seeded fixture，仅用于 UI / 交互验证，不写入正式答案源。
+              </p>
+              <div class="candidate-actions">
+                <el-button
+                  size="small"
+                  :loading="actionLoading"
+                  :disabled="!selectedCandidate.m5_answer_book?.answer_from_answer_book && !selectedCandidate.m5_answer_book?.analysis_from_answer_book"
+                  data-testid="accept-match-button"
+                  @click="runReviewAction('accept_match')"
+                >
+                  accept_match
+                </el-button>
+                <el-button
+                  size="small"
+                  :loading="actionLoading"
+                  data-testid="reject-match-button"
+                  @click="runReviewAction('reject_match')"
+                >
+                  reject_match
+                </el-button>
+              </div>
+            </section>
+            <section data-testid="similarity-panel">
+              <h2>M5B 相似题 / 去重</h2>
+              <dl class="evidence-list">
+                <div>
+                  <dt>duplicate_status</dt>
+                  <dd>{{ textOr(selectedCandidate.m5_similarity?.duplicate_status, candidates?.m5b_verdict || '未提供') }}</dd>
+                </div>
+                <div>
+                  <dt>duplicate_cluster_id</dt>
+                  <dd>{{ textOr(selectedCandidate.m5_similarity?.duplicate_cluster_id, '未提供') }}</dd>
+                </div>
+                <div>
+                  <dt>canonical_question_id</dt>
+                  <dd>{{ textOr(selectedCandidate.m5_similarity?.canonical_question_id, '未提供') }}</dd>
+                </div>
+                <div>
+                  <dt>decision_status</dt>
+                  <dd>{{ textOr(selectedCandidate.m5_similarity?.decision_status, 'not_reviewed') }}</dd>
+                </div>
+                <div>
+                  <dt>similarity candidates</dt>
+                  <dd>{{ (selectedCandidate.m5_similarity?.similarity_candidates || []).length || 0 }}</dd>
+                </div>
+                <div>
+                  <dt>说明</dt>
+                  <dd>{{ textOr(selectedCandidate.m5_similarity?.empty_state_text, '暂无相似题候选') }}</dd>
+                </div>
+              </dl>
+              <div class="candidate-actions">
+                <el-button size="small" :loading="actionLoading" data-testid="keep-both-button" @click="runReviewAction('keep_both')">
+                  keep_both
+                </el-button>
+                <el-button size="small" :loading="actionLoading" @click="runReviewAction('mark_sibling')">
+                  mark_sibling
+                </el-button>
+                <el-button size="small" :loading="actionLoading" data-testid="ignore-similarity-button" @click="runReviewAction('ignore_similarity')">
+                  ignore_similarity
+                </el-button>
+                <el-button size="small" :loading="actionLoading" @click="runReviewAction('mark_duplicate')">
+                  mark_duplicate
+                </el-button>
+              </div>
+            </section>
+            <section data-testid="manual-action-panel">
+              <h2>人工动作</h2>
+              <div class="manual-action-grid">
+                <el-input
+                  v-model="actionReason"
+                  type="textarea"
+                  autosize
+                  placeholder="填写人工决策原因 / 证据摘要"
+                />
+                <div class="manual-action-row">
+                  <el-input v-model="answerOverrideDraft" placeholder="override_answer，例如 A" />
+                  <el-button :loading="actionLoading" @click="handleOverrideAnswer">override_answer</el-button>
+                </div>
+                <div class="manual-action-row">
+                  <el-input
+                    v-model="analysisOverrideDraft"
+                    type="textarea"
+                    autosize
+                    placeholder="override_analysis，填写人工确认后的解析"
+                  />
+                  <el-button :loading="actionLoading" @click="handleOverrideAnalysis">override_analysis</el-button>
+                </div>
+              </div>
+            </section>
+            <section data-testid="audit-log-panel">
+              <h2>Audit Log</h2>
+              <div v-if="candidateAuditEvents.length" class="audit-log-list">
+                <article
+                  v-for="event in candidateAuditEvents"
+                  :key="event.id || `${event.action}-${event.created_at}`"
+                  class="image-linkage-card"
+                >
+                  <strong>{{ textOr(event.action, 'unknown_action') }}</strong>
+                  <dl class="evidence-list compact">
+                    <div>
+                      <dt>actor</dt>
+                      <dd>{{ textOr(event.actor, 'unknown') }}</dd>
+                    </div>
+                    <div>
+                      <dt>reason</dt>
+                      <dd>{{ textOr(event.reason, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>created_at</dt>
+                      <dd>{{ textOr(event.created_at, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>evidence_ids</dt>
+                      <dd>{{ joinList(event.evidence_ids) }}</dd>
+                    </div>
+                  </dl>
+                </article>
+              </div>
+              <p v-else class="muted">暂无人工动作审计事件。</p>
+            </section>
           </article>
         </template>
       </section>
@@ -378,6 +553,33 @@
       </div>
     </section>
 
+    <section v-if="previewPublishMeta" class="checklist-band" data-testid="preview-publish-panel">
+      <div class="pane-head">
+        <div>
+          <strong>Preview 发布</strong>
+          <span>preview-only / dry-run，不写入正式题库</span>
+        </div>
+      </div>
+      <dl class="evidence-list">
+        <div>
+          <dt>publish_status</dt>
+          <dd>{{ textOr(previewPublishMeta.publish_status, '未发布') }}</dd>
+        </div>
+        <div>
+          <dt>preview_route</dt>
+          <dd>{{ textOr(previewPublishMeta.preview_route, '未提供') }}</dd>
+        </div>
+        <div>
+          <dt>preview_api_path</dt>
+          <dd>{{ textOr(previewPublishMeta.preview_api_path, '未提供') }}</dd>
+        </div>
+        <div>
+          <dt>question_count</dt>
+          <dd>{{ textOr(previewPublishMeta.question_count, 0) }}</dd>
+        </div>
+      </dl>
+    </section>
+
     <el-drawer v-model="previewVisible" title="试卷预览" size="720px" data-testid="paper-preview">
       <div v-if="paperPreview" class="paper-preview">
         <h2>{{ textOr(paperPreview.title, paperTitle) }}</h2>
@@ -411,10 +613,12 @@ import { ElMessage } from 'element-plus';
 import MathText from '@/components/MathText.vue';
 import { mathTextToString } from '@/utils/mathText';
 import {
+  applyPaperReviewAction,
   createDraftPaper,
   getDraftPaper,
   getDraftPaperPreview,
   getPaperCandidates,
+  publishDraftPaperPreview,
   updateDraftPaper,
   type DraftPaper,
   type PaperCandidate,
@@ -436,6 +640,12 @@ const sections = reactive([{ id: 'section-1', title: '自动候选题', order: 1
 const draftQuestions = ref<Array<PaperCandidate & { score: number; section_id: string; order: number }>>([]);
 const previewVisible = ref(false);
 const paperPreview = ref<DraftPaper | null>(null);
+const actionLoading = ref(false);
+const publishingPreview = ref(false);
+const actionReason = ref('');
+const answerOverrideDraft = ref('');
+const analysisOverrideDraft = ref('');
+const previewPublishMeta = ref<Record<string, any> | null>(null);
 const optionLabels = ['A', 'B', 'C', 'D'] as const;
 
 const filters = [
@@ -472,6 +682,14 @@ const filteredCandidates = computed(() => {
 const selectedCandidate = computed(() =>
   candidateRows.value.find((item) => item.candidate_id === selectedCandidateId.value) || candidateRows.value[0] || null,
 );
+const candidateAuditEvents = computed(() => {
+  const direct = Array.isArray(selectedCandidate.value?.audit_events)
+    ? selectedCandidate.value?.audit_events
+    : [];
+  return [...direct].sort((left, right) =>
+    textOr(right?.created_at, '').localeCompare(textOr(left?.created_at, '')),
+  );
+});
 
 const failureMessage = computed(() => {
   if (errorMessage.value) return errorMessage.value;
@@ -516,6 +734,7 @@ async function loadCandidates() {
   try {
     candidates.value = await getPaperCandidates(taskId.value);
     paperTitle.value = `解析任务 ${taskId.value} 制卷草稿`;
+    previewPublishMeta.value = candidates.value?.publish_preview || null;
     if (!selectedCandidateId.value && candidateRows.value[0]) {
       selectedCandidateId.value = candidateRows.value[0].candidate_id;
     }
@@ -613,6 +832,85 @@ async function openPreview() {
   if (!paperId.value) return;
   paperPreview.value = await getDraftPaperPreview(paperId.value);
   previewVisible.value = true;
+}
+
+function resetActionDrafts() {
+  answerOverrideDraft.value = '';
+  analysisOverrideDraft.value = '';
+}
+
+function defaultActionReason(action: string) {
+  const label = selectedCandidate.value ? questionLabel(selectedCandidate.value) : '当前候选题';
+  return `${label} ${action}`;
+}
+
+async function refreshSelectedCandidate() {
+  const keepId = selectedCandidate.value?.candidate_id || selectedCandidateId.value;
+  await loadCandidates();
+  if (keepId) selectedCandidateId.value = keepId;
+}
+
+async function runReviewAction(action: string, extra: Record<string, unknown> = {}) {
+  if (!taskId.value || !selectedCandidate.value) return;
+  actionLoading.value = true;
+  try {
+    await applyPaperReviewAction(taskId.value, {
+      action,
+      candidate_id: selectedCandidate.value.candidate_id,
+      question_no: selectedCandidate.value.question_no,
+      reason: actionReason.value.trim() || defaultActionReason(action),
+      evidence_ids: selectedCandidate.value.source_artifacts_refs
+        ? Object.values(selectedCandidate.value.source_artifacts_refs)
+        : [],
+      ...extra,
+    });
+    await refreshSelectedCandidate();
+    actionReason.value = '';
+    ElMessage.success(`已记录动作：${action}`);
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
+async function handleOverrideAnswer() {
+  const answer = answerOverrideDraft.value.trim().toUpperCase();
+  if (!answer) {
+    ElMessage.warning('请先填写人工确认后的答案');
+    return;
+  }
+  await runReviewAction('override_answer', { answer });
+  resetActionDrafts();
+}
+
+async function handleOverrideAnalysis() {
+  const analysis = analysisOverrideDraft.value.trim();
+  if (!analysis) {
+    ElMessage.warning('请先填写人工确认后的解析');
+    return;
+  }
+  await runReviewAction('override_analysis', { analysis });
+  resetActionDrafts();
+}
+
+async function handlePublishPreview() {
+  if (!paperId.value) {
+    await saveDraft();
+  }
+  if (!paperId.value) return;
+  publishingPreview.value = true;
+  try {
+    previewPublishMeta.value = await publishDraftPaperPreview(paperId.value, {
+      dry_run: true,
+      reason: actionReason.value.trim() || 'preview-only publish from admin review',
+      evidence_ids: selectedCandidate.value?.source_artifacts_refs
+        ? Object.values(selectedCandidate.value.source_artifacts_refs)
+        : [],
+    });
+    await refreshSelectedCandidate();
+    ElMessage.success('Preview 发布已生成，可用于 H5 smoke');
+  } finally {
+    publishingPreview.value = false;
+  }
 }
 
 function textOr(value: unknown, fallback: string | number) {
@@ -966,6 +1264,28 @@ onMounted(loadCandidates);
   border-radius: 8px;
   background: var(--admin-surface-soft);
   padding: 10px;
+}
+
+.manual-action-grid,
+.audit-log-list {
+  display: grid;
+  gap: 10px;
+}
+
+.manual-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.not-reviewable-panel {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: oklch(97% 0.025 35);
+  border: 1px solid oklch(84% 0.12 35);
 }
 
 .paper-title-input,
