@@ -2,8 +2,8 @@ Project: 行测助手全链路测试修复、Git 工作区治理、垃圾文件�
 Branch: ralph/xingce-e2e-git-hygiene-delivery
 Project Root: /home/carry/project2
 Initialized At: 2026-05-04 17:46:46 CST (+0800)
-Status: initialized
-Current Story: pending start of US-001
+Status: in progress (US-006 complete)
+Current Story: US-007 pending
 
 Scope
 - 先做 Git 工作区治理，再进入全链路测试修复、回归和交付验收。
@@ -24,12 +24,16 @@ Known Inputs
 - 当前 M5A: `20/20` 有答本结果，`6` 题 matched，`14` 题 conflict
 
 Codebase Patterns
-- `backend/` 是主要后端服务与测试目录，后续默认质量检查中的后端构建和测试从这里执行。
-- `admin-web/` 是管理端前端，后续 UI 相关 story 需要真实浏览器验证并保留截图证据。
-- `pdf-service/` 承担 PDF 解析与视觉 provider 相关链路，后续 provider 调度、超时、fallback、视觉归属问题主要落在这里或其调用链。
-- `debug/` 是统一证据根目录；本轮 PRD 约定每个 story 额外保存到 `debug/ralph-e2e/<storyId>-<timestamp>/`。
-- 根目录同时存在 `.env`、`node_modules/`、`.pytest_cache/`、`logs/`、`artifacts/`、历史截图和多份调研文档；在 US-001 完成前应视为混合工作区，默认保留。
-- `ralph/` 目录下已有旧的 Ralph 资产，但当前执行入口改为根目录 `prd.json` 和 `progress.txt`。
+- `backend/` NestJS 后端 (TypeScript), port 3000, Swagger `/api-docs`。默认质量检查: `npm run build`, `node -r ts-node/register -r tsconfig-paths/register test/pdf-review-workflow.test.ts`。
+- `admin-web/` Vue 3 + Element Plus 管理端前端, Vite dev server port 5173, 代理 `/api` 到 `http://localhost:3000`。默认质量检查: `npm run build`。
+- `h5-web/` Vue 3 + Vant 4 移动端前端, Vite dev server port 5173, 代理 `/api` 到 `http://127.0.0.1:3010`。
+- `pdf-service/` FastAPI (Python), port 8001, 启动: `uvicorn main:app --port 8001`。视觉 provider 调度链: `volcengine_ark_vl → qwen_vl → mimo_vl`。
+- 数据库: MySQL localhost:3306, database `quiz_app`, user `root`, no password。Redis localhost:6379。
+- `debug/` 是统一证据根目录 (gitignored)；本轮 PRD 约定每个 story 额外保存到 `debug/ralph-e2e/<storyId>-<timestamp>/`。
+- `debug/` 在 `.gitignore` 中，commit 需 `git add -f`。
+- 根 `.gitignore` 已覆盖: node_modules, dist, build, .vite, coverage, playwright-report, test-results, *.log, *.tmp, .DS_Store, __pycache__, .pytest_cache, .mypy_cache, .ruff_cache, .coverage, .env(!.env.example), *.png/jpg。
+- 已知测试材料: 题本 `/home/carry/题本/题本篇.pdf`, 答本 `/home/carry/答本/解析篇.pdf`, 任务 ID `836fec20-2628-44ed-9642-aedd57467864`。
+- US-001~005 已完成 Git 治理: 400+ → 39 status lines。归档到 `/home/carry/project2-archive/20260504-182835/`。
 
 Default Quality Checks
 - `cd /home/carry/project2/backend && node -r ts-node/register -r tsconfig-paths/register test/pdf-review-workflow.test.ts`
@@ -173,3 +177,19 @@ History
 - 截图/trace/debug 路径: 无新 debug 文件
 - 发现的可复用模式: 根 .gitignore 使用 `.env.*` + `!.env.example` 模式覆盖 .env.local/.env.*.local；backend/admin-web/pdf-service 各有独立 .gitignore 但大部分规则已由根目录覆盖
 - 仍需后续 story 处理的问题: US-006 建立 Ralph 基线与运行手册
+
+[2026-05-04 18:41:00 CST (+0800)] US-006
+- 实现/测试了什么: 建立 Ralph 基线与运行手册。生成 baseline.md 记录项目结构、服务端口、环境变量、启动方式、清理后 git 状态。
+- 修改文件: `debug/ralph-baseline/20260504-183932/baseline.md`, `debug/ralph-e2e/US-006-20260504-183932/baseline.md`, `progress.txt`
+- 清理了什么: 无
+- 保留了什么: 全部 20 个 tracked modified 文件、全部 19 个 untracked 文件
+- 运行了哪些命令: `cat package.json`, `cat backend/package.json`, `cat backend/.env.example`, `cat pdf-service/.env.example`, `git status --porcelain=v1`, Agent 子任务收集项目信息
+- 结果是否通过: 是。baseline.md 生成，Codebase Patterns 更新。
+- 基线内容:
+  - 4 个服务: backend (3000), admin-web (5173), h5-web (5173), pdf-service (8001)
+  - 数据库: MySQL localhost:3306 quiz_app, Redis localhost:6379
+  - 默认质量检查: backend build + test, admin-web build
+  - 清理后 git status: 20 tracked modified + 19 untracked = 39 lines
+- 截图/trace/debug 路径: `debug/ralph-baseline/20260504-183932/baseline.md`, `debug/ralph-e2e/US-006-20260504-183932/`
+- 发现的可复用模式: pdf-service 使用 uvicorn 启动（不在 main.py 中调用），admin-web/h5-web 都代理 /api 到 backend；backend .env.example 包含完整的环境变量文档
+- 仍需后续 story 处理的问题: US-007 建立全链路测试矩阵
