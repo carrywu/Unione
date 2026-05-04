@@ -8,7 +8,9 @@ from typing import Any
 
 import fitz
 
-from commercial_ocr.adapters import CommercialOCRProvider, provider_registry
+from commercial_ocr.adapters import provider_registry
+from commercial_ocr.quality_gate import evaluate_parse_quality
+from commercial_ocr.semantic_assembler import assemble_semantic_result
 from commercial_ocr.types import CommercialOCRExecution, ProviderOCRRequest, ProviderOCRResult
 from models import PageContent, Region, TextBlock
 
@@ -16,7 +18,7 @@ from models import PageContent, Region, TextBlock
 logger = logging.getLogger(__name__)
 
 LOCAL_PARSER_PROVIDER = "local_parser"
-DEFAULT_PRIMARY_PROVIDER = LOCAL_PARSER_PROVIDER
+DEFAULT_PRIMARY_PROVIDER = "mock_commercial_ocr"
 
 
 def commercial_ocr_enabled() -> bool:
@@ -28,7 +30,7 @@ def primary_provider_name() -> str:
 
 
 def fallback_provider_names() -> list[str]:
-    raw = str(os.getenv("PDF_PARSE_FALLBACK_PROVIDERS") or LOCAL_PARSER_PROVIDER).strip()
+    raw = str(os.getenv("PDF_PARSE_FALLBACK_PROVIDERS") or "local_parser,mock_commercial_ocr").strip()
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
@@ -67,6 +69,7 @@ def run_commercial_ocr_pipeline(
     if not commercial_ocr_enabled() and primary != LOCAL_PARSER_PROVIDER:
         execution.warnings.append("commercial_ocr_disabled")
         execution.should_use_local_parser = True
+        execution.effective_provider = LOCAL_PARSER_PROVIDER
         execution.attempted_providers.append({"provider": primary, "status": "skipped_disabled"})
         return execution
 
@@ -78,49 +81,59 @@ def run_commercial_ocr_pipeline(
         if provider_name == LOCAL_PARSER_PROVIDER:
             execution.should_use_local_parser = True
             execution.attempted_providers.append({"provider": provider_name, "status": "selected_local_parser"})
-            if execution.provider_result is None:
+            if execution.effective_provider is None:
                 execution.effective_provider = provider_name
             return execution
 
         provider = providers.get(provider_name)
         if provider is None:
-            execution.attempted_providers.append(
-                {
-                    "provider": provider_name,
-                    "status": "skipped_unknown_provider",
-                }
-            )
+            execution.attempted_providers.append({"provider": provider_name, "status": "skipped_unknown_provider"})
             execution.warnings.append(f"unknown_provider:{provider_name}")
             continue
 
         available, missing = provider.is_available()
         if not available:
-            execution.attempted_providers.append(
-                {
-                    "provider": provider_name,
-                    "status": "skipped_unavailable",
-                    "reasons": missing,
-                }
-            )
+            execution.attempted_providers.append({"provider": provider_name, "status": "skipped_unavailable", "reasons": missing})
             execution.warnings.extend(missing)
             continue
 
         result = provider.analyze_document(request)
-        execution.attempted_providers.append(
-            {
-                "provider": provider_name,
-                "status": result.provider_status,
-                "raw_response_ref": result.raw_response_ref,
-                "provider_error": result.provider_error,
-                "warnings": result.warnings,
-            }
-        )
+        assembly = None
+        quality_gate = None
         if result.provider_status == "ok" and result.page_results:
+            assembly = assemble_semantic_result(
+                result.page_results,
+                provider_name=result.provider_name,
+                provider_trace_ref=result.raw_response_ref,
+            )
+            quality_gate = evaluate_parse_quality(
+                assembly,
+                fallback_used=provider_name != primary,
+                provider_error=result.provider_error,
+            )
+
+        attempt_payload = {
+            "provider": provider_name,
+            "status": result.provider_status,
+            "raw_response_ref": result.raw_response_ref,
+            "provider_error": result.provider_error,
+            "warnings": result.warnings,
+            "quality_gate": quality_gate.to_dict() if quality_gate else None,
+        }
+        execution.attempted_providers.append(attempt_payload)
+
+        if result.provider_status == "ok" and result.page_results and _provider_has_structured_text(result):
             execution.provider_result = result
+            execution.semantic_assembly = assembly
+            execution.quality_gate = quality_gate
             execution.effective_provider = provider_name
             execution.fallback_used = provider_name != primary
             result.fallback_used = execution.fallback_used
+            execution.warnings.extend(result.warnings)
             return execution
+
+        if result.provider_status == "ok" and result.page_results:
+            execution.warnings.append(f"provider_output_requires_fallback:{provider_name}")
         execution.warnings.extend(result.warnings)
 
     execution.should_use_local_parser = True
@@ -145,7 +158,7 @@ def provider_result_to_page_contents(
                 text=_to_page_text(block.text, block.block_type),
             )
             for index, block in enumerate(ordered_blocks, start=1)
-            if block.text.strip()
+            if block.text.strip() and block.block_type != "bbox_only"
         ]
         regions = [
             region
@@ -178,6 +191,8 @@ def execution_summary(execution: CommercialOCRExecution | None) -> dict[str, Any
         "attempted_providers": execution.attempted_providers,
         "warnings": execution.warnings,
         "provider_result": provider_result.to_dict() if provider_result else None,
+        "semantic_assembly": execution.semantic_assembly.to_dict() if execution.semantic_assembly else None,
+        "quality_gate": execution.quality_gate.to_dict() if execution.quality_gate else None,
     }
 
 
@@ -199,6 +214,15 @@ def task_id_from_debug_dir(debug_dir: str | None) -> str | None:
             if task_id:
                 return task_id
     return Path(debug_dir).name.strip() or None
+
+
+def _provider_has_structured_text(result: ProviderOCRResult) -> bool:
+    meaningful_types = {"stem", "option", "answer", "analysis", "material_intro", "text"}
+    for page in result.page_results:
+        for block in page.blocks:
+            if block.block_type in meaningful_types and block.text.strip():
+                return True
+    return False
 
 
 def _dedupe_order(items: list[str]) -> list[str]:

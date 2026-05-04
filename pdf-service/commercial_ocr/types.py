@@ -18,6 +18,7 @@ OCRBlockType = Literal[
     "chart",
     "header",
     "footer",
+    "bbox_only",
     "unknown",
 ]
 
@@ -34,6 +35,7 @@ class NormalizedOCRBlock:
     block_type: OCRBlockType = "unknown"
     confidence: float | None = None
     reading_order: int = 0
+    parent_block_id: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
@@ -128,6 +130,22 @@ class NormalizedQuestion:
 
 
 @dataclass
+class SemanticAssemblyResult:
+    material_groups: list[MaterialGroup] = field(default_factory=list)
+    question_groups: list[dict[str, Any]] = field(default_factory=list)
+    normalized_questions: list[NormalizedQuestion] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "material_groups": [group.to_dict() for group in self.material_groups],
+            "question_groups": list(self.question_groups),
+            "normalized_questions": [question.to_dict() for question in self.normalized_questions],
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass
 class ParseQualityGateResult:
     extraction_complete: bool
     ocr_complete: bool
@@ -164,6 +182,8 @@ class CommercialOCRExecution:
     provider_result: ProviderOCRResult | None = None
     fallback_used: bool = False
     should_use_local_parser: bool = False
+    semantic_assembly: SemanticAssemblyResult | None = None
+    quality_gate: ParseQualityGateResult | None = None
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -174,5 +194,7 @@ class CommercialOCRExecution:
             "provider_result": self.provider_result.to_dict() if self.provider_result else None,
             "fallback_used": self.fallback_used,
             "should_use_local_parser": self.should_use_local_parser,
+            "semantic_assembly": self.semantic_assembly.to_dict() if self.semantic_assembly else None,
+            "quality_gate": self.quality_gate.to_dict() if self.quality_gate else None,
             "warnings": list(self.warnings),
         }

@@ -13,6 +13,7 @@ from commercial_ocr.types import (
     NormalizedQuestion,
     ParseQualityGateResult,
     ProviderOCRResult,
+    SemanticAssemblyResult,
 )
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "NormalizedQuestion",
     "ParseQualityGateResult",
     "ProviderOCRResult",
+    "SemanticAssemblyResult",
     "commercial_ocr_enabled",
     "execution_summary",
     "fallback_provider_names",
