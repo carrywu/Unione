@@ -203,8 +203,8 @@
         "保存 `debug/provider-timing/<taskId>/provider-timing.json`"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "现有代码已覆盖所有字段 (ai_client.py:1180)、cooldown (429→指数退避)、per-page timeout。新增 2 个测试: 单 provider 隔离 + timing payload 字段。18/18 tests PASS。provider-timing 数据通过 _vision_provider_attempts 在 API 响应中返回，可按 taskId 查询。"
     },
     {
       "id": "US-010",

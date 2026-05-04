@@ -237,3 +237,23 @@ History
 - 截图/trace/debug 路径: `scripts/health-check.sh`
 - 发现的可复用模式: 脚本使用 ss/netstat 检测端口，curl 检测 HTTP 响应，grep 检查 .env 变量
 - 仍需后续 story 处理的问题: US-009 AI provider 调度与耗时日志
+
+[2026-05-04 18:55:00 CST (+0800)] US-009
+- 实现/测试了什么: AI provider 调度与耗时日志。验证现有 provider 日志覆盖所有要求字段，新增 2 个测试覆盖单 provider order 隔离和 timing payload 字段完整性。
+- 修改文件: `pdf-service/tests/test_ai_client_page_visual_fallbacks.py` (新增 2 tests), `prd.json`, `progress.txt`
+- 清理了什么: 无
+- 保留了什么: 现有 16 个 provider 测试 + ai_client.py 完整 provider 调度逻辑
+- 运行了哪些命令: `python -m pytest tests/test_ai_client_page_visual_fallbacks.py -v` (18 passed), `npm run build` (backend + admin-web)
+- 结果是否通过: 是。18/18 tests PASS, backend build PASS, admin-web build PASS。
+- 现有覆盖:
+  - `_vision_attempt_payload` (ai_client.py:1180): 包含 taskId, pageNo, provider, model, timeout_seconds, elapsed_ms, status, error_type, error_message, fallback_from, fallback_reason, startedAt, finishedAt
+  - `_annotate_vision_result` (ai_client.py:1228): _vision_provider, _vision_model, _vision_elapsed_ms, _vision_provider_attempts, _vision_fallback_from
+  - Cooldown logic (ai_client.py:859): 429/rate limit → cooldown, consecutive timeouts → increasing cooldown
+  - Per-page timeout (ai_client.py:159): prevents single provider from crashing whole PDF
+  - Provider order: VISION_AI_PROVIDER_ORDER env var parsed at ai_client.py:715
+- 新增测试:
+  - `test_single_provider_order_only_calls_specified_provider`: ORDER=volcengine_ark_vl 时，qwen_vl 和 mimo_vl 不被调用
+  - `test_provider_timing_payload_has_required_fields`: attempt payload 包含 provider/elapsed_ms/status/startedAt/finishedAt/fallback_reason
+- 截图/trace/debug 路径: `pdf-service/tests/test_ai_client_page_visual_fallbacks.py`
+- 发现的可复用模式: ai_client.py 使用 hedged launch (并发主备 provider)、cooldown (429/timeout 指数退避)、page timeout budget (单页不拖垮整本) 三层保护；_vision_provider_attempts 完整记录每次尝试
+- 仍需后续 story 处理的问题: US-010 任务 cancel/retry 与卡 processing 恢复
