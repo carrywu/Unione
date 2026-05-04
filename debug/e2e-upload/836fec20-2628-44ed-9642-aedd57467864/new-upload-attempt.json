@@ -1,7 +1,0 @@
-{
-  "new_upload_task_id": "1d9ecc64-dcd1-4947-8acd-5f09c2d0730a",
-  "file_uploaded": "http://127.0.0.1:3010/uploads/2026/05/7179923e-33a3-4fcb-b2d6-e5b8ce030368.pdf",
-  "result": "canceled after 5 pages (188-page PDF, slow provider fallback)",
-  "note": "PDF has 188 pages, not 20. Processing ~2-3 min/page due to qwen_vl timeout fallback to mimo_vl. Used existing completed task 836fec20 for evidence.",
-  "providers_used": "qwen_vl (failed), mimo_vl (fallback), volcengine_ark_vl (no API key)"
-}

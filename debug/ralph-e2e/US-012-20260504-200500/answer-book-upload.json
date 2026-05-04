@@ -1,8 +1,0 @@
-{
-  "endpoint": "POST /admin/upload/file",
-  "file": "/home/carry/答本/解析篇.pdf",
-  "response": {
-    "url": "http://127.0.0.1:3010/uploads/2026/05/92b21c0c-d66e-40ed-b84c-09e50be2fb85.pdf",
-    "filename": "解析篇.pdf"
-  }
-}
