@@ -17,6 +17,7 @@ const router = createRouter({
     { path: '/', component: HomeView },
     { path: '/bank/:id?', component: BankView },
     { path: '/quiz/:bankId', component: QuizView },
+    { path: '/quiz-preview/:paperId', component: QuizView },
     { path: '/result', component: ResultView },
     { path: '/wrong', component: WrongView },
     { path: '/analysis', component: AnalysisView },

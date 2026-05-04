@@ -112,8 +112,19 @@
             <span>解析详情</span>
             <button class="analysis-note-btn" type="button" @pointerdown.prevent="openNotePanel" @click="openNotePanel">查看笔记</button>
           </div>
-          <p class="analysis-answer">正确答案：<MathText :text="answerLabel(currentResult?.answer || '')" fallback="未给出" /></p>
-          <p class="analysis-text"><MathText :text="currentResult?.analysis" fallback="暂无解析" /></p>
+          <p class="analysis-answer">
+            正确答案：
+            <MathText
+              :text="currentResult?.answer ? answerLabel(currentResult.answer) : ''"
+              :fallback="currentResult?.answer_unknown_reason || '未给出'"
+            />
+          </p>
+          <p class="analysis-text">
+            <MathText
+              :text="currentResult?.analysis"
+              :fallback="currentResult?.analysis_unknown_reason || '暂无解析'"
+            />
+          </p>
           <img
             v-for="(image, index) in analysisImages"
             :key="`analysis-image-${index}`"
@@ -194,6 +205,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showDialog, showImagePreview, showSuccessToast } from 'vant';
+import { getPreviewPaper, submitPreviewPaperAnswer } from '@/api/preview-paper';
 import { submitAnswer } from '@/api/record';
 import LoadingState from '@/components/LoadingState.vue';
 import AppIcon from '@/components/AppIcon.vue';
@@ -207,12 +219,14 @@ import { getQuestionNote, saveQuestionNote } from '@/utils/questionNotes';
 const route = useRoute();
 const router = useRouter();
 const quiz = useQuizStore();
-const bankId = String(route.params.bankId);
+const bankId = computed(() => String(route.params.bankId || ''));
+const previewPaperId = computed(() => String(route.params.paperId || ''));
+const isPreviewMode = computed(() => route.path.startsWith('/quiz-preview/'));
 const selectedAnswer = ref('');
 const showAnswerSheet = ref(false);
 const showNotePanel = ref(false);
 const noteDraft = ref('');
-const { saveLocal } = useSync(bankId);
+const { saveLocal } = useSync();
 
 const { timeLeft, start } = useCountdown(30 * 60, async () => {
   await showDialog({ message: '时间到，自动提交' });
@@ -320,13 +334,21 @@ async function handleSubmit() {
     user_answer: selectedAnswer.value,
     time_spent: Math.floor((Date.now() - quiz.startedAt) / 1000),
   };
-  saveLocal(bankId, payload);
-  const result = navigator.onLine ? await submitAnswer(payload) : null;
+  if (!isPreviewMode.value) {
+    saveLocal(bankId.value, payload);
+  }
+  const result = navigator.onLine
+    ? (isPreviewMode.value
+      ? await submitPreviewPaperAnswer(previewPaperId.value, payload)
+      : await submitAnswer(payload))
+    : null;
   quiz.submitAnswer({
     ...payload,
     is_correct: result?.is_correct,
     answer: result?.answer || question.value.answer,
     analysis: result?.analysis || question.value.analysis,
+    answer_unknown_reason: result?.answer_unknown_reason || question.value.answer_unknown_reason || null,
+    analysis_unknown_reason: result?.analysis_unknown_reason || question.value.analysis_unknown_reason || null,
     analysis_image_url: result?.analysis_image_url || question.value.analysis_image_url,
     analysis_image_urls: result?.analysis_image_urls || question.value.analysis_image_urls,
   });
@@ -342,8 +364,13 @@ async function handleNext() {
 }
 
 onMounted(async () => {
-  if (!(quiz.bankId === bankId && quiz.questions.length)) {
-    await quiz.startQuiz(bankId);
+  if (isPreviewMode.value) {
+    if (!(quiz.sessionMode === 'preview' && quiz.previewPaperId === previewPaperId.value && quiz.questions.length)) {
+      const preview = await getPreviewPaper(previewPaperId.value);
+      await quiz.startPreviewQuiz(previewPaperId.value, preview.questions || []);
+    }
+  } else if (!(quiz.bankId === bankId.value && quiz.questions.length)) {
+    await quiz.startQuiz(bankId.value);
   }
   if (quiz.questions.length) start();
 });

@@ -8,8 +8,24 @@ export interface SubmitPayload {
 
 export function submitAnswer(data: SubmitPayload) {
   return http.post<
-    { is_correct: boolean; answer: string; analysis: string; analysis_image_url?: string; analysis_image_urls?: string[] },
-    { is_correct: boolean; answer: string; analysis: string; analysis_image_url?: string; analysis_image_urls?: string[] }
+    {
+      is_correct: boolean;
+      answer: string;
+      analysis: string;
+      answer_unknown_reason?: string | null;
+      analysis_unknown_reason?: string | null;
+      analysis_image_url?: string;
+      analysis_image_urls?: string[];
+    },
+    {
+      is_correct: boolean;
+      answer: string;
+      analysis: string;
+      answer_unknown_reason?: string | null;
+      analysis_unknown_reason?: string | null;
+      analysis_image_url?: string;
+      analysis_image_urls?: string[];
+    }
   >(
     '/api/records/submit',
     data,

@@ -7,6 +7,8 @@ export interface QuizAnswer {
   is_correct?: boolean;
   answer?: string;
   analysis?: string;
+  answer_unknown_reason?: string | null;
+  analysis_unknown_reason?: string | null;
   analysis_image_url?: string;
   analysis_image_urls?: string[];
   time_spent: number;
@@ -15,6 +17,8 @@ export interface QuizAnswer {
 export const useQuizStore = defineStore('quiz', {
   state: () => ({
     bankId: '',
+    sessionMode: 'bank' as 'bank' | 'preview',
+    previewPaperId: '',
     questions: [] as Question[],
     currentIndex: 0,
     answers: {} as Record<string, QuizAnswer>,
@@ -31,15 +35,24 @@ export const useQuizStore = defineStore('quiz', {
     wrongAnswers: (state) => Object.values(state.answers).filter((answer) => answer.is_correct === false),
   },
   actions: {
-    async startQuiz(bankId: string, questions?: Question[]) {
+    async startQuiz(
+      bankId: string,
+      questions?: Question[],
+      options?: { mode?: 'bank' | 'preview'; previewPaperId?: string },
+    ) {
       this.status = 'loading';
       this.bankId = bankId;
+      this.sessionMode = options?.mode || 'bank';
+      this.previewPaperId = options?.previewPaperId || '';
       this.questions = questions || (await getQuestions(bankId, 1, 100)).list;
       this.currentIndex = 0;
       this.answers = {};
       this.timeLeft = 30 * 60;
       this.startedAt = Date.now();
       this.status = this.questions.length ? 'answering' : 'idle';
+    },
+    async startPreviewQuiz(paperId: string, questions: Question[]) {
+      await this.startQuiz(paperId, questions, { mode: 'preview', previewPaperId: paperId });
     },
     submitAnswer(payload: QuizAnswer) {
       this.answers[payload.question_id] = payload;

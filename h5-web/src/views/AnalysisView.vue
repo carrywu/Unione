@@ -110,7 +110,9 @@
               :src="image"
               alt="解析图片"
             />
-            <p class="explanation-text"><MathText :text="item.analysis" fallback="暂无文字解析" /></p>
+            <p class="explanation-text">
+              <MathText :text="item.analysis" :fallback="item.question.analysis_unknown_reason || '暂无文字解析'" />
+            </p>
           </div>
 
           <!-- Knowledge Tags -->

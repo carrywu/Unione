@@ -107,7 +107,7 @@
           <AppIcon name="book" :size="20" />
           全部解析
         </button>
-        <button class="btn-primary-lg" @click="router.replace(`/quiz/${quiz.bankId}`)">
+        <button class="btn-primary-lg" @click="router.replace(retryRoute)">
           <AppIcon name="practice" :size="20" />
           再练一次
         </button>
@@ -142,6 +142,11 @@ const submitTime = computed(() => {
   const d = new Date();
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 });
+const retryRoute = computed(() =>
+  quiz.sessionMode === 'preview' && quiz.previewPaperId
+    ? `/quiz-preview/${quiz.previewPaperId}`
+    : `/quiz/${quiz.bankId}`,
+);
 
 function answerClass(questionId: string) {
   const answer = quiz.answers[questionId];
