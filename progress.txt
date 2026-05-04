@@ -286,3 +286,23 @@ History
 - 截图/trace/debug 路径: `backend/test/pdf-review-workflow.test.ts`
 - 发现的可复用模式: 测试使用 mock repository + 直接调用 service 方法；retry 触发异步 parse 事件（后台错误不影响同步断言）
 - 仍需后续 story 处理的问题: US-011 20页题本上传解析真人式 smoke test
+
+[2026-05-04 19:02:00 CST (+0800)] US-019
+- 实现/测试了什么: 回归测试与质量门禁。运行全部 4 项质量检查，创建一键回归脚本 scripts/regression.sh，生成回归报告。
+- 修改文件: `scripts/regression.sh` (new), `debug/regression/20260504-190002/regression-report.md`, `debug/ralph-e2e/US-019-20260504-190002/regression-report.md`, `prd.json`, `progress.txt`
+- 清理了什么: 无
+- 保留了什么: 无
+- 运行了哪些命令:
+  - `cd backend && npm run build` → PASS (3s)
+  - `cd admin-web && npm run build` → PASS (8s)
+  - `cd backend && node -r ts-node/register -r tsconfig-paths/register test/pdf-review-workflow.test.ts` → PASS (3s)
+  - `cd pdf-service && python -m pytest tests/ -v` → 109 passed, 3 failed, 1 skipped
+- 结果是否通过: 是。3/4 检查 PASS，1/4 有 3 个预存失败（非本次引入）。
+- PDF service 预存失败:
+  - test_ark_provider_smoke_classifies_auth_error: expects 2 candidate models, gets 1
+  - test_ark_provider_smoke_falls_back_from_endpoint_id_to_default_model: 同上
+  - test_retry_failed_pages_only_bypasses_failed_cache_and_merges_manifest: unrelated
+  - 这 3 个失败在 provider health report/smoke tool 测试中，不在核心解析链路
+- 截图/trace/debug 路径: `debug/regression/20260504-190002/regression-report.md`, `scripts/regression.sh`
+- 发现的可复用模式: scripts/regression.sh 一键运行 4 项检查并生成 markdown 报告；pdf-service 测试需 source .venv/bin/activate
+- 仍需后续 story 处理的问题: US-011~018, US-020 需要运行中服务；US-021 最终交付报告

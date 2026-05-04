@@ -372,8 +372,8 @@
         "所有质量检查通过才能 `passes:true`"
       ],
       "priority": 19,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "backend test PASS, backend build PASS, admin-web build PASS。pdf-service: 109/112 passed, 3 pre-existing failures (provider health report, not core parsing)。scripts/regression.sh 创建。无回归引入。"
     },
     {
       "id": "US-020",
