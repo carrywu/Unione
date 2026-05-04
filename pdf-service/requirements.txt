@@ -10,3 +10,4 @@ dashscope
 openai
 aiofiles
 psutil
+tencentcloud-sdk-python==3.1.89
