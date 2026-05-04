@@ -187,8 +187,8 @@
         "admin-web build 通过"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "scripts/health-check.sh 创建，检查 6 个维度: env/deps/ports/backend/pdf-service/build。backend build PASS, admin-web build PASS。"
     },
     {
       "id": "US-009",

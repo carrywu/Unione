@@ -217,3 +217,23 @@ History
 - 截图/trace/debug 路径: `debug/e2e-test-matrix/20260504-184300/matrix.md`, `debug/ralph-e2e/US-007-20260504-184300/`
 - 发现的可复用模式: API 端点可通过 curl 或 fetch 脚本自动化；browser 测试需 Playwright 或手动截图；cancel/retry 端点已存在可直接测试
 - 仍需后续 story 处理的问题: US-008 服务启动与健康检查自动化
+
+[2026-05-04 18:48:00 CST (+0800)] US-008
+- 实现/测试了什么: 服务启动与健康检查自动化。创建 scripts/health-check.sh，检查 .env、node_modules、端口占用、backend/pdf-service 健康、provider order。
+- 修改文件: `scripts/health-check.sh` (new), `prd.json`, `progress.txt`
+- 清理了什么: 无
+- 保留了什么: 无
+- 运行了哪些命令: `bash scripts/health-check.sh`, `npm run build` (backend + admin-web)
+- 结果是否通过: 是。脚本运行正常，backend build PASS, admin-web build PASS。
+- 脚本功能:
+  - [1/6] 检查 backend/pdf-service/admin-web .env 文件
+  - [2/6] 检查 node_modules 和 Python venv
+  - [3/6] 检查端口 3000/8001/5173/3306/6379 占用
+  - [4/6] curl 检查 backend API 响应
+  - [5/6] curl 检查 pdf-service 健康 + provider order
+  - [6/6] 提示 build 验证命令
+  - 输出 errors/warnings 摘要，失败时 exit 1
+- 当前状态: Redis 运行中，其余服务未启动（预期）
+- 截图/trace/debug 路径: `scripts/health-check.sh`
+- 发现的可复用模式: 脚本使用 ss/netstat 检测端口，curl 检测 HTTP 响应，grep 检查 .env 变量
+- 仍需后续 story 处理的问题: US-009 AI provider 调度与耗时日志
