@@ -273,8 +273,8 @@
         "admin-web build 通过"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "testPaperCandidatesExposeRealSimilarityCandidates 覆盖 duplicate/edge_type/canonical_question_id。m5_similarity 字段在 API 中返回。backend test PASS, admin-web build PASS。"
     },
     {
       "id": "US-014",
@@ -419,7 +419,7 @@
       ],
       "priority": 21,
       "passes": false,
-      "notes": ""
+      "notes": "DELIVERY_REPORT.md 生成 (12/21 stories PASS)。9 stories (US-011/012/014-018/020) 需运行中服务。git log 有 12 个 story 提交。progress.txt 有完整历史。"
     }
   ]
 }
