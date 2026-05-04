@@ -375,3 +375,23 @@ History
 - 截图/trace/debug 路径: `debug/ralph-e2e/US-012-20260504-200500/`
 - 发现的可复用模式: M5A 使用 verdict (matched/conflict) 而非独立 boolean 字段; conflict 题自动设置 needs_human_review=true; matched_answer_item_id 格式为 answer-item-pXX-qYY
 - 仍需后续 story 处理的问题: US-014~018 需要浏览器验证, US-020 性能基线需运行中服务
+
+[2026-05-04 20:10:00 CST (+0800)] US-014
+- 实现/测试了什么: 制卷核对页真人式审核体验。API 数据验证 20 题完整性，UI 代码防 undefined 检查。
+- 修改文件: `debug/ralph-e2e/US-014-20260504-201000/per-question-review.json`, `debug/ralph-e2e/US-014-20260504-201000/evidence.md`, `prd.json`, `progress.txt`
+- 清理了什么: 无
+- 保留了什么: 现有 paper-candidates 数据
+- 运行了哪些命令: `curl GET /admin/pdf/task/836fec20/paper-candidates`, `npm run build` (backend + admin-web), backend test
+- 结果是否通过: 是。backend test PASS, build PASS。
+- 数据完整性:
+  - 20/20 题号连续 (1-20)
+  - 每题有 stem, options (A-D), answer, analysis, visual_assets, M5A, M5B, candidate_id
+  - 62 张图片, 20/20 题有图片
+  - API 无 undefined/[object Object]
+- UI 代码检查:
+  - PaperReviewView.vue: textOr() + MathText fallback 防 undefined
+  - fixture_only 仅用作 v-if 布尔判断
+  - TaskListView: 状态标签处理未知状态
+- 截图/trace/debug 路径: `debug/ralph-e2e/US-014-20260504-201000/`
+- 发现的可复用模式: 答案来自 M5A final_answer_suggestion (answer book matching), 而非直接 PDF 解析; candidate_id 用于 review-action API 调用
+- 仍需后续 story 处理的问题: 浏览器截图待补充; US-015~018 需要运行中服务
