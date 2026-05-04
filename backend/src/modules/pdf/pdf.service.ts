@@ -126,8 +126,20 @@ export class PdfService {
     const taskQuestions = await this.questionRepository.find({
       where: { parse_task_id: task.id },
     });
+    const commercialOcr = this.commercialOcrSummaryFromTask(task);
+    const commercialQuestionsByNo = new Map<number, Record<string, any>>();
+    if (commercialOcr) {
+      this.synthesizeCommercialOcrQuestions(commercialOcr).forEach((question) => {
+        const questionNo = this.toOptionalNumber(question.question_no);
+        if (questionNo === null) return;
+        commercialQuestionsByNo.set(questionNo, question);
+      });
+    }
     const publishable = taskQuestions.filter((question) =>
-      this.isPublishableParsedQuestion(question),
+      this.isPublishableParsedQuestion(
+        question,
+        commercialQuestionsByNo.get(question.index_num) || null,
+      ),
     );
     const reviewCount = taskQuestions.length - publishable.length;
 
@@ -492,7 +504,17 @@ export class PdfService {
     const pageUnderstandingRecovered = await readLocalJson('page-understanding-recovered.json');
     const sourceTextSpanReport = await readLocalJson('source-text-span-report.json');
     const materialGroupBindingReport = await readLocalJson('material-group-binding-report.json');
-    if (!debugPayload && !finalPreviewPayload && !aiAuditResults) {
+    const commercialOcr = this.commercialOcrSummaryFromTask(task);
+    const synthesizedCommercial = commercialOcr
+      ? this.synthesizeCommercialOcrDebugPayload(task, commercialOcr)
+      : null;
+    const preferCommercialPreview = Boolean(
+      commercialOcr &&
+        synthesizedCommercial &&
+        this.firstMeaningfulText(commercialOcr.effective_provider) &&
+        this.firstMeaningfulText(commercialOcr.effective_provider) !== 'local_parser',
+    );
+    if (!debugPayload && !finalPreviewPayload && !aiAuditResults && !synthesizedCommercial) {
       throw new NotFoundException('AI 预审核调试产物不存在');
     }
     const normalizedM4 = this.normalizeM4DebugPayload({
@@ -505,6 +527,15 @@ export class PdfService {
       pageUnderstanding,
       recropPlan,
     });
+    const normalizedM4Preview =
+      Array.isArray(normalizedM4.final_preview_payload?.questions) &&
+      normalizedM4.final_preview_payload.questions.length
+        ? normalizedM4.final_preview_payload
+        : null;
+    const normalizedM4Audits =
+      Array.isArray(normalizedM4.ai_audit_results) && normalizedM4.ai_audit_results.length
+        ? normalizedM4.ai_audit_results
+        : null;
     return {
       taskId: task.id,
       bankId: task.bank_id,
@@ -514,19 +545,46 @@ export class PdfService {
       qwen_vl_call_count: Number(debugPayload?.qwen_vl_call_count_after || 0),
       final_verdict: debugPayload?.final_verdict || null,
       final_preview_payload:
-        normalizedM4.final_preview_payload ||
+        (preferCommercialPreview
+          ? synthesizedCommercial?.final_preview_payload || normalizedM4Preview
+          : normalizedM4Preview || synthesizedCommercial?.final_preview_payload) ||
         finalPreviewPayload ||
         debugPayload?.final_preview_payload ||
         null,
-      final_questions: finalQuestions || debugPayload?.final_questions_after_audit || [],
+      final_questions:
+        (preferCommercialPreview
+          ? synthesizedCommercial?.final_questions || finalQuestions
+          : finalQuestions || synthesizedCommercial?.final_questions) ||
+        debugPayload?.final_questions_after_audit ||
+        [],
       ai_audit_results:
-        normalizedM4.ai_audit_results || aiAuditResults || debugPayload?.ai_audit_results || [],
-      m4_ai_preaudit_summary: normalizedM4.m4_ai_preaudit_summary,
+        (preferCommercialPreview
+          ? synthesizedCommercial?.ai_audit_results || normalizedM4Audits
+          : normalizedM4Audits || synthesizedCommercial?.ai_audit_results) ||
+        aiAuditResults ||
+        debugPayload?.ai_audit_results ||
+        [],
+      m4_ai_preaudit_summary:
+        !preferCommercialPreview && (normalizedM4Preview || normalizedM4Audits)
+          ? normalizedM4.m4_ai_preaudit_summary
+          : null,
       page_understanding: pageUnderstanding || debugPayload?.page_understanding || [],
-      semantic_groups: semanticGroups || debugPayload?.semantic_groups || [],
+      semantic_groups:
+        semanticGroups ||
+        synthesizedCommercial?.semantic_groups ||
+        debugPayload?.semantic_groups ||
+        [],
       recrop_plan: recropPlan || debugPayload?.recrop_plan || [],
-      stage_counts: stageCounts || debugPayload?.stage_counts || null,
-      first_failed_stage: firstFailedStage || debugPayload?.first_failed_stage || null,
+      stage_counts:
+        stageCounts ||
+        synthesizedCommercial?.stage_counts ||
+        debugPayload?.stage_counts ||
+        null,
+      first_failed_stage:
+        firstFailedStage ||
+        synthesizedCommercial?.first_failed_stage ||
+        debugPayload?.first_failed_stage ||
+        null,
       fallback_recovery: fallbackRecovery || debugPayload?.fallback_recovery || null,
       question_number_scan: questionNumberScan || debugPayload?.question_number_scan || null,
       page_understanding_recovered:
@@ -534,6 +592,7 @@ export class PdfService {
       source_text_span_report: sourceTextSpanReport || debugPayload?.source_text_span_report || null,
       material_group_binding_report:
         materialGroupBindingReport || debugPayload?.material_group_binding_report || null,
+      commercial_ocr: commercialOcr,
       artifact_refs: {
         ai_preaudit_debug: join(debugDir, 'ai-preaudit-debug.json'),
         final_preview_payload: join(debugDir, 'final-preview-payload.json'),
@@ -650,23 +709,25 @@ export class PdfService {
     const questions = previewQuestions.map((question, index) => {
       const questionNo = question?.question_no ?? null;
       const key = this.paperCandidateQuestionKey(questionNo, index);
+      const sourceQuestion =
+        sourceQuestionsByNo.get(String(questionNo)) || sourceQuestions[index] || null;
+      const mergedQuestion = this.mergeCommercialCandidateQuestion({
+        previewQuestion: question || {},
+        finalQuestion: finalQuestionsByNo.get(key) || {},
+        sourceQuestion,
+      });
       const audit =
         auditsByNo.get(key) ||
         auditResults[index] ||
         {};
       const baseCandidate = this.buildPaperCandidate(
         task,
-        {
-          ...(finalQuestionsByNo.get(key) || {}),
-          ...(question || {}),
-        },
+        mergedQuestion,
         audit || {},
         index,
         debug,
         sequenceDiagnostics,
       );
-      const sourceQuestion =
-        sourceQuestionsByNo.get(String(questionNo)) || sourceQuestions[index] || null;
       const similarityCandidates = this.findHistoricalSimilarityCandidates({
         task,
         candidate: baseCandidate,
@@ -800,6 +861,7 @@ export class PdfService {
           'm5a-answer-match-report.json',
         ),
       },
+      commercial_ocr: debug.commercial_ocr || null,
     };
     await this.writePaperCandidateArtifact(task.id, payload);
     await this.writeM4SemanticArtifacts(task.id, debug, payload);
@@ -1034,6 +1096,76 @@ export class PdfService {
     }
     const task = await this.taskRepository.findOne({ where: { id: taskId } });
     if (!task) throw new NotFoundException('解析任务不存在');
+    const candidates = await this.getPaperCandidates(task.id);
+    const candidateById = new Map(
+      candidates.questions.map((item: Record<string, any>) => [String(item.candidate_id), item]),
+    );
+    const candidateByQuestionNo = new Map(
+      candidates.questions
+        .filter((item: Record<string, any>) => item.question_no !== null && item.question_no !== undefined)
+        .map((item: Record<string, any>) => [String(item.question_no), item]),
+    );
+    const blockedPreviewQuestions = (Array.isArray(paper.questions) ? paper.questions : []).flatMap((question, index) => {
+      const candidateId = this.safeDisplayText(question.candidate_id || question.id, '');
+      const questionNoKey =
+        question.question_no !== null && question.question_no !== undefined
+          ? String(question.question_no)
+          : '';
+      const candidate = (
+        (candidateId ? candidateById.get(candidateId) : null) ||
+        (questionNoKey ? candidateByQuestionNo.get(questionNoKey) : null) ||
+        null
+      ) as Record<string, any> | null;
+      if (!candidate) {
+        return [`候选题 ${candidateId || questionNoKey || index + 1} 缺少最新 review DTO，不能发布`];
+      }
+      const answer = this.firstMeaningfulText(
+        question.answer_override,
+        candidate.answer_override,
+        question.final_answer_suggestion,
+        candidate.final_answer_suggestion,
+        question.answer_suggestion,
+        candidate.answer_suggestion,
+        question.answer,
+        candidate.answer,
+      );
+      const analysis = this.firstMeaningfulText(
+        question.analysis_override,
+        candidate.analysis_override,
+        question.final_analysis_suggestion,
+        candidate.final_analysis_suggestion,
+        question.analysis_suggestion,
+        candidate.analysis_suggestion,
+        question.analysis,
+        candidate.analysis,
+      );
+      const layoutOnly = this.toStringArray(
+        candidate.quality_gate_question_status?.warnings,
+      ).includes('layout_only_result');
+      const approved =
+        candidate.can_add_to_paper ||
+        (candidate.approved_for_publish &&
+          !candidate.quarantined &&
+          candidate.manualReviewable &&
+          !candidate.extracted_but_incomplete);
+      const reasons = [
+        !approved ? candidate.cannot_add_reason || '未通过 review/publish gate' : '',
+        candidate.extracted_but_incomplete ? 'commercial OCR 已抽取但结果不完整，禁止发布' : '',
+        candidate.review_ready === false ? 'quality gate review_ready=false' : '',
+        candidate.needs_human_review === true && !candidate.approved_for_publish
+          ? 'needs_human_review=true 且未人工确认'
+          : '',
+        layoutOnly ? 'layout-only OCR 结果不能发布' : '',
+        !answer ? '答案缺失，禁止发布' : '',
+        !analysis ? '解析缺失，禁止发布' : '',
+      ].filter(Boolean);
+      return reasons.length
+        ? [`候选题 ${candidate.question_no ?? candidate.candidate_id ?? index + 1}：${reasons.join('；')}`]
+        : [];
+    });
+    if (blockedPreviewQuestions.length) {
+      throw new BadRequestException(`试卷草稿存在未通过发布门禁的题目：${blockedPreviewQuestions.join(' | ')}`);
+    }
 
     const now = new Date().toISOString();
     const previewQuestions = Array.isArray(paper.questions)
@@ -1349,6 +1481,12 @@ export class PdfService {
       new Set([
         ...this.toStringArray(question.risk_flags),
         ...this.toStringArray(audit.risk_flags),
+        ...this.toStringArray(question.validation_warnings),
+        ...this.toStringArray(question.missing_fields),
+        ...this.toStringArray(question.commercial_ocr_warnings),
+        ...this.toStringArray(question.quality_gate?.blocking_reasons),
+        ...this.toStringArray(question.quality_gate?.warnings),
+        ...this.toStringArray(question.quality_gate_question_status?.warnings),
       ]),
     );
     const stem = this.safeDisplayText(question.stem, '');
@@ -1425,6 +1563,51 @@ export class PdfService {
     const questionOnFallbackFailedPage = sourcePageRefs.some((pageNo: number) =>
       fallbackFailedPages.includes(pageNo),
     );
+    const qualityGate = question.quality_gate && typeof question.quality_gate === 'object'
+      ? (question.quality_gate as Record<string, any>)
+      : null;
+    const hasCommercialQualityGate = Boolean(qualityGate);
+    const questionGate = question.quality_gate_question_status && typeof question.quality_gate_question_status === 'object'
+      ? (question.quality_gate_question_status as Record<string, any>)
+      : null;
+    const providerFallbackUsed = Boolean(
+      question.fallback_used ??
+        question.provider_result?.fallback_used ??
+        qualityGate?.warnings?.includes?.('provider_fallback_used'),
+    );
+    const providerStatus = this.safeDisplayText(
+      question.provider_status || question.provider_result?.provider_status,
+      '',
+    ) || null;
+    const providerName = this.safeDisplayText(
+      question.provider_name || question.provider_result?.provider_name,
+      '',
+    ) || null;
+    const reviewReady = qualityGate?.review_ready === true;
+    const extractedButIncomplete = qualityGate?.extracted_but_incomplete === true;
+    const qualityNeedsHumanReview = qualityGate?.needs_human_review === true || questionGate?.needs_human_review === true;
+    const layoutOnlyResult = this.toStringArray(questionGate?.warnings).includes('layout_only_result');
+    const answerMissing = !this.firstMeaningfulText(
+      audit.answer_suggestion,
+      question.answer_suggestion,
+      question.ai_candidate_answer,
+      question.answer,
+    );
+    const analysisMissing = !this.firstMeaningfulText(
+      audit.analysis_suggestion,
+      question.analysis_suggestion,
+      question.ai_candidate_analysis,
+      question.analysis,
+    );
+    if (providerFallbackUsed && !riskFlags.includes('provider_fallback_used')) {
+      riskFlags.push('provider_fallback_used');
+    }
+    if (qualityNeedsHumanReview && !riskFlags.includes('commercial_ocr_requires_human_review')) {
+      riskFlags.push('commercial_ocr_requires_human_review');
+    }
+    if (!reviewReady && qualityGate && !riskFlags.includes('commercial_ocr_not_review_ready')) {
+      riskFlags.push('commercial_ocr_not_review_ready');
+    }
     if (sequenceGateFailed) {
       ['question_number_gap', 'question_boundary_uncertain'].forEach((flag) => {
         if (!riskFlags.includes(flag)) riskFlags.push(flag);
@@ -1464,6 +1647,12 @@ export class PdfService {
         audit.needs_review ||
         auditFailed ||
         auditWarning ||
+        (hasCommercialQualityGate &&
+          (qualityNeedsHumanReview ||
+            providerFallbackUsed ||
+            extractedButIncomplete ||
+            !reviewReady ||
+            layoutOnlyResult)) ||
         stemMissing ||
         optionMissing.length ||
         imageMissing ||
@@ -1479,6 +1668,19 @@ export class PdfService {
       questionOnFallbackFailedPage ? `页面解析失败(fallback_failed): pages=[${fallbackFailedPages.join(',')}]` : '',
       auditFailed ? `AI 预审核失败: ${this.safeDisplayText(audit.ai_audit_summary, '未给出摘要')}` : '',
       auditWarning && sourceReview.manualReviewable ? 'AI 预审核 warning，需人工核验原卷后才可强制加入' : '',
+      hasCommercialQualityGate && !reviewReady
+        ? `commercial OCR quality gate 未通过: ${(this.toStringArray(qualityGate?.blocking_reasons) || []).join(',')}`
+        : '',
+      hasCommercialQualityGate && extractedButIncomplete ? 'commercial OCR 已抽取但结果不完整' : '',
+      hasCommercialQualityGate && providerFallbackUsed
+        ? `commercial OCR 发生 fallback: ${providerName || 'unknown_provider'}`
+        : '',
+      hasCommercialQualityGate && providerStatus && providerStatus !== 'ok'
+        ? `commercial OCR provider 状态异常: ${providerStatus}`
+        : '',
+      hasCommercialQualityGate && layoutOnlyResult ? 'layout-only OCR 结果不能直接发布' : '',
+      answerMissing ? '答案缺失' : '',
+      analysisMissing ? '解析缺失或不可验证' : '',
       !sourceReview.manualReviewable ? sourceReview.missingContextReason : '',
       riskFlags.includes('chart_title_missing_or_unlocalized') ? '图表标题缺失或未定位' : '',
       riskFlags.includes('table_header_missing_or_unlocalized') ? '表头缺失或未定位' : '',
@@ -1561,6 +1763,26 @@ export class PdfService {
       missingContextReason: sourceReview.manualReviewable ? null : sourceReview.missingContextReason,
       recommendedAction: sourceReview.recommendedAction,
       source_locator_available: sourceLocatorAvailable,
+      provider_name: providerName,
+      provider_status: providerStatus,
+      provider_latency_ms: this.toOptionalNumber(question.provider_latency_ms || question.provider_result?.provider_latency_ms),
+      provider_trace_ref: this.firstMeaningfulText(question.provider_trace_ref, question.provider_result?.raw_response_ref) || null,
+      provider_error: question.provider_error || question.provider_result?.provider_error || null,
+      provider_fallback_used: providerFallbackUsed,
+      grouping_evidence: this.toStringArray(question.grouping_evidence),
+      grouping_confidence: this.toOptionalNumber(question.grouping_confidence),
+      quality_gate: qualityGate,
+      quality_gate_question_status: questionGate,
+      extracted_but_incomplete: hasCommercialQualityGate ? extractedButIncomplete : null,
+      review_ready: hasCommercialQualityGate ? reviewReady : null,
+      needs_human_review: hasCommercialQualityGate ? qualityNeedsHumanReview : null,
+      visual_understanding: question.visual_understanding || null,
+      missing_fields: this.toStringArray(question.missing_fields),
+      validation_warnings: this.toStringArray(question.validation_warnings),
+      material: question.material || null,
+      material_shared_stem:
+        this.firstMeaningfulText(question.material?.content, question.material_shared_stem) ||
+        null,
       source_artifacts_refs: {
         ...(question.source_artifacts_refs || {}),
         ...(debug.artifact_refs || {}),
@@ -1681,6 +1903,16 @@ export class PdfService {
     sourceQuestion: Question | null;
     pageMaterialContext: Map<number, Array<Record<string, any>>>;
   }) {
+    if (input.candidate.material && typeof input.candidate.material === 'object') {
+      const material = input.candidate.material as Record<string, any>;
+      return {
+        id: this.firstMeaningfulText(material.id, input.candidate.material_group_id) || null,
+        content: this.cleanParsedText(material.content || ''),
+        images: Array.isArray(material.images) ? material.images : [],
+        source_page: this.toOptionalNumber(material.source_page) ?? null,
+        source: this.firstMeaningfulText(material.source, 'commercial_ocr_semantic') || 'commercial_ocr_semantic',
+      };
+    }
     if (input.sourceQuestion?.material?.content) {
       return {
         id: input.sourceQuestion.material.id,
@@ -1707,11 +1939,26 @@ export class PdfService {
         return {
           id: groupId,
           content: this.cleanParsedText(matched.content),
-          images: [],
+          images: Array.isArray(input.candidate.visual_assets) ? input.candidate.visual_assets : [],
           source_page: Number(page),
           source: 'page_understanding_raw_material',
         };
       }
+    }
+    if (input.candidate.shared_material && this.firstMeaningfulText(input.candidate.stem, input.candidate.source_text_span)) {
+      return {
+        id: groupId || null,
+        content: this.cleanParsedText(
+          input.candidate.material_shared_stem ||
+            input.candidate.source_text_span ||
+            '',
+        ),
+        images: Array.isArray(input.candidate.visual_assets) ? input.candidate.visual_assets : [],
+        source_page: Array.isArray(input.candidate.source_page_refs)
+          ? this.toOptionalNumber(input.candidate.source_page_refs[0]) ?? null
+          : null,
+        source: 'commercial_ocr_candidate_fallback',
+      };
     }
     return null;
   }
@@ -3180,6 +3427,12 @@ export class PdfService {
   }
 
   private firstNonEmptyProvider(debug: Record<string, any>) {
+    const commercialProvider =
+      this.firstMeaningfulText(
+        debug?.commercial_ocr?.provider_result?.provider_name,
+        debug?.commercial_ocr?.effective_provider,
+      ) || null;
+    if (commercialProvider) return commercialProvider;
     const rawOutputs = Array.isArray(debug?.ai_preaudit_debug?.qwen_vl_raw_outputs)
       ? debug.ai_preaudit_debug.qwen_vl_raw_outputs
       : [];
@@ -3190,6 +3443,458 @@ export class PdfService {
   private firstNonEmptyModel(debug: Record<string, any>) {
     const fromPage = this.firstFromPageUnderstanding(debug.page_understanding, 'model');
     return fromPage || null;
+  }
+
+  private commercialOcrSummaryFromTask(task: ParseTask) {
+    const summary = this.parseResultSummary(task.result_summary);
+    const stats = summary?.stats && typeof summary.stats === 'object'
+      ? summary.stats
+      : {};
+    const commercial = stats?.commercial_ocr || summary?.commercial_ocr;
+    return commercial && typeof commercial === 'object' ? (commercial as Record<string, any>) : null;
+  }
+
+  private synthesizeCommercialOcrDebugPayload(
+    task: ParseTask,
+    commercial: Record<string, any>,
+  ) {
+    const questions = this.synthesizeCommercialOcrQuestions(commercial);
+    const auditResults = this.synthesizeCommercialOcrAuditResults(commercial);
+    const semanticGroups = this.synthesizeCommercialOcrSemanticGroups(commercial);
+    const blockingReasons = this.toStringArray(commercial.quality_gate?.blocking_reasons);
+    return {
+      final_preview_payload: { questions },
+      final_questions: questions,
+      ai_audit_results: auditResults,
+      semantic_groups: semanticGroups,
+      stage_counts: {
+        output_questions_count: questions.length,
+        final_questions_count: questions.length,
+        final_preview_questions_count: questions.length,
+        commercial_ocr_material_group_count: Array.isArray(commercial.semantic_assembly?.material_groups)
+          ? commercial.semantic_assembly.material_groups.length
+          : 0,
+      },
+      first_failed_stage: blockingReasons.length
+        ? {
+            firstFailedStage: 'commercial_ocr_quality_gate',
+            reason: blockingReasons.join(','),
+            stage_counts: {
+              output_questions_count: questions.length,
+              final_preview_questions_count: questions.length,
+            },
+          }
+        : null,
+    };
+  }
+
+  private synthesizeCommercialOcrQuestions(commercial: Record<string, any>) {
+    const providerResult =
+      commercial.provider_result && typeof commercial.provider_result === 'object'
+        ? (commercial.provider_result as Record<string, any>)
+        : {};
+    const assembly =
+      commercial.semantic_assembly && typeof commercial.semantic_assembly === 'object'
+        ? (commercial.semantic_assembly as Record<string, any>)
+        : {};
+    const qualityGate =
+      commercial.quality_gate && typeof commercial.quality_gate === 'object'
+        ? (commercial.quality_gate as Record<string, any>)
+        : {};
+    const visualUnderstanding =
+      commercial.visual_understanding && typeof commercial.visual_understanding === 'object'
+        ? (commercial.visual_understanding as Record<string, any>)
+        : null;
+    const materialGroups = this.toArrayOfObjects(assembly.material_groups);
+    const materialById = new Map(
+      materialGroups.map((group) => [this.safeDisplayText(group.material_id, ''), group]),
+    );
+    const questionStatusByNo = new Map<number, Record<string, any>>();
+    this.toArrayOfObjects(qualityGate.per_question_status).forEach((item) => {
+      const questionNo = this.toOptionalNumber(item.question_no);
+      if (questionNo === null) return;
+      questionStatusByNo.set(questionNo, item);
+    });
+
+    return this.toArrayOfObjects(assembly.normalized_questions).map((question, index) => {
+      const questionNo = this.toOptionalNumber(question.question_no) ?? index + 1;
+      const materialId = this.safeDisplayText(question.material_id, '') || null;
+      const materialGroup = materialId ? materialById.get(materialId) || null : null;
+      const sharedAssets = this.toArrayOfObjects(materialGroup?.shared_assets);
+      const questionStatus = questionStatusByNo.get(questionNo) || null;
+      const questionRange =
+        this.toNumberArray(materialGroup?.question_range) ||
+        this.toNumberArray(question.question_range) ||
+        [];
+      const sourcePageSpan = this.toNumberArray(question.source_page_span) || [];
+      const sourcePageRefs =
+        sourcePageSpan.length === 2 && sourcePageSpan[0] <= sourcePageSpan[1]
+          ? Array.from(
+              { length: sourcePageSpan[1] - sourcePageSpan[0] + 1 },
+              (_unused, offset) => sourcePageSpan[0] + offset,
+            )
+          : sourcePageSpan;
+      const warnings = Array.from(
+        new Set([
+          ...this.toStringArray(question.validation_warnings),
+          ...this.toStringArray(materialGroup?.warnings),
+          ...this.toStringArray(questionStatus?.warnings),
+        ]),
+      );
+      const visualAssets = this.buildCommercialOcrVisualAssets(sharedAssets, questionNo);
+      const previewImagePath =
+        this.firstMeaningfulText(
+          question.question_image_ref,
+          visualAssets[0]?.url,
+          visualAssets[0]?.image_url,
+          visualAssets[0]?.src,
+        ) || null;
+      const material = materialGroup
+        ? {
+            id: materialGroup.material_id || materialId,
+            content: this.safeDisplayText(materialGroup.shared_stem, ''),
+            images: visualAssets.map((asset) => ({
+              ...asset,
+              slot: 'material',
+              role: asset.role || 'material',
+              image_role: asset.image_role || 'material',
+            })),
+            source_page: Array.isArray(sourcePageRefs) ? this.toOptionalNumber(sourcePageRefs[0]) : null,
+            source: 'commercial_ocr_semantic',
+          }
+        : null;
+      return {
+        question_no: questionNo,
+        stem: this.safeDisplayText(question.local_stem, '') || this.safeDisplayText(question.full_stem, ''),
+        options: this.normalizeCandidateOptions(question.options),
+        answer: this.firstMeaningfulText(question.answer) || null,
+        analysis:
+          this.firstMeaningfulText(
+            String(question.analysis || '').trim().toLowerCase() === 'unknown'
+              ? ''
+              : question.analysis,
+          ) || null,
+        answer_suggestion: this.firstMeaningfulText(question.answer) || null,
+        answer_confidence: this.toOptionalNumber(question.confidence),
+        answer_unknown_reason:
+          this.firstMeaningfulText(question.answer) ? null : 'commercial_ocr_answer_missing',
+        analysis_suggestion:
+          this.firstMeaningfulText(
+            String(question.analysis || '').trim().toLowerCase() === 'unknown'
+              ? ''
+              : question.analysis,
+          ) || null,
+        analysis_confidence: this.toOptionalNumber(question.confidence),
+        analysis_unknown_reason:
+          this.firstMeaningfulText(
+            String(question.analysis || '').trim().toLowerCase() === 'unknown'
+              ? ''
+              : question.analysis,
+          )
+            ? null
+            : 'commercial_ocr_analysis_incomplete',
+        visual_assets: visualAssets,
+        preview_image_path: previewImagePath,
+        visual_summary:
+          this.firstMeaningfulText(
+            visualUnderstanding?.visual_grouping_summary,
+            materialGroup?.shared_stem,
+          ) || null,
+        visual_confidence: this.toOptionalNumber(visualUnderstanding?.confidence),
+        source_page_refs: sourcePageRefs,
+        source_bbox: this.toNumberArray(question.bbox),
+        source_text_span:
+          this.firstMeaningfulText(question.full_stem, question.local_stem) || null,
+        material_group_id: materialId,
+        material_group_question_indexes: questionRange,
+        material_group_confidence: this.toOptionalNumber(
+          materialGroup?.grouping_confidence ?? question.grouping_confidence,
+        ),
+        material_group_reason: this.toStringArray(
+          materialGroup?.grouping_evidence || question.grouping_evidence,
+        ).join(' | ') || null,
+        shared_material: Boolean(materialGroup),
+        visual_parse_status: previewImagePath || sharedAssets.length ? 'available' : 'skipped',
+        ai_audit_status:
+          questionStatus?.complete === true && qualityGate.review_ready === true
+            ? 'passed'
+            : questionStatus?.needs_human_review
+              ? 'warning'
+              : 'failed',
+        ai_audit_verdict:
+          questionStatus?.complete === true && qualityGate.review_ready === true
+            ? '可通过'
+            : questionStatus?.needs_human_review
+              ? '需复核'
+              : '不建议直接发布',
+        ai_audit_summary: this.buildCommercialOcrAuditSummary({
+          questionNo,
+          questionStatus,
+          qualityGate,
+          warnings,
+        }),
+        ai_reviewed_before_human: true,
+        risk_flags: warnings,
+        need_manual_fix: Boolean(question.needs_human_review || questionStatus?.needs_human_review || qualityGate.needs_human_review),
+        can_add_to_paper: Boolean(
+          qualityGate.review_ready &&
+            questionStatus?.complete !== false &&
+            !question.needs_human_review &&
+            !questionStatus?.needs_human_review,
+        ),
+        cannot_add_reason: qualityGate.review_ready
+          ? null
+          : this.toStringArray(qualityGate.blocking_reasons).join('；') || 'commercial OCR quality gate 未通过',
+        manual_review_status:
+          qualityGate.review_ready && !questionStatus?.needs_human_review
+            ? 'reviewable'
+            : 'commercial_ocr_needs_review',
+        manualReviewable: !this.toStringArray(qualityGate.blocking_reasons).includes('layout_only_result'),
+        manualForceAddAllowed: false,
+        missingContextReason: null,
+        recommendedAction:
+          qualityGate.review_ready
+            ? '人工核验后可加入试卷'
+            : '先处理 quality gate blocking reasons，再进入人工审核/发布',
+        source_locator_available: Boolean(sourcePageRefs.length && this.toNumberArray(question.bbox)?.length === 4),
+        material,
+        provider_name:
+          this.firstMeaningfulText(providerResult.provider_name, commercial.effective_provider) || null,
+        provider_version: this.firstMeaningfulText(providerResult.provider_version) || null,
+        provider_status: this.firstMeaningfulText(providerResult.provider_status) || null,
+        provider_error: providerResult.provider_error || null,
+        provider_latency_ms: this.toOptionalNumber(providerResult.provider_latency_ms),
+        provider_trace_ref: this.firstMeaningfulText(
+          question.provider_trace_ref,
+          providerResult.raw_response_ref,
+        ) || null,
+        provider_result: providerResult,
+        fallback_used: Boolean(commercial.fallback_used ?? providerResult.fallback_used),
+        grouping_evidence: this.toStringArray(question.grouping_evidence),
+        grouping_confidence: this.toOptionalNumber(question.grouping_confidence),
+        quality_gate: qualityGate,
+        quality_gate_question_status: questionStatus,
+        visual_understanding: visualUnderstanding,
+        missing_fields: this.toStringArray(question.missing_fields),
+        validation_warnings: this.toStringArray(question.validation_warnings),
+        commercial_ocr_warnings: warnings,
+      };
+    });
+  }
+
+  private synthesizeCommercialOcrAuditResults(commercial: Record<string, any>) {
+    return this.synthesizeCommercialOcrQuestions(commercial).map((question) => ({
+      question_no: question.question_no,
+      ai_audit_status: question.ai_audit_status,
+      ai_audit_verdict: question.ai_audit_verdict,
+      ai_audit_summary: question.ai_audit_summary,
+      answer_suggestion: question.answer_suggestion,
+      answer_confidence: question.answer_confidence,
+      answer_unknown_reason: question.answer_unknown_reason,
+      analysis_suggestion: question.analysis_suggestion,
+      analysis_confidence: question.analysis_confidence,
+      analysis_unknown_reason: question.analysis_unknown_reason,
+      risk_flags: question.risk_flags || [],
+      needs_review: question.need_manual_fix,
+    }));
+  }
+
+  private synthesizeCommercialOcrSemanticGroups(commercial: Record<string, any>) {
+    const questions = this.synthesizeCommercialOcrQuestions(commercial);
+    const byMaterial = new Map<string, Record<string, any>>();
+    for (const question of questions) {
+      const groupId = this.safeDisplayText(question.material_group_id, '');
+      if (!groupId) continue;
+      const existing = byMaterial.get(groupId) || {
+        question_no: question.question_no,
+        material_group_id: groupId,
+        material_group_question_indexes: question.material_group_question_indexes || [],
+        source_page_start: Array.isArray(question.source_page_refs) ? Number(question.source_page_refs[0] || 0) : 0,
+        source_page_end: Array.isArray(question.source_page_refs)
+          ? Number(question.source_page_refs[question.source_page_refs.length - 1] || 0)
+          : 0,
+        source_text_span: question.material?.content || question.source_text_span || null,
+        stem_group: {
+          text: question.stem,
+          bbox: question.source_bbox,
+          source_text_span: question.source_text_span,
+        },
+        options_group: {
+          blocks: Object.entries(question.options || {}).map(([label, text]) => ({ label, text })),
+        },
+        material_group: {
+          id: groupId,
+          bbox: question.source_bbox,
+          question_range: question.material_group_question_indexes || [],
+        },
+        visual_group: {
+          blocks: Array.isArray(question.visual_assets) ? question.visual_assets : [],
+        },
+        title_group: {
+          blocks: question.material?.content ? [{ text: question.material.content }] : [],
+        },
+        risk_flags: question.risk_flags || [],
+      };
+      byMaterial.set(groupId, existing);
+    }
+    return Array.from(byMaterial.values());
+  }
+
+  private mergeCommercialCandidateQuestion(input: {
+    previewQuestion: Record<string, any>;
+    finalQuestion: Record<string, any>;
+    sourceQuestion: Question | null;
+  }) {
+    const { previewQuestion, finalQuestion, sourceQuestion } = input;
+    const mergedMaterial =
+      previewQuestion.material ||
+      finalQuestion.material ||
+      (sourceQuestion?.material
+        ? {
+            id: sourceQuestion.material.id,
+            content: sourceQuestion.material.content,
+            images: Array.isArray(sourceQuestion.material.images) ? sourceQuestion.material.images : [],
+            source: 'source_question_material',
+          }
+        : null);
+    const mergedVisualAssets =
+      (Array.isArray(previewQuestion.visual_assets) && previewQuestion.visual_assets.length
+        ? previewQuestion.visual_assets
+        : null) ||
+      (Array.isArray(finalQuestion.visual_assets) && finalQuestion.visual_assets.length
+        ? finalQuestion.visual_assets
+        : null) ||
+      (Array.isArray(previewQuestion.images) && previewQuestion.images.length
+        ? previewQuestion.images
+        : null) ||
+      (Array.isArray(finalQuestion.images) && finalQuestion.images.length
+        ? finalQuestion.images
+        : null) ||
+      (Array.isArray(sourceQuestion?.images) && sourceQuestion.images.length
+        ? sourceQuestion.images
+        : []);
+    return {
+      ...finalQuestion,
+      ...previewQuestion,
+      visual_assets: mergedVisualAssets,
+      images: mergedVisualAssets,
+      material: mergedMaterial,
+      answer: previewQuestion.answer ?? finalQuestion.answer ?? sourceQuestion?.answer ?? null,
+      analysis: previewQuestion.analysis ?? finalQuestion.analysis ?? sourceQuestion?.analysis ?? null,
+      source_bbox:
+        previewQuestion.source_bbox ||
+        finalQuestion.source_bbox ||
+        sourceQuestion?.source_bbox ||
+        null,
+      source_text_span:
+        previewQuestion.source_text_span ||
+        finalQuestion.source_text_span ||
+        sourceQuestion?.source_text_span ||
+        null,
+      source_page_refs:
+        previewQuestion.source_page_refs ||
+        finalQuestion.source_page_refs ||
+        sourceQuestion?.page_range ||
+        [],
+      question_quality:
+        previewQuestion.question_quality ||
+        finalQuestion.question_quality ||
+        sourceQuestion?.question_quality ||
+        null,
+    };
+  }
+
+  private buildCommercialOcrAuditSummary(input: {
+    questionNo: number;
+    questionStatus: Record<string, any> | null;
+    qualityGate: Record<string, any>;
+    warnings: string[];
+  }) {
+    if (input.questionStatus?.complete && input.qualityGate.review_ready) {
+      return `commercial OCR quality gate 通过，题目 ${input.questionNo} 可进入人工复核/发布`;
+    }
+    const reasons = Array.from(
+      new Set([
+        ...this.toStringArray(input.questionStatus?.warnings),
+        ...this.toStringArray(input.qualityGate.blocking_reasons),
+        ...input.warnings,
+      ]),
+    );
+    return reasons.length
+      ? `commercial OCR quality gate 未通过：${reasons.join('、')}`
+      : `commercial OCR 题目 ${input.questionNo} 需人工复核`;
+  }
+
+  private buildCommercialOcrVisualAssets(
+    sharedAssets: Array<Record<string, any>>,
+    questionNo: number,
+  ) {
+    return sharedAssets.map((asset, index) => {
+      const assetId =
+        this.firstMeaningfulText(asset.asset_id, asset.ref, `asset-${index + 1}`) ||
+        `asset-${index + 1}`;
+      const caption =
+        this.firstMeaningfulText(asset.text, asset.caption, asset.visual_summary) ||
+        `共享材料图表 ${index + 1}`;
+      const url = this.commercialOcrAssetPreviewUrl({
+        assetId,
+        caption,
+        blockType: this.firstMeaningfulText(asset.block_type, 'figure') || 'figure',
+        questionNo,
+      });
+      return {
+        asset_id: assetId,
+        page: this.toOptionalNumber(asset.page_no ?? asset.page) ?? null,
+        bbox: this.toNumberArray(asset.bbox),
+        url,
+        src: url,
+        image_url: url,
+        role: 'material',
+        image_role: 'material',
+        slot: 'material',
+        belongs_to_question: false,
+        linked_by: 'commercial_ocr_semantic_group',
+        link_reason: caption,
+        caption,
+        visual_summary: caption,
+        visual_hash: this.normalizeTextForSignature(caption),
+      };
+    });
+  }
+
+  private commercialOcrAssetPreviewUrl(input: {
+    assetId: string;
+    caption: string;
+    blockType: string;
+    questionNo: number;
+  }) {
+    const accent = /table/i.test(input.blockType) ? '#0f766e' : '#1d4ed8';
+    const label = `${input.blockType.toUpperCase()} · Q${input.questionNo}`;
+    const caption = this.escapeSvgText(input.caption || 'Commercial OCR shared asset');
+    const svg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">',
+      '<rect width="960" height="540" fill="#f8fafc"/>',
+      `<rect x="32" y="32" width="896" height="476" rx="28" fill="#ffffff" stroke="${accent}" stroke-width="6"/>`,
+      `<rect x="64" y="72" width="832" height="56" rx="18" fill="${accent}" fill-opacity="0.10"/>`,
+      `<text x="80" y="108" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="${accent}">${this.escapeSvgText(label)}</text>`,
+      `<text x="80" y="176" font-family="Arial, sans-serif" font-size="26" fill="#0f172a">${caption}</text>`,
+      `<text x="80" y="240" font-family="Arial, sans-serif" font-size="20" fill="#475569">asset_id: ${this.escapeSvgText(input.assetId)}</text>`,
+      '<rect x="80" y="286" width="360" height="168" rx="20" fill="#dbeafe"/>',
+      '<rect x="488" y="286" width="328" height="32" rx="10" fill="#e2e8f0"/>',
+      '<rect x="488" y="334" width="256" height="32" rx="10" fill="#e2e8f0"/>',
+      '<rect x="488" y="382" width="300" height="32" rx="10" fill="#e2e8f0"/>',
+      '</svg>',
+    ].join('');
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  }
+
+  private escapeSvgText(value: string) {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   private firstFromPageUnderstanding(value: unknown, key: string) {
@@ -3590,6 +4295,16 @@ export class PdfService {
       requested_provider_order: this.firstMeaningfulText(
         aiConfig.vision_ai_provider_order,
       ) || null,
+      commercial_ocr_enabled:
+        this.firstMeaningfulText(aiConfig.commercial_ocr_enabled) || null,
+      commercial_ocr_real_smoke:
+        this.firstMeaningfulText(aiConfig.commercial_ocr_real_smoke) || null,
+      commercial_ocr_primary_provider:
+        this.firstMeaningfulText(aiConfig.pdf_parse_primary_provider) || null,
+      commercial_ocr_fallback_providers:
+        this.firstMeaningfulText(aiConfig.pdf_parse_fallback_providers) || null,
+      ocr_provider_trace_enabled:
+        this.firstMeaningfulText(aiConfig.ocr_provider_trace_enabled) || null,
       requested_visual_model: this.firstMeaningfulText(aiConfig.visual_model) || null,
       requested_ark_model: this.firstMeaningfulText(aiConfig.ark_vision_model) || null,
       requested_mimo_model: this.firstMeaningfulText(aiConfig.mimo_vision_model) || null,
@@ -4142,6 +4857,29 @@ export class PdfService {
         { key: 'PDF_VISUAL_PAGE_TIMEOUT_SECONDS' },
         { key: 'PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS' },
         { key: 'PDF_HEADER_FOOTER_BLACKLIST' },
+        { key: 'COMMERCIAL_OCR_ENABLED' },
+        { key: 'COMMERCIAL_OCR_REAL_SMOKE' },
+        { key: 'PDF_PARSE_PRIMARY_PROVIDER' },
+        { key: 'PDF_PARSE_FALLBACK_PROVIDERS' },
+        { key: 'MOCK_COMMERCIAL_OCR_FIXTURE_NAME' },
+        { key: 'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME' },
+        { key: 'MOCK_TENCENT_QUESTION_SPLIT_LAYOUT_FIXTURE_NAME' },
+        { key: 'OCR_PROVIDER_TRACE_ENABLED' },
+        { key: 'BAIDU_API_KEY' },
+        { key: 'BAIDU_SECRET_KEY' },
+        { key: 'BAIDU_ACCESS_TOKEN' },
+        { key: 'BAIDU_OCR_ENDPOINT' },
+        { key: 'BAIDU_OCR_TIMEOUT_MS' },
+        { key: 'TENCENT_SECRET_ID' },
+        { key: 'TENCENT_SECRET_KEY' },
+        { key: 'TENCENT_REGION' },
+        { key: 'TENCENT_OCR_ENDPOINT' },
+        { key: 'TENCENT_OCR_VERSION' },
+        { key: 'TENCENT_OCR_TIMEOUT_MS' },
+        { key: 'TENCENT_OCR_USE_NEW_MODEL' },
+        { key: 'TENCENT_OCR_ENABLE_IMAGE_CROP' },
+        { key: 'TENCENT_OCR_ENABLE_ONLY_DETECT_BORDER' },
+        { key: 'TENCENT_OCR_REAL_SMOKE' },
       ],
     });
     const values = new Map(configs.map((config) => [config.key, config.value]));
@@ -4213,6 +4951,39 @@ export class PdfService {
       pdf_visual_page_timeout_seconds: read('PDF_VISUAL_PAGE_TIMEOUT_SECONDS'),
       pdf_visual_provider_timeout_seconds: read('PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS'),
       header_footer_blacklist: read('PDF_HEADER_FOOTER_BLACKLIST'),
+      commercial_ocr_enabled: read('COMMERCIAL_OCR_ENABLED', 'false'),
+      commercial_ocr_real_smoke: read('COMMERCIAL_OCR_REAL_SMOKE', 'false'),
+      pdf_parse_primary_provider: read('PDF_PARSE_PRIMARY_PROVIDER', 'mock_commercial_ocr'),
+      pdf_parse_fallback_providers: read(
+        'PDF_PARSE_FALLBACK_PROVIDERS',
+        'local_parser,mock_commercial_ocr',
+      ),
+      mock_commercial_ocr_fixture_name: read('MOCK_COMMERCIAL_OCR_FIXTURE_NAME'),
+      mock_tencent_question_split_fixture_name: read(
+        'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME',
+      ),
+      mock_tencent_question_split_layout_fixture_name: read(
+        'MOCK_TENCENT_QUESTION_SPLIT_LAYOUT_FIXTURE_NAME',
+      ),
+      ocr_provider_trace_enabled: read('OCR_PROVIDER_TRACE_ENABLED', 'true'),
+      baidu_api_key: read('BAIDU_API_KEY'),
+      baidu_secret_key: read('BAIDU_SECRET_KEY'),
+      baidu_access_token: read('BAIDU_ACCESS_TOKEN'),
+      baidu_ocr_endpoint: read('BAIDU_OCR_ENDPOINT'),
+      baidu_ocr_timeout_ms: read('BAIDU_OCR_TIMEOUT_MS', '60000'),
+      tencent_secret_id: read('TENCENT_SECRET_ID'),
+      tencent_secret_key: read('TENCENT_SECRET_KEY'),
+      tencent_region: read('TENCENT_REGION', 'ap-guangzhou'),
+      tencent_ocr_endpoint: read('TENCENT_OCR_ENDPOINT', 'https://ocr.tencentcloudapi.com'),
+      tencent_ocr_version: read('TENCENT_OCR_VERSION', '2018-11-19'),
+      tencent_ocr_timeout_ms: read('TENCENT_OCR_TIMEOUT_MS', '60000'),
+      tencent_ocr_use_new_model: read('TENCENT_OCR_USE_NEW_MODEL', 'false'),
+      tencent_ocr_enable_image_crop: read('TENCENT_OCR_ENABLE_IMAGE_CROP', 'false'),
+      tencent_ocr_enable_only_detect_border: read(
+        'TENCENT_OCR_ENABLE_ONLY_DETECT_BORDER',
+        'false',
+      ),
+      tencent_ocr_real_smoke: read('TENCENT_OCR_REAL_SMOKE', 'false'),
       parse_task_id: taskId || '',
     });
   }
@@ -4543,7 +5314,10 @@ export class PdfService {
     await this.bankRepository.update(bankId, { total_count: total });
   }
 
-  private isPublishableParsedQuestion(question: Question) {
+  private isPublishableParsedQuestion(
+    question: Question,
+    commercialQuestion?: Record<string, any> | null,
+  ) {
     const warnings = Array.isArray(question.parse_warnings)
       ? question.parse_warnings
       : [];
@@ -4551,9 +5325,39 @@ export class PdfService {
     const hasAiPreauditSignal = Boolean(
       aiStatus || question.ai_reviewed_before_human || question.ai_review_error,
     );
+    const commercialQualityGate =
+      commercialQuestion?.quality_gate && typeof commercialQuestion.quality_gate === 'object'
+        ? (commercialQuestion.quality_gate as Record<string, any>)
+        : null;
+    const commercialQuestionGate =
+      commercialQuestion?.quality_gate_question_status &&
+      typeof commercialQuestion.quality_gate_question_status === 'object'
+        ? (commercialQuestion.quality_gate_question_status as Record<string, any>)
+        : null;
+    const layoutOnly = this.toStringArray(commercialQuestionGate?.warnings).includes(
+      'layout_only_result',
+    );
+    const answerPresent = Boolean(this.firstMeaningfulText(question.answer, commercialQuestion?.answer));
+    const analysisPresent = Boolean(
+      this.firstMeaningfulText(
+        question.analysis,
+        String(commercialQuestion?.analysis || '').trim().toLowerCase() === 'unknown'
+          ? ''
+          : commercialQuestion?.analysis,
+      ),
+    );
     return (
       !question.needs_review &&
       warnings.length === 0 &&
+      answerPresent &&
+      analysisPresent &&
+      !layoutOnly &&
+      (!commercialQuestion ||
+        (commercialQualityGate?.review_ready === true &&
+          commercialQualityGate?.extracted_but_incomplete !== true &&
+          commercialQualityGate?.needs_human_review !== true &&
+          commercialQuestion?.fallback_used !== true &&
+          commercialQuestionGate?.needs_human_review !== true)) &&
       (!hasAiPreauditSignal ||
         (aiStatus === 'passed' && !question.ai_review_error))
     );

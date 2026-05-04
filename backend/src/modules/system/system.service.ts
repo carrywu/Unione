@@ -146,6 +146,11 @@ export class SystemService {
       deepseek_api_key_set: Boolean(aiConfig.deepseek_api_key),
       mimo_api_key_set: Boolean(aiConfig.mimo_api_key),
       ark_api_key_set: Boolean(aiConfig.ark_api_key),
+      baidu_api_key_set: Boolean(aiConfig.baidu_api_key),
+      baidu_secret_key_set: Boolean(aiConfig.baidu_secret_key),
+      baidu_access_token_set: Boolean(aiConfig.baidu_access_token),
+      tencent_secret_id_set: Boolean(aiConfig.tencent_secret_id),
+      tencent_secret_key_set: Boolean(aiConfig.tencent_secret_key),
       ai_provider_vision:
         (serviceConfig as Record<string, unknown>)?.ai_provider_vision || 'qwen_vl',
       ai_provider_text:
@@ -155,6 +160,38 @@ export class SystemService {
       prompt_source:
         (serviceConfig as Record<string, unknown>)?.prompt_source || 'database',
       cache_ttl: (serviceConfig as Record<string, unknown>)?.cache_ttl || 300,
+      commercial_ocr_enabled:
+        (serviceConfig as Record<string, unknown>)?.commercial_ocr_enabled ||
+        aiConfig.commercial_ocr_enabled ||
+        'false',
+      commercial_ocr_real_smoke:
+        (serviceConfig as Record<string, unknown>)?.commercial_ocr_real_smoke ||
+        aiConfig.commercial_ocr_real_smoke ||
+        'false',
+      pdf_parse_primary_provider:
+        (serviceConfig as Record<string, unknown>)?.pdf_parse_primary_provider ||
+        aiConfig.pdf_parse_primary_provider ||
+        'mock_commercial_ocr',
+      pdf_parse_fallback_providers:
+        (serviceConfig as Record<string, unknown>)?.pdf_parse_fallback_providers ||
+        aiConfig.pdf_parse_fallback_providers ||
+        'local_parser,mock_commercial_ocr',
+      mock_commercial_ocr_fixture_name:
+        (serviceConfig as Record<string, unknown>)?.mock_commercial_ocr_fixture_name ||
+        aiConfig.mock_commercial_ocr_fixture_name ||
+        '',
+      mock_tencent_question_split_fixture_name:
+        (serviceConfig as Record<string, unknown>)?.mock_tencent_question_split_fixture_name ||
+        aiConfig.mock_tencent_question_split_fixture_name ||
+        '',
+      mock_tencent_question_split_layout_fixture_name:
+        (serviceConfig as Record<string, unknown>)?.mock_tencent_question_split_layout_fixture_name ||
+        aiConfig.mock_tencent_question_split_layout_fixture_name ||
+        '',
+      ocr_provider_trace_enabled:
+        (serviceConfig as Record<string, unknown>)?.ocr_provider_trace_enabled ||
+        aiConfig.ocr_provider_trace_enabled ||
+        'true',
     };
   }
 
@@ -308,6 +345,40 @@ export class SystemService {
         }),
       );
     }
+    const configWrites: Array<[unknown, string, string]> = [
+      [body.commercial_ocr_enabled, 'COMMERCIAL_OCR_ENABLED', 'commercial OCR 主链路开关'],
+      [body.commercial_ocr_real_smoke, 'COMMERCIAL_OCR_REAL_SMOKE', 'commercial OCR 真实 smoke 开关'],
+      [body.pdf_parse_primary_provider, 'PDF_PARSE_PRIMARY_PROVIDER', 'PDF 解析主 provider'],
+      [body.pdf_parse_fallback_providers, 'PDF_PARSE_FALLBACK_PROVIDERS', 'PDF 解析 fallback provider 顺序'],
+      [body.mock_commercial_ocr_fixture_name, 'MOCK_COMMERCIAL_OCR_FIXTURE_NAME', 'mock commercial OCR fixture'],
+      [body.mock_tencent_question_split_fixture_name, 'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME', 'mock tencent QuestionSplit fixture'],
+      [body.mock_tencent_question_split_layout_fixture_name, 'MOCK_TENCENT_QUESTION_SPLIT_LAYOUT_FIXTURE_NAME', 'mock tencent QuestionSplitLayout fixture'],
+      [body.ocr_provider_trace_enabled, 'OCR_PROVIDER_TRACE_ENABLED', 'provider trace 开关'],
+      [body.baidu_api_key, 'BAIDU_API_KEY', '百度 OCR API Key'],
+      [body.baidu_secret_key, 'BAIDU_SECRET_KEY', '百度 OCR Secret Key'],
+      [body.baidu_access_token, 'BAIDU_ACCESS_TOKEN', '百度 OCR Access Token'],
+      [body.baidu_ocr_endpoint, 'BAIDU_OCR_ENDPOINT', '百度 OCR endpoint'],
+      [body.baidu_ocr_timeout_ms, 'BAIDU_OCR_TIMEOUT_MS', '百度 OCR timeout(ms)'],
+      [body.tencent_secret_id, 'TENCENT_SECRET_ID', '腾讯 OCR SecretId'],
+      [body.tencent_secret_key, 'TENCENT_SECRET_KEY', '腾讯 OCR SecretKey'],
+      [body.tencent_region, 'TENCENT_REGION', '腾讯 OCR region'],
+      [body.tencent_ocr_endpoint, 'TENCENT_OCR_ENDPOINT', '腾讯 OCR endpoint'],
+      [body.tencent_ocr_version, 'TENCENT_OCR_VERSION', '腾讯 OCR version'],
+      [body.tencent_ocr_timeout_ms, 'TENCENT_OCR_TIMEOUT_MS', '腾讯 OCR timeout(ms)'],
+      [body.tencent_ocr_use_new_model, 'TENCENT_OCR_USE_NEW_MODEL', '腾讯 OCR UseNewModel 开关'],
+      [body.tencent_ocr_enable_image_crop, 'TENCENT_OCR_ENABLE_IMAGE_CROP', '腾讯 OCR EnableImageCrop 开关'],
+      [body.tencent_ocr_enable_only_detect_border, 'TENCENT_OCR_ENABLE_ONLY_DETECT_BORDER', '腾讯 OCR EnableOnlyDetectBorder 开关'],
+      [body.tencent_ocr_real_smoke, 'TENCENT_OCR_REAL_SMOKE', '腾讯 OCR 真实 smoke 开关'],
+    ];
+    for (const [value, key, description] of configWrites) {
+      if (typeof value === 'string' && value !== '') {
+        updates.push(this.updateConfig(key, { value, description }));
+      } else if (typeof value === 'boolean') {
+        updates.push(this.updateConfig(key, { value: String(value), description }));
+      } else if (typeof value === 'number' && Number.isFinite(value)) {
+        updates.push(this.updateConfig(key, { value: String(value), description }));
+      }
+    }
     await Promise.all(updates);
     return this.proxyPdfService('PUT', '/admin/config', body, true);
   }
@@ -375,6 +446,29 @@ export class SystemService {
         { key: 'VISION_AI_PROVIDER_TIMEOUT_SECONDS' },
         { key: 'PDF_VISUAL_PAGE_TIMEOUT_SECONDS' },
         { key: 'PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS' },
+        { key: 'COMMERCIAL_OCR_ENABLED' },
+        { key: 'COMMERCIAL_OCR_REAL_SMOKE' },
+        { key: 'PDF_PARSE_PRIMARY_PROVIDER' },
+        { key: 'PDF_PARSE_FALLBACK_PROVIDERS' },
+        { key: 'MOCK_COMMERCIAL_OCR_FIXTURE_NAME' },
+        { key: 'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME' },
+        { key: 'MOCK_TENCENT_QUESTION_SPLIT_LAYOUT_FIXTURE_NAME' },
+        { key: 'OCR_PROVIDER_TRACE_ENABLED' },
+        { key: 'BAIDU_API_KEY' },
+        { key: 'BAIDU_SECRET_KEY' },
+        { key: 'BAIDU_ACCESS_TOKEN' },
+        { key: 'BAIDU_OCR_ENDPOINT' },
+        { key: 'BAIDU_OCR_TIMEOUT_MS' },
+        { key: 'TENCENT_SECRET_ID' },
+        { key: 'TENCENT_SECRET_KEY' },
+        { key: 'TENCENT_REGION' },
+        { key: 'TENCENT_OCR_ENDPOINT' },
+        { key: 'TENCENT_OCR_VERSION' },
+        { key: 'TENCENT_OCR_TIMEOUT_MS' },
+        { key: 'TENCENT_OCR_USE_NEW_MODEL' },
+        { key: 'TENCENT_OCR_ENABLE_IMAGE_CROP' },
+        { key: 'TENCENT_OCR_ENABLE_ONLY_DETECT_BORDER' },
+        { key: 'TENCENT_OCR_REAL_SMOKE' },
       ],
     });
     const values = new Map(configs.map((config) => [config.key, config.value]));
@@ -434,6 +528,39 @@ export class SystemService {
         vision_ai_provider_timeout_seconds: read('VISION_AI_PROVIDER_TIMEOUT_SECONDS'),
         pdf_visual_page_timeout_seconds: read('PDF_VISUAL_PAGE_TIMEOUT_SECONDS'),
         pdf_visual_provider_timeout_seconds: read('PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS'),
+        commercial_ocr_enabled: read('COMMERCIAL_OCR_ENABLED', 'false'),
+        commercial_ocr_real_smoke: read('COMMERCIAL_OCR_REAL_SMOKE', 'false'),
+        pdf_parse_primary_provider: read('PDF_PARSE_PRIMARY_PROVIDER', 'mock_commercial_ocr'),
+        pdf_parse_fallback_providers: read(
+          'PDF_PARSE_FALLBACK_PROVIDERS',
+          'local_parser,mock_commercial_ocr',
+        ),
+        mock_commercial_ocr_fixture_name: read('MOCK_COMMERCIAL_OCR_FIXTURE_NAME'),
+        mock_tencent_question_split_fixture_name: read(
+          'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME',
+        ),
+        mock_tencent_question_split_layout_fixture_name: read(
+          'MOCK_TENCENT_QUESTION_SPLIT_LAYOUT_FIXTURE_NAME',
+        ),
+        ocr_provider_trace_enabled: read('OCR_PROVIDER_TRACE_ENABLED', 'true'),
+        baidu_api_key: read('BAIDU_API_KEY'),
+        baidu_secret_key: read('BAIDU_SECRET_KEY'),
+        baidu_access_token: read('BAIDU_ACCESS_TOKEN'),
+        baidu_ocr_endpoint: read('BAIDU_OCR_ENDPOINT'),
+        baidu_ocr_timeout_ms: read('BAIDU_OCR_TIMEOUT_MS', '60000'),
+        tencent_secret_id: read('TENCENT_SECRET_ID'),
+        tencent_secret_key: read('TENCENT_SECRET_KEY'),
+        tencent_region: read('TENCENT_REGION', 'ap-guangzhou'),
+        tencent_ocr_endpoint: read('TENCENT_OCR_ENDPOINT', 'https://ocr.tencentcloudapi.com'),
+        tencent_ocr_version: read('TENCENT_OCR_VERSION', '2018-11-19'),
+        tencent_ocr_timeout_ms: read('TENCENT_OCR_TIMEOUT_MS', '60000'),
+        tencent_ocr_use_new_model: read('TENCENT_OCR_USE_NEW_MODEL', 'false'),
+        tencent_ocr_enable_image_crop: read('TENCENT_OCR_ENABLE_IMAGE_CROP', 'false'),
+        tencent_ocr_enable_only_detect_border: read(
+          'TENCENT_OCR_ENABLE_ONLY_DETECT_BORDER',
+          'false',
+        ),
+        tencent_ocr_real_smoke: read('TENCENT_OCR_REAL_SMOKE', 'false'),
       }).filter(([, value]) => Boolean(value)),
     );
   }

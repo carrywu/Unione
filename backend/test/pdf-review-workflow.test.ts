@@ -119,6 +119,7 @@ function harness() {
       done_count: 3,
       attempt: 0,
       error: null,
+      result_summary: null,
       created_at: now,
     },
   ];
@@ -234,8 +235,140 @@ function harness() {
   };
 }
 
+function commercialOcrSummaryFixture(options: {
+  reviewReady?: boolean;
+  extractedButIncomplete?: boolean;
+  fallbackUsed?: boolean;
+  layoutOnlyQuestionNos?: number[];
+}) {
+  const reviewReady = options.reviewReady ?? true;
+  const extractedButIncomplete = options.extractedButIncomplete ?? false;
+  const fallbackUsed = options.fallbackUsed ?? false;
+  const layoutOnlyQuestionNos = new Set(options.layoutOnlyQuestionNos || []);
+  const questionRange = [17, 18, 19, 20];
+  const normalizedQuestions = questionRange.map((questionNo, index) => ({
+    question_id: `q-${questionNo}`,
+    question_no: questionNo,
+    material_id: 'material-17-20-p1',
+    parent_group_id: 'question-group-material-17-20',
+    group_type: 'shared_material',
+    question_role: 'child_question',
+    question_range: questionRange,
+    shared_stem_ref: 'material-17-20-p1',
+    local_stem: `${questionNo}. 第 ${questionNo} 题题干`,
+    full_stem: `根据以下资料，回答17-20题\n${questionNo}. 第 ${questionNo} 题题干`,
+    options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+    answer: extractedButIncomplete && questionNo === 20 ? null : 'A',
+    analysis: extractedButIncomplete && questionNo === 20 ? 'unknown' : `第 ${questionNo} 题解析`,
+    category: '资料分析',
+    subtype: null,
+    source_page_span: [1, 1],
+    bbox: [20, 180 + index * 120, 520, 250 + index * 120],
+    question_image_ref: layoutOnlyQuestionNos.has(questionNo) ? null : `mock-image-${questionNo}`,
+    provider: 'mock_commercial_ocr',
+    provider_trace_ref: '/tmp/mock-commercial-ocr-trace.json',
+    confidence: 0.94,
+    needs_human_review: fallbackUsed || extractedButIncomplete || layoutOnlyQuestionNos.has(questionNo),
+    missing_fields: extractedButIncomplete && questionNo === 20 ? ['answer', 'analysis'] : [],
+    validation_warnings: layoutOnlyQuestionNos.has(questionNo) ? ['layout_only_requires_followup'] : [],
+    grouping_evidence: ['explicit_range:17-20', 'material_intro:根据以下资料'],
+    grouping_confidence: 0.95,
+  }));
+  return {
+    requested_primary_provider: 'mock_commercial_ocr',
+    effective_provider: 'mock_commercial_ocr',
+    fallback_used: fallbackUsed,
+    should_use_local_parser: false,
+    provider_result: {
+      provider_name: 'mock_commercial_ocr',
+      provider_version: 'fixture-baidu-v1',
+      source_document_id: 'doc-1',
+      task_id: 'task-1',
+      raw_response_ref: '/tmp/mock-commercial-ocr-trace.json',
+      provider_latency_ms: 12,
+      provider_status: 'ok',
+      provider_error: null,
+      fallback_used: fallbackUsed,
+      warnings: fallbackUsed ? ['provider_fallback_used'] : [],
+      page_results: [],
+    },
+    semantic_assembly: {
+      material_groups: [
+        {
+          material_id: 'material-17-20-p1',
+          group_type: 'shared_material',
+          question_range: questionRange,
+          shared_stem: '根据以下资料，回答17-20题',
+          shared_assets: [
+            {
+              asset_id: 'fixture-chart-1',
+              block_type: 'chart',
+              page_no: 1,
+              bbox: [40, 60, 360, 160],
+              text: '2024年主要城市数字经济规模',
+            },
+          ],
+          source_page_span: [1, 1],
+          source_blocks: ['fixture-material-1', 'fixture-chart-1'],
+          grouping_evidence: ['explicit_range:17-20', 'material_intro:根据以下资料'],
+          grouping_confidence: 0.95,
+          needs_human_review: fallbackUsed || extractedButIncomplete,
+          warnings: [],
+        },
+      ],
+      question_groups: [],
+      normalized_questions: normalizedQuestions,
+      warnings: [],
+    },
+    quality_gate: {
+      extraction_complete: true,
+      ocr_complete: !extractedButIncomplete,
+      visual_assets_preserved: !layoutOnlyQuestionNos.size,
+      semantic_consistent: !layoutOnlyQuestionNos.size,
+      reasoning_verified: false,
+      review_ready: reviewReady,
+      extracted_but_incomplete: extractedButIncomplete || Boolean(layoutOnlyQuestionNos.size),
+      needs_human_review: fallbackUsed || extractedButIncomplete || Boolean(layoutOnlyQuestionNos.size),
+      blocking_reasons: [
+        ...(reviewReady ? [] : ['ocr_content_incomplete']),
+        ...(layoutOnlyQuestionNos.size ? ['layout_only_result'] : []),
+        ...(fallbackUsed ? ['provider_fallback_used'] : []),
+      ],
+      warnings: fallbackUsed ? ['provider_fallback_used'] : [],
+      per_question_status: questionRange.map((questionNo) => ({
+        question_id: `q-${questionNo}`,
+        question_no: questionNo,
+        group_type: 'shared_material',
+        complete: !(extractedButIncomplete && questionNo === 20) && !layoutOnlyQuestionNos.has(questionNo),
+        ocr_complete: !(extractedButIncomplete && questionNo === 20),
+        visual_assets_preserved: !layoutOnlyQuestionNos.has(questionNo),
+        semantic_consistent: !layoutOnlyQuestionNos.has(questionNo),
+        needs_human_review:
+          fallbackUsed || (extractedButIncomplete && questionNo === 20) || layoutOnlyQuestionNos.has(questionNo),
+        missing_fields: extractedButIncomplete && questionNo === 20 ? ['answer', 'analysis'] : [],
+        warnings: [
+          ...(extractedButIncomplete && questionNo === 20 ? ['answer_missing', 'analysis_unknown'] : []),
+          ...(layoutOnlyQuestionNos.has(questionNo) ? ['layout_only_result'] : []),
+        ],
+      })),
+    },
+    visual_understanding: {
+      triggered: true,
+      mode: 'mock',
+      provider: 'mock_visual_understanding',
+      visual_grouping_summary: 'visual_grouping_consistent:groups=1;questions=4',
+      confidence: 0.91,
+      warnings: [],
+    },
+    warnings: [],
+  };
+}
+
 async function run() {
   await testPublishSkipsLowConfidenceAndWarningQuestions();
+  await testCommercialOcrSummaryBackfillsCandidatesWithoutAiPreauditArtifacts();
+  await testCommercialOcrPublishGateRejectsBlockedPreviewPaper();
+  await testPublishResultUsesCommercialOcrGate();
   await testReadabilityReviewSendsSourceBboxSeparatelyFromImages();
   await testReadabilityReviewKeepsAdjacentSourceAndVisualLayersSeparated();
   await testQuestionImageOperationsOnlyTouchCurrentQuestion();
@@ -278,12 +411,155 @@ async function testPublishSkipsLowConfidenceAndWarningQuestions() {
 
   const result = await h.pdfService.publishResult('task-1', { publish_bank: true });
 
-  assert.equal(result.published_count, 2);
-  assert.equal(result.review_count, 1);
+  assert.equal(result.published_count, 1);
+  assert.equal(result.review_count, 2);
   assert.equal(h.questions[0].status, QuestionStatus.Published);
   assert.equal(h.questions[1].status, QuestionStatus.Draft);
+  assert.equal(h.questions[2].status, QuestionStatus.Draft);
   assert.equal(h.questions[1].needs_review, true);
   assert.deepEqual(h.questions[1].parse_warnings, ['visual_assignment_low_confidence']);
+}
+
+async function testCommercialOcrSummaryBackfillsCandidatesWithoutAiPreauditArtifacts() {
+  const h = harness();
+  h.questions.splice(
+    0,
+    h.questions.length,
+    ...(Array.from({ length: 4 }, (_unused, index) => ({
+      id: `qc${index + 1}`,
+      bank_id: 'bank-1',
+      parse_task_id: 'task-1',
+      index_num: 17 + index,
+      type: QuestionType.Single,
+      content: `第 ${17 + index} 题本地题干`,
+      option_a: '甲',
+      option_b: '乙',
+      option_c: '丙',
+      option_d: '丁',
+      images: [{ url: `shared-${17 + index}.png`, role: 'material', image_order: 1 }],
+      status: QuestionStatus.Draft,
+      needs_review: false,
+      parse_confidence: 0.93,
+      parse_warnings: [],
+      answer: 'A',
+      analysis: `第 ${17 + index} 题解析`,
+      created_at: new Date('2026-04-29T10:00:00.000Z'),
+    })) as Question[]),
+  );
+  h.tasks[0].result_summary = JSON.stringify({
+    stats: { commercial_ocr: commercialOcrSummaryFixture({ reviewReady: true }) },
+  });
+  const debugDir = join(process.cwd(), 'debug', 'pdf-ai-preaudit', 'task-1');
+  await rm(debugDir, { recursive: true, force: true });
+
+  const candidates = await h.pdfService.getPaperCandidates('task-1');
+
+  assert.equal(candidates.provider, 'mock_commercial_ocr');
+  assert.equal(candidates.questions.length, 4);
+  assert.equal(candidates.questions[0].provider_name, 'mock_commercial_ocr');
+  assert.equal(candidates.questions[0].shared_material, true);
+  assert.deepEqual(candidates.questions[0].material_group_question_indexes, [17, 18, 19, 20]);
+  assert.equal(candidates.questions[0].material?.content, '根据以下资料，回答17-20题');
+  assert.deepEqual(
+    candidates.questions.map((item) => item.material_group_id),
+    Array(4).fill('material-17-20-p1'),
+  );
+  assert.equal(candidates.questions[0].review_ready, true);
+}
+
+async function testCommercialOcrPublishGateRejectsBlockedPreviewPaper() {
+  const h = harness();
+  h.questions.splice(
+    0,
+    h.questions.length,
+    {
+      id: 'qc17',
+      bank_id: 'bank-1',
+      parse_task_id: 'task-1',
+      index_num: 17,
+      type: QuestionType.Single,
+      content: '第 17 题本地题干',
+      option_a: '甲',
+      option_b: '乙',
+      option_c: '丙',
+      option_d: '丁',
+      images: [{ url: 'shared-17.png', role: 'material', image_order: 1 }],
+      status: QuestionStatus.Draft,
+      needs_review: false,
+      parse_confidence: 0.93,
+      parse_warnings: [],
+      answer: null,
+      analysis: null,
+      created_at: new Date('2026-04-29T10:00:00.000Z'),
+    } as Question,
+  );
+  h.tasks[0].result_summary = JSON.stringify({
+    stats: {
+      commercial_ocr: commercialOcrSummaryFixture({
+        reviewReady: false,
+        extractedButIncomplete: true,
+        layoutOnlyQuestionNos: [17],
+      }),
+    },
+  });
+  const previewRoot = join(process.cwd(), 'debug', 'paper-drafts');
+  await mkdir(previewRoot, { recursive: true });
+  await writeFile(
+    join(previewRoot, 'blocked-paper.json'),
+    JSON.stringify(
+      {
+        paper_id: 'blocked-paper',
+        title: 'blocked preview paper',
+        sections: [{ id: 'section-1', title: '自动候选题', order: 1 }],
+        questions: [
+          {
+            candidate_id: 'task-1:17',
+            question_no: 17,
+            stem: '第 17 题题干',
+            options: { A: '甲', B: '乙', C: '丙', D: '丁' },
+          },
+        ],
+        source_task_id: 'task-1',
+        source_bank_id: 'bank-1',
+        created_at: new Date('2026-04-29T10:00:00.000Z').toISOString(),
+      },
+      null,
+      2,
+    ),
+    'utf-8',
+  );
+
+  await assert.rejects(
+    () => h.pdfService.publishDraftPaperPreview('blocked-paper', { dry_run: true }),
+    /quality gate|layout-only|结果不完整|答案缺失|解析缺失/,
+  );
+}
+
+async function testPublishResultUsesCommercialOcrGate() {
+  const h = harness();
+  Object.assign(h.questions[0], {
+    needs_review: false,
+    parse_warnings: [],
+    answer: 'A',
+    analysis: '解析存在',
+    index_num: 17,
+  });
+  h.questions.splice(1);
+  h.tasks[0].result_summary = JSON.stringify({
+    stats: {
+      commercial_ocr: commercialOcrSummaryFixture({
+        reviewReady: false,
+        extractedButIncomplete: true,
+        layoutOnlyQuestionNos: [17],
+      }),
+    },
+  });
+
+  const result = await h.pdfService.publishResult('task-1', { publish_bank: true });
+
+  assert.equal(result.published_count, 0);
+  assert.equal(result.review_count, 1);
+  assert.equal(h.questions[0].status, QuestionStatus.Draft);
 }
 
 async function testReadabilityReviewSendsSourceBboxSeparatelyFromImages() {

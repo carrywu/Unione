@@ -581,6 +581,14 @@ export class QuestionService {
       where: { id: In(dto.ids) },
       withDeleted: false,
     });
+    const blocked = questions.filter((question) => !this.canPublishQuestion(question));
+    if (blocked.length) {
+      throw new BadRequestException(
+        `存在未通过发布门禁的题目：${blocked
+          .map((question) => question.index_num || question.id)
+          .join(',')}`,
+      );
+    }
     await this.questionRepository.update(
       { id: In(dto.ids) },
       {
@@ -832,6 +840,29 @@ export class QuestionService {
         { key: 'PDF_VISUAL_PAGE_TIMEOUT_SECONDS' },
         { key: 'PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS' },
         { key: 'PDF_HEADER_FOOTER_BLACKLIST' },
+        { key: 'COMMERCIAL_OCR_ENABLED' },
+        { key: 'COMMERCIAL_OCR_REAL_SMOKE' },
+        { key: 'PDF_PARSE_PRIMARY_PROVIDER' },
+        { key: 'PDF_PARSE_FALLBACK_PROVIDERS' },
+        { key: 'MOCK_COMMERCIAL_OCR_FIXTURE_NAME' },
+        { key: 'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME' },
+        { key: 'MOCK_TENCENT_QUESTION_SPLIT_LAYOUT_FIXTURE_NAME' },
+        { key: 'OCR_PROVIDER_TRACE_ENABLED' },
+        { key: 'BAIDU_API_KEY' },
+        { key: 'BAIDU_SECRET_KEY' },
+        { key: 'BAIDU_ACCESS_TOKEN' },
+        { key: 'BAIDU_OCR_ENDPOINT' },
+        { key: 'BAIDU_OCR_TIMEOUT_MS' },
+        { key: 'TENCENT_SECRET_ID' },
+        { key: 'TENCENT_SECRET_KEY' },
+        { key: 'TENCENT_REGION' },
+        { key: 'TENCENT_OCR_ENDPOINT' },
+        { key: 'TENCENT_OCR_VERSION' },
+        { key: 'TENCENT_OCR_TIMEOUT_MS' },
+        { key: 'TENCENT_OCR_USE_NEW_MODEL' },
+        { key: 'TENCENT_OCR_ENABLE_IMAGE_CROP' },
+        { key: 'TENCENT_OCR_ENABLE_ONLY_DETECT_BORDER' },
+        { key: 'TENCENT_OCR_REAL_SMOKE' },
       ],
     });
     const values = new Map(configs.map((config) => [config.key, config.value]));
@@ -899,7 +930,78 @@ export class QuestionService {
         pdf_visual_page_timeout_seconds: read('PDF_VISUAL_PAGE_TIMEOUT_SECONDS'),
         pdf_visual_provider_timeout_seconds: read('PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS'),
         header_footer_blacklist: read('PDF_HEADER_FOOTER_BLACKLIST'),
+        commercial_ocr_enabled: read('COMMERCIAL_OCR_ENABLED', 'false'),
+        commercial_ocr_real_smoke: read('COMMERCIAL_OCR_REAL_SMOKE', 'false'),
+        pdf_parse_primary_provider: read('PDF_PARSE_PRIMARY_PROVIDER', 'mock_commercial_ocr'),
+      pdf_parse_fallback_providers: read(
+        'PDF_PARSE_FALLBACK_PROVIDERS',
+        'local_parser,mock_commercial_ocr',
+      ),
+      mock_commercial_ocr_fixture_name: read('MOCK_COMMERCIAL_OCR_FIXTURE_NAME'),
+      mock_tencent_question_split_fixture_name: read(
+        'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME',
+      ),
+      mock_tencent_question_split_layout_fixture_name: read(
+        'MOCK_TENCENT_QUESTION_SPLIT_LAYOUT_FIXTURE_NAME',
+      ),
+      ocr_provider_trace_enabled: read('OCR_PROVIDER_TRACE_ENABLED', 'true'),
+        baidu_api_key: read('BAIDU_API_KEY'),
+        baidu_secret_key: read('BAIDU_SECRET_KEY'),
+        baidu_access_token: read('BAIDU_ACCESS_TOKEN'),
+        baidu_ocr_endpoint: read('BAIDU_OCR_ENDPOINT'),
+        baidu_ocr_timeout_ms: read('BAIDU_OCR_TIMEOUT_MS', '60000'),
+        tencent_secret_id: read('TENCENT_SECRET_ID'),
+        tencent_secret_key: read('TENCENT_SECRET_KEY'),
+        tencent_region: read('TENCENT_REGION', 'ap-guangzhou'),
+        tencent_ocr_endpoint: read('TENCENT_OCR_ENDPOINT', 'https://ocr.tencentcloudapi.com'),
+        tencent_ocr_version: read('TENCENT_OCR_VERSION', '2018-11-19'),
+        tencent_ocr_timeout_ms: read('TENCENT_OCR_TIMEOUT_MS', '60000'),
+        tencent_ocr_use_new_model: read('TENCENT_OCR_USE_NEW_MODEL', 'false'),
+        tencent_ocr_enable_image_crop: read('TENCENT_OCR_ENABLE_IMAGE_CROP', 'false'),
+        tencent_ocr_enable_only_detect_border: read(
+          'TENCENT_OCR_ENABLE_ONLY_DETECT_BORDER',
+          'false',
+        ),
+        tencent_ocr_real_smoke: read('TENCENT_OCR_REAL_SMOKE', 'false'),
       }).filter(([, value]) => Boolean(value)),
+    );
+  }
+
+  private canPublishQuestion(question: Question) {
+    const warnings = Array.isArray(question.parse_warnings) ? question.parse_warnings : [];
+    const commercial =
+      question.question_quality &&
+      typeof question.question_quality === 'object' &&
+      question.question_quality.commercial_ocr &&
+      typeof question.question_quality.commercial_ocr === 'object'
+        ? (question.question_quality.commercial_ocr as Record<string, any>)
+        : null;
+    const qualityGate =
+      commercial?.quality_gate && typeof commercial.quality_gate === 'object'
+        ? (commercial.quality_gate as Record<string, any>)
+        : null;
+    const questionGate =
+      commercial?.quality_gate_question_status &&
+      typeof commercial.quality_gate_question_status === 'object'
+        ? (commercial.quality_gate_question_status as Record<string, any>)
+        : null;
+    const layoutOnly = Array.isArray(questionGate?.warnings)
+      ? questionGate.warnings.includes('layout_only_result')
+      : false;
+    return Boolean(
+      question.status !== QuestionStatus.Published &&
+        !question.needs_review &&
+        warnings.length === 0 &&
+        question.answer &&
+        question.analysis &&
+        String(question.analysis).trim().toLowerCase() !== 'unknown' &&
+        !layoutOnly &&
+        (!commercial ||
+          (qualityGate?.review_ready === true &&
+            qualityGate?.extracted_but_incomplete !== true &&
+            qualityGate?.needs_human_review !== true &&
+            commercial?.fallback_used !== true &&
+            questionGate?.needs_human_review !== true)),
     );
   }
 
