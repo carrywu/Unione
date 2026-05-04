@@ -140,8 +140,8 @@
         "admin-web build 通过"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "补充 build/、*.tmp、.pytest_cache/、.mypy_cache/、.ruff_cache/、.coverage。已有 node_modules/dist/.vite/coverage/playwright-report/test-results/*.log/.DS_Store/__pycache__/.env。无密钥被跟踪。backend build PASS, admin-web build PASS。"
     },
     {
       "id": "US-006",

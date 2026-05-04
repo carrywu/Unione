@@ -153,3 +153,23 @@ History
 - 截图/trace/debug 路径: `debug/git-hygiene/20260504-182031/cleanup-report.md`, `debug/ralph-e2e/US-004-20260504-182835/`
 - 发现的可复用模式: .agent/ 目录包含 tracked 和 untracked 混合文件，归档前需用 `git ls-files` 区分；debug/ 在 .gitignore 中，commit 需 `git add -f`
 - 仍需后续 story 处理的问题: US-005 .gitignore 加固（防止后续构建产物再次污染 git status）
+
+[2026-05-04 18:38:00 CST (+0800)] US-005
+- 实现/测试了什么: .gitignore 仓库卫生加固。检查并补充根目录 .gitignore 缺失模式。
+- 修改文件: `.gitignore`
+- 清理了什么: 无
+- 保留了什么: 所有现有 .gitignore 规则
+- 运行了哪些命令: `cat .gitignore`, `cat backend/.gitignore`, `cat pdf-service/.gitignore`, `cat admin-web/.gitignore`, `git ls-files | grep -E '\.env$|secret|credential|password|token|key\.json'`, `npm run build` (backend + admin-web)
+- 结果是否通过: 是。backend build PASS, admin-web build PASS。
+- 新增 .gitignore 模式:
+  - `build/`, `*/build/` — 构建输出目录
+  - `*.tmp` — 临时文件
+  - `.pytest_cache/` — pytest 缓存
+  - `.mypy_cache/` — mypy 类型检查缓存
+  - `.ruff_cache/` — ruff lint 缓存
+  - `.coverage` — coverage 数据文件
+- 已有模式确认: node_modules, dist, .vite, coverage, playwright-report, test-results, *.log, .DS_Store, __pycache__, .env/.env.*（!.env.example）均已存在
+- 密钥检查: 无 .env 或密钥文件被 git 跟踪（仅 .env.example 变体）
+- 截图/trace/debug 路径: 无新 debug 文件
+- 发现的可复用模式: 根 .gitignore 使用 `.env.*` + `!.env.example` 模式覆盖 .env.local/.env.*.local；backend/admin-web/pdf-service 各有独立 .gitignore 但大部分规则已由根目录覆盖
+- 仍需后续 story 处理的问题: US-006 建立 Ralph 基线与运行手册

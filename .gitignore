@@ -17,7 +17,9 @@ __pycache__/
 
 # Build and generated output
 dist/
+build/
 */dist/
+*/build/
 .turbo/
 .vite/
 coverage/
@@ -35,8 +37,15 @@ backend/debug/
 pdf-service/tmp/
 pdf-service/*.pdf
 *.log
+*.tmp
 h5-console-errors.txt
 *.zip
+
+# Python caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
 
 # Large local media/screenshots
 *.png
