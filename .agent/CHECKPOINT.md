@@ -5,7 +5,7 @@
 - 当前 task_id：`836fec20-2628-44ed-9642-aedd57467864`
 - 当前阶段：`M6_COMPLETE`
 - 当前结论：`M2_PASS / M3_PASS / M4_PASS / M6_PASS`
-- 当前 M5 状态：`M5A_BLOCKED(缺真实答本输入) / M5B_FAIL(缺真实 similarity 服务)`
+- 当前 M5 状态：`M5A_IN_PROGRESS(待读取 /home/carry/答本 与真实对撞) / M5B_PASS(真实 similarity / duplicate 已接入)`
 - 当前分支：`main`
 - 最近已推送代码提交：`6429fee test(pdf): add publish smoke workflow`
 
@@ -29,5 +29,5 @@
 
 ## 下一步
 
-1. 提交并推送 docs/report/handoff 更新
-2. 如继续推进，下一里程碑才是 `M5` 真服务补齐或 `M7`，不是回头改 M2/M3/M4 主逻辑
+1. 提交并推送 `M5B` 真实 similarity / duplicate 链路
+2. 读取 `/home/carry/题本` 与 `/home/carry/答本`，推进 `M5A` 真实答本对撞

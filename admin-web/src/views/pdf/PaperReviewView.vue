@@ -432,6 +432,57 @@
                   <dd>{{ textOr(selectedCandidate.m5_similarity?.empty_state_text, '暂无相似题候选') }}</dd>
                 </div>
               </dl>
+              <div
+                v-if="(selectedCandidate.m5_similarity?.similarity_candidates || []).length"
+                class="image-linkage-list"
+              >
+                <article
+                  v-for="match in selectedCandidate.m5_similarity?.similarity_candidates || []"
+                  :key="`${match.question_id || 'unknown'}-${match.edge_type || 'similar'}`"
+                  class="image-linkage-card"
+                >
+                  <div class="candidate-row-top">
+                    <strong>{{ similarityCandidateTitle(match) }}</strong>
+                    <div class="candidate-tags">
+                      <span>{{ textOr(match.edge_type, 'similar') }}</span>
+                      <span>{{ similarityScoreText(match.similarity_score) }}</span>
+                      <span v-if="match.exact_signature_match">exact_signature</span>
+                    </div>
+                  </div>
+                  <p>
+                    <MathText
+                      :text="truncate(textOr(match.content || match.source_text_span, '历史题内容缺失'), 120)"
+                      fallback="历史题内容缺失"
+                    />
+                  </p>
+                  <dl class="evidence-list compact">
+                    <div>
+                      <dt>question_id</dt>
+                      <dd>{{ textOr(match.question_id, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>bank_id</dt>
+                      <dd>{{ textOr(match.bank_id, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>parse_task_id</dt>
+                      <dd>{{ textOr(match.parse_task_id, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>source_pages</dt>
+                      <dd>{{ similaritySourcePagesText(match.source_page_refs) }}</dd>
+                    </div>
+                    <div>
+                      <dt>status</dt>
+                      <dd>{{ textOr(match.status, '未提供') }} / {{ textOr(match.review_status, '未提供') }}</dd>
+                    </div>
+                    <div>
+                      <dt>visual_summary</dt>
+                      <dd><MathText :text="match.visual_summary" fallback="未提供" /></dd>
+                    </div>
+                  </dl>
+                </article>
+              </div>
               <div class="candidate-actions">
                 <el-button size="small" :loading="actionLoading" data-testid="keep-both-button" @click="runReviewAction('keep_both')">
                   keep_both
@@ -992,6 +1043,23 @@ function booleanText(value: unknown) {
 function joinList(value: unknown) {
   if (!Array.isArray(value) || !value.length) return '无';
   return value.map((item) => textOr(item, '')).filter(Boolean).join('、') || '无';
+}
+
+function similarityCandidateTitle(match: Record<string, any>) {
+  const bankId = textOr(match.bank_id, 'unknown-bank');
+  const questionNo = match.question_no ? `第 ${match.question_no} 题` : textOr(match.question_id, '未知题目');
+  return `${bankId} · ${questionNo}`;
+}
+
+function similarityScoreText(value?: number | null) {
+  return value === null || value === undefined
+    ? 'score 未提供'
+    : `score ${Number(value).toFixed(2)}`;
+}
+
+function similaritySourcePagesText(value: unknown) {
+  if (!Array.isArray(value) || !value.length) return '未提供';
+  return value.map((item) => textOr(item, '')).filter(Boolean).join(', ') || '未提供';
 }
 
 onMounted(loadCandidates);

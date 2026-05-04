@@ -141,7 +141,27 @@ export interface PaperCandidate {
     duplicate_status?: string;
     duplicate_cluster_id?: string | null;
     canonical_question_id?: string | null;
-    similarity_candidates?: Array<Record<string, any>>;
+    similarity_candidates?: Array<{
+      question_id?: string | null;
+      bank_id?: string | null;
+      parse_task_id?: string | null;
+      question_no?: number | null;
+      status?: string | null;
+      review_status?: string | null;
+      edge_type?: string | null;
+      similarity_score?: number | null;
+      stem_score?: number | null;
+      options_score?: number | null;
+      exact_signature_match?: boolean;
+      content?: string | null;
+      source_text_span?: string | null;
+      answer?: string | null;
+      analysis?: string | null;
+      source_page_refs?: number[];
+      shared_material?: boolean;
+      visual_summary?: string | null;
+      has_visual_context?: boolean;
+    }>;
     edge_type?: string | null;
     final_similarity_score?: number | null;
     decision_status?: string | null;

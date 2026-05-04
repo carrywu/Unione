@@ -23,13 +23,12 @@
 
 ## M5/M6 口径
 
-- `M5A_BLOCKED`
-  - 缺真实答本/解析本输入
-  - 页面与 API 均展示明确空状态
-  - seeded fixture 仅用于 UI/交互测试，不写正式库
-- `M5B_FAIL`
-  - 未接入真实 similarity/duplicate 服务
-  - 页面验证的是 empty-state 与人工决策审计，不伪造候选
+- `M5A_IN_PROGRESS`
+  - 下一步直接读取 `/home/carry/答本` 做真实答本/解析本对撞
+  - seeded fixture 只能作为兜底 UI 验证，不能再作为 authoritative 结果
+- `M5B_PASS`
+  - backend 已接入真实历史题库 similarity / duplicate 候选生成
+  - admin-web 已展示真实候选明细、分数、来源与人工决策区
 - `M6_PASS`
   - `M6A_PASS`
   - `M6B_PASS`
@@ -55,6 +54,6 @@
 
 ## 建议续跑顺序
 
-1. 推送当前 docs/report/handoff 更新
-2. 如果继续托管，优先补齐真实 `M5A` 输入与 `M5B` 相似题服务
+1. 推送当前 `M5B` 代码与 report/handoff 更新
+2. 读取 `/home/carry/题本` 与 `/home/carry/答本`，完成真实 `M5A` 对撞
 3. `M7` 仍未启动，需要用户另行授权进入合规/审计加固阶段

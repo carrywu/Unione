@@ -238,6 +238,7 @@ async function run() {
   await testPaperCandidatesDraftAndPreviewFromAiPreauditArtifacts();
   await testPaperCandidatesFillM4CoverageAndSemanticArtifacts();
   await testPaperCandidatesExposeM5EmptyStateAndSeededFixture();
+  await testPaperCandidatesExposeRealSimilarityCandidates();
   await testBuildTaskConsistencyPreviewIncludesAllQuestions();
   await testPaperCandidatesDoNotTreatMaterialBindingFailureAsMissingPreviousPage();
   await testPaperCandidatesRejectQuestionNumberGapsFailClosed();
@@ -934,16 +935,140 @@ async function testPaperCandidatesExposeM5EmptyStateAndSeededFixture() {
 
     const candidates = await h.pdfService.getPaperCandidates('task-1');
     assert.equal(candidates.m5a_verdict, 'M5A_BLOCKED_BY_MISSING_ANSWER_BOOK');
-    assert.equal(candidates.m5b_verdict, 'M5B_FAIL');
+    assert.equal(candidates.m5b_verdict, 'M5B_PASS');
     assert.match((candidates.non_blocking_warnings || []).join(' '), /未提供答本\/解析本/);
-    assert.match((candidates.non_blocking_warnings || []).join(' '), /相似题服务/);
+    assert.match((candidates.non_blocking_warnings || []).join(' '), /历史题库暂为空/);
     assert.equal(candidates.questions[0].m5_answer_book?.verdict, 'fixture_only');
     assert.equal(candidates.questions[0].m5_answer_book?.fixture_only, true);
     assert.equal(candidates.questions[0].m5_answer_book?.answer_from_answer_book, 'A');
     assert.equal(candidates.questions[0].m5_answer_book?.analysis_from_answer_book, '旧官方解析');
     assert.match(candidates.questions[0].m5_answer_book?.empty_state_text || '', /未提供答本\/解析本/);
     assert.equal(candidates.questions[0].m5_similarity?.duplicate_status, 'no_similarity_candidates');
-    assert.match(candidates.questions[0].m5_similarity?.empty_state_text || '', /尚未接入历史题库相似题候选/);
+    assert.match(candidates.questions[0].m5_similarity?.empty_state_text || '', /历史题库为空/);
+  } finally {
+    await rm(debugDir, { recursive: true, force: true });
+  }
+}
+
+async function testPaperCandidatesExposeRealSimilarityCandidates() {
+  const h = harness();
+  const debugDir = join(process.cwd(), 'debug', 'pdf-ai-preaudit', 'task-1');
+
+  await rm(debugDir, { recursive: true, force: true });
+  await mkdir(debugDir, { recursive: true });
+
+  h.questions.push({
+    id: 'q-legacy-1',
+    bank_id: 'bank-legacy',
+    parse_task_id: 'task-legacy',
+    index_num: 88,
+    type: QuestionType.Single,
+    content: '高置信题',
+    source_text_span: '高置信题',
+    option_a: 'A',
+    option_b: 'B',
+    option_c: 'C',
+    option_d: 'D',
+    status: QuestionStatus.Published,
+    needs_review: false,
+    parse_warnings: [],
+    created_at: new Date('2026-04-28T10:00:00.000Z'),
+  } as Question);
+
+  try {
+    await writeFile(
+      join(debugDir, 'ai-preaudit-debug.json'),
+      JSON.stringify({ qwen_vl_enabled: true, qwen_vl_call_count_after: 1 }, null, 2),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'final-preview-payload.json'),
+      JSON.stringify(
+        {
+          questions: [
+            {
+              question_no: 1,
+              stem: '高置信题',
+              options: { A: 'A', B: 'B', C: 'C', D: 'D' },
+              visual_parse_status: 'success',
+              source_page_refs: [1],
+              source_bbox: [10, 20, 220, 90],
+              source_text_span: '高置信题',
+              risk_flags: [],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'semantic-groups.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            source_page_start: 1,
+            source_page_end: 1,
+            source_text_span: '高置信题',
+            stem_group: {
+              text: '高置信题',
+              bbox: [10, 20, 220, 90],
+              source_text_span: '高置信题',
+            },
+            options_group: {
+              blocks: [
+                { label: 'A', text: 'A' },
+                { label: 'B', text: 'B' },
+                { label: 'C', text: 'C' },
+                { label: 'D', text: 'D' },
+              ],
+            },
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    await writeFile(
+      join(debugDir, 'ai-audit-results.json'),
+      JSON.stringify(
+        [
+          {
+            question_no: 1,
+            ai_audit_status: 'passed',
+            ai_audit_verdict: '可通过',
+            ai_audit_summary: '结构完整。',
+            answer_suggestion: 'A',
+            analysis_suggestion: '沿用当前题目已有解析。',
+            risk_flags: [],
+          },
+        ],
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const candidates = await h.pdfService.getPaperCandidates('task-1');
+    assert.equal(candidates.m5b_verdict, 'M5B_PASS');
+    assert.equal(candidates.questions[0].m5_similarity?.duplicate_status, 'duplicate');
+    assert.equal(candidates.questions[0].m5_similarity?.edge_type, 'duplicate');
+    assert.equal(candidates.questions[0].m5_similarity?.canonical_question_id, 'q-legacy-1');
+    assert.equal(
+      candidates.questions[0].m5_similarity?.similarity_candidates?.[0]?.question_id,
+      'q-legacy-1',
+    );
+    assert.equal(
+      candidates.questions[0].m5_similarity?.similarity_candidates?.[0]?.edge_type,
+      'duplicate',
+    );
+    assert.match(
+      candidates.questions[0].m5_similarity?.empty_state_text || '',
+      /已检索 1 道历史题，命中 1 个相似候选/,
+    );
   } finally {
     await rm(debugDir, { recursive: true, force: true });
   }

@@ -4,8 +4,8 @@
 - m2_verdict: `M2_PASS`
 - m3_verdict: `M3_PASS`
 - m4_verdict: `M4_PASS`
-- m5a_verdict: `M5A_BLOCKED`
-- m5b_verdict: `M5B_FAIL`
+- m5a_verdict: `M5A_IN_PROGRESS`
+- m5b_verdict: `M5B_PASS`
 - m6a_verdict: `M6A_PASS`
 - m6b_verdict: `M6B_PASS`
 - m6c_verdict: `M6C_PASS`
@@ -37,8 +37,7 @@
 
 ## Non-Blocking Warnings
 
-- `M5A_BLOCKED`：未提供真实答本/解析本输入，当前只验证真实空状态与 seeded fixture UI。
-- `M5B_FAIL`：未接入真实 similarity/duplicate 服务，当前只验证 empty-state 与人工审计闭环。
+- `M5A_IN_PROGRESS`：真实答本/解析本目录待读取并进入正式对撞；当前只保留 seeded fixture 作为 UI 兜底。
 - 本地 `.env` 与 `backend/.env` 存在真实密钥，但未进入暂存区或提交；扫描输出已脱敏。
 
 ## Evidence

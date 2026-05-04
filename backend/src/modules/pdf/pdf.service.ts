@@ -568,6 +568,11 @@ export class PdfService {
       relations: ['material'],
       order: { index_num: 'ASC', created_at: 'ASC' },
     });
+    const historicalQuestions = (
+      await this.questionRepository.find({
+        order: { created_at: 'DESC' },
+      })
+    ).filter((question) => question.parse_task_id !== task.id);
     const sourceQuestionsByNo = new Map(
       sourceQuestions.map((question) => [String(question.index_num), question]),
     );
@@ -630,6 +635,12 @@ export class PdfService {
       );
       const sourceQuestion =
         sourceQuestionsByNo.get(String(questionNo)) || sourceQuestions[index] || null;
+      const similarityCandidates = this.findHistoricalSimilarityCandidates({
+        task,
+        candidate: baseCandidate,
+        sourceQuestion,
+        historicalQuestions,
+      });
       return this.decoratePaperCandidateForM6({
         task,
         candidate: baseCandidate,
@@ -637,6 +648,8 @@ export class PdfService {
         answerSources:
           questionNo !== null ? answerSourcesByIndex.get(Number(questionNo)) || [] : [],
         pageMaterialContext,
+        similarityCandidates,
+        historicalQuestionCount: historicalQuestions.length,
         reviewDecision:
           reviewState.review_decisions?.[baseCandidate.candidate_id] || {},
         questionEvents:
@@ -691,7 +704,7 @@ export class PdfService {
       m5a_verdict: answerSources.length
         ? 'M5A_PASS'
         : 'M5A_BLOCKED_BY_MISSING_ANSWER_BOOK',
-      m5b_verdict: 'M5B_FAIL',
+      m5b_verdict: 'M5B_PASS',
       publish_preview: reviewState.publish_preview || null,
       debug_dir: debug.debug_dir,
       provider: this.firstNonEmptyProvider(debug),
@@ -703,7 +716,9 @@ export class PdfService {
         answerSources.length
           ? null
           : '未提供答本/解析本，M5A 当前仅展示 empty-state 与 seeded fixture，不写入正式库',
-        '尚未接入历史题库相似题服务，M5B 当前仅展示空状态与人工决策留痕',
+        historicalQuestions.length
+          ? null
+          : '历史题库暂为空，M5B 已执行真实检索，但当前暂无可比对题目',
       ].filter(Boolean),
       questions,
       artifact_refs: {
@@ -1513,6 +1528,8 @@ export class PdfService {
     sourceQuestion: Question | null;
     answerSources: AnswerSource[];
     pageMaterialContext: Map<number, Array<Record<string, any>>>;
+    similarityCandidates: Array<Record<string, any>>;
+    historicalQuestionCount: number;
     reviewDecision: Record<string, any>;
     questionEvents: Array<Record<string, any>>;
   }) {
@@ -1525,6 +1542,8 @@ export class PdfService {
     });
     const similarity = this.buildPaperCandidateSimilarity({
       reviewDecision: input.reviewDecision,
+      similarityCandidates: input.similarityCandidates,
+      historicalQuestionCount: input.historicalQuestionCount,
     });
     const material = this.buildPaperCandidateMaterial({
       candidate: input.candidate,
@@ -1717,31 +1736,322 @@ export class PdfService {
 
   private buildPaperCandidateSimilarity(input: {
     reviewDecision: Record<string, any>;
+    similarityCandidates: Array<Record<string, any>>;
+    historicalQuestionCount: number;
   }) {
+    const computedCandidates = input.similarityCandidates;
+    const topCandidate = computedCandidates[0] || null;
+    const computedDuplicateStatus = topCandidate?.edge_type || 'no_similarity_candidates';
+    const computedClusterId =
+      topCandidate?.duplicate_cluster_id ||
+      (topCandidate?.similarity_signature
+        ? `sim_${createHash('sha256')
+            .update(String(topCandidate.similarity_signature))
+            .digest('hex')
+            .slice(0, 12)}`
+        : null);
+    const emptyStateText = computedCandidates.length
+      ? `已检索 ${input.historicalQuestionCount} 道历史题，命中 ${computedCandidates.length} 个相似候选`
+      : input.historicalQuestionCount
+        ? `已检索 ${input.historicalQuestionCount} 道历史题，未命中相似候选`
+        : '历史题库为空，暂无可比对题目';
     return {
       duplicate_status:
-        this.firstMeaningfulText(input.reviewDecision.duplicate_status) ||
-        'no_similarity_candidates',
+        this.firstMeaningfulText(
+          input.reviewDecision.duplicate_status,
+          computedDuplicateStatus,
+        ) || 'no_similarity_candidates',
       duplicate_cluster_id:
-        this.firstMeaningfulText(input.reviewDecision.duplicate_cluster_id) ||
-        null,
+        this.firstMeaningfulText(
+          input.reviewDecision.duplicate_cluster_id,
+          computedClusterId,
+        ) || null,
       canonical_question_id:
-        this.firstMeaningfulText(input.reviewDecision.canonical_question_id) ||
-        null,
+        this.firstMeaningfulText(
+          input.reviewDecision.canonical_question_id,
+          topCandidate?.question_id,
+        ) || null,
       similarity_candidates: Array.isArray(input.reviewDecision.similarity_candidates)
         ? input.reviewDecision.similarity_candidates
-        : [],
+        : computedCandidates,
       edge_type:
-        this.firstMeaningfulText(input.reviewDecision.edge_type) || null,
+        this.firstMeaningfulText(
+          input.reviewDecision.edge_type,
+          topCandidate?.edge_type,
+        ) || null,
       final_similarity_score: this.toOptionalNumber(
-        input.reviewDecision.final_similarity_score,
+        input.reviewDecision.final_similarity_score ??
+          topCandidate?.similarity_score,
       ),
       decision_status:
         this.firstMeaningfulText(input.reviewDecision.similarity_decision) ||
         'not_reviewed',
-      empty_state_text:
-        '尚未接入历史题库相似题候选，当前仅支持空状态审核与人工决策留痕',
+      empty_state_text: emptyStateText,
     };
+  }
+
+  private findHistoricalSimilarityCandidates(input: {
+    task: ParseTask;
+    candidate: Record<string, any>;
+    sourceQuestion: Question | null;
+    historicalQuestions: Question[];
+  }) {
+    const candidateStem =
+      this.firstMeaningfulText(
+        input.candidate.source_text_span,
+        input.candidate.stem,
+        input.sourceQuestion?.source_text_span,
+        input.sourceQuestion?.content,
+      ) || '';
+    const candidateOptions = this.paperCandidateSimilarityOptions(
+      input.candidate,
+      input.sourceQuestion,
+    );
+    const candidateSignature = this.buildQuestionSimilaritySignature({
+      stem: candidateStem,
+      options: candidateOptions,
+    });
+    const candidateRiskFlags = this.toStringArray(input.candidate.risk_flags);
+    const candidateMaterialDependent = this.isMaterialDependentCandidate(
+      candidateStem,
+      candidateRiskFlags,
+    );
+
+    const matches = input.historicalQuestions
+      .filter((question) => question.id !== input.sourceQuestion?.id)
+      .map((question) => {
+        const historyStem =
+          this.firstMeaningfulText(question.source_text_span, question.content) || '';
+        const historyOptions = this.paperCandidateSimilarityOptions(question);
+        const historySignature = this.buildQuestionSimilaritySignature({
+          stem: historyStem,
+          options: historyOptions,
+        });
+        const stemScore = this.textSimilarityScore(candidateStem, historyStem);
+        const optionsScore = this.optionsSimilarityScore(
+          candidateOptions,
+          historyOptions,
+        );
+        const sourceTextScore = this.textSimilarityScore(
+          this.firstMeaningfulText(
+            input.candidate.source_text_span,
+            input.candidate.stem,
+          ) || candidateStem,
+          this.firstMeaningfulText(
+            question.source_text_span,
+            question.content,
+          ) || historyStem,
+        );
+        const similarityScore = Number(
+          (
+            Math.max(
+              sourceTextScore * 0.75 + optionsScore * 0.25,
+              stemScore * 0.7 + optionsScore * 0.3,
+            )
+          ).toFixed(3),
+        );
+        const edgeType = this.classifyHistoricalSimilarityEdge({
+          candidateSignature,
+          historySignature,
+          similarityScore,
+          stemScore,
+          optionsScore,
+          candidateMaterialDependent,
+          historyMaterialDependent: this.isMaterialDependentCandidate(
+            historyStem,
+            this.toStringArray(question.parse_warnings),
+          ),
+        });
+        if (!edgeType) return null;
+        return {
+          question_id: question.id,
+          bank_id: question.bank_id,
+          parse_task_id: question.parse_task_id || null,
+          question_no: question.index_num ?? null,
+          status: question.status || null,
+          review_status: question.review_status || null,
+          edge_type: edgeType,
+          similarity_score: similarityScore,
+          stem_score: Number(stemScore.toFixed(3)),
+          options_score: Number(optionsScore.toFixed(3)),
+          exact_signature_match: Boolean(
+            candidateSignature &&
+              historySignature &&
+              candidateSignature === historySignature,
+          ),
+          duplicate_cluster_id:
+            candidateSignature && historySignature && candidateSignature === historySignature
+              ? `sim_${createHash('sha256')
+                  .update(candidateSignature)
+                  .digest('hex')
+                  .slice(0, 12)}`
+              : null,
+          similarity_signature: historySignature,
+          content: question.content || null,
+          source_text_span: question.source_text_span || null,
+          answer: question.answer || null,
+          analysis: question.analysis || null,
+          source_page_refs: this.questionSourcePageRefsFromEntity(question),
+          shared_material: Boolean(question.shared_material),
+          visual_summary: question.visual_summary || null,
+          has_visual_context: Boolean(question.has_visual_context),
+        };
+      })
+      .filter((item) => Boolean(item)) as Array<Record<string, any>>;
+    const orderedMatches = matches
+      .sort((left, right) => {
+        const rankDelta =
+          this.similarityEdgeRank(left.edge_type) -
+          this.similarityEdgeRank(right.edge_type);
+        if (rankDelta !== 0) return rankDelta;
+        const scoreDelta =
+          Number(right.similarity_score || 0) - Number(left.similarity_score || 0);
+        if (scoreDelta !== 0) return scoreDelta;
+        return String(left.question_id || '').localeCompare(
+          String(right.question_id || ''),
+        );
+      });
+
+    const deduped: Array<Record<string, any>> = [];
+    const seen = new Set<string>();
+    for (const item of orderedMatches) {
+      const key = this.safeDisplayText(item.question_id, '');
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(item);
+      if (deduped.length >= 5) break;
+    }
+    return deduped;
+  }
+
+  private paperCandidateSimilarityOptions(
+    candidate: Record<string, any>,
+    sourceQuestion?: Question | null,
+  ) {
+    const candidateOptions = this.normalizeCandidateOptions(candidate.options);
+    return {
+      A:
+        this.firstMeaningfulText(
+          candidateOptions.A,
+          candidate.option_a,
+          sourceQuestion?.option_a,
+        ) || '',
+      B:
+        this.firstMeaningfulText(
+          candidateOptions.B,
+          candidate.option_b,
+          sourceQuestion?.option_b,
+        ) || '',
+      C:
+        this.firstMeaningfulText(
+          candidateOptions.C,
+          candidate.option_c,
+          sourceQuestion?.option_c,
+        ) || '',
+      D:
+        this.firstMeaningfulText(
+          candidateOptions.D,
+          candidate.option_d,
+          sourceQuestion?.option_d,
+        ) || '',
+    };
+  }
+
+  private buildQuestionSimilaritySignature(input: {
+    stem?: unknown;
+    options?: Record<string, unknown>;
+  }) {
+    const stem = this.normalizeTextForSignature(input.stem);
+    const options = ['A', 'B', 'C', 'D'].map((label) =>
+      this.normalizeTextForSignature(input.options?.[label]),
+    );
+    if (!stem && !options.some(Boolean)) return null;
+    return JSON.stringify({ stem, options });
+  }
+
+  private classifyHistoricalSimilarityEdge(input: {
+    candidateSignature: string | null;
+    historySignature: string | null;
+    similarityScore: number;
+    stemScore: number;
+    optionsScore: number;
+    candidateMaterialDependent: boolean;
+    historyMaterialDependent: boolean;
+  }) {
+    if (
+      input.candidateSignature &&
+      input.historySignature &&
+      input.candidateSignature === input.historySignature
+    ) {
+      return 'duplicate';
+    }
+    if (
+      input.similarityScore >= 0.93 ||
+      (input.stemScore >= 0.96 && input.optionsScore >= 0.5)
+    ) {
+      return 'near';
+    }
+    if (
+      input.candidateMaterialDependent &&
+      input.historyMaterialDependent &&
+      input.stemScore >= 0.58
+    ) {
+      return 'sibling';
+    }
+    if (input.similarityScore >= 0.6 || input.stemScore >= 0.68) {
+      return 'similar';
+    }
+    return null;
+  }
+
+  private similarityEdgeRank(edgeType: unknown) {
+    const order = ['duplicate', 'near', 'sibling', 'similar'];
+    const index = order.indexOf(this.safeDisplayText(edgeType, ''));
+    return index >= 0 ? index : order.length;
+  }
+
+  private optionsSimilarityScore(
+    left: Record<string, string>,
+    right: Record<string, string>,
+  ) {
+    let compared = 0;
+    let matched = 0;
+    for (const label of ['A', 'B', 'C', 'D'] as const) {
+      const leftText = this.normalizeTextForSignature(left[label]);
+      const rightText = this.normalizeTextForSignature(right[label]);
+      if (!leftText && !rightText) continue;
+      compared += 1;
+      if (leftText && rightText && leftText === rightText) matched += 1;
+    }
+    return compared ? matched / compared : 0;
+  }
+
+  private textSimilarityScore(left: unknown, right: unknown) {
+    const leftText = this.normalizeTextForSignature(left);
+    const rightText = this.normalizeTextForSignature(right);
+    if (!leftText || !rightText) return 0;
+    if (leftText === rightText) return 1;
+    const leftTokens = this.textSimilarityTokens(leftText);
+    const rightTokens = this.textSimilarityTokens(rightText);
+    if (!leftTokens.size || !rightTokens.size) return 0;
+    let overlap = 0;
+    leftTokens.forEach((token) => {
+      if (rightTokens.has(token)) overlap += 1;
+    });
+    return (2 * overlap) / (leftTokens.size + rightTokens.size);
+  }
+
+  private textSimilarityTokens(value: string) {
+    const tokens = new Set<string>();
+    if (!value) return tokens;
+    if (value.length <= 2) {
+      tokens.add(value);
+      return tokens;
+    }
+    for (let index = 0; index < value.length - 1; index += 1) {
+      tokens.add(value.slice(index, index + 2));
+    }
+    return tokens;
   }
 
   private normalizeM4DebugPayload(input: {

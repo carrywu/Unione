@@ -1,6 +1,6 @@
 # 最终报告
 
-一句话结论：`836fec20-2628-44ed-9642-aedd57467864` 已完成 `M6_PASS`，admin-web 审核闭环、H5 移动端一致性、preview/dry-run 发布 smoke 均通过；当前剩余仅是 `M5A` 缺真实答本输入与 `M5B` 缺真实相似题服务的非阻塞增强项。
+一句话结论：`836fec20-2628-44ed-9642-aedd57467864` 已完成 `M6_PASS`，且 `M5B` 真实 similarity / duplicate 链路已接入；admin-web 审核闭环、H5 移动端一致性、preview/dry-run 发布 smoke 均通过。当前仅剩 `M5A` 真实答本对撞待继续完成。
 
 ## 1. 当前 task_id
 
@@ -21,10 +21,10 @@
 - M2：`PASS`
 - M3：`PASS`
 - M4：`PASS`
-- M5A：`BLOCKED`
-  - 原因：未提供真实答本/解析本输入
-- M5B：`FAIL`
-  - 原因：未接入真实 similarity/duplicate 服务
+- M5A：`IN_PROGRESS`
+  - 下一步：读取 `/home/carry/答本` 做真实答本/解析本对撞
+- M5B：`PASS`
+  - backend 与 admin-web 均已接入真实 similarity/duplicate 候选链路
 - M6A：`PASS`
 - M6B：`PASS`
 - M6C：`PASS`
@@ -40,7 +40,7 @@
   - 题干 / 选项 / 材料 / 图片图表
   - M4 AI 预审核字段
   - M5A 答本候选空状态或 seeded fixture
-  - M5B 相似题空状态与人工决策区
+  - M5B 相似题真实候选与人工决策区
 - 可执行动作列表：
   - `accept_match`
   - `ignore_similarity`
@@ -150,10 +150,8 @@
 
 ## 11. 未完成项 / 阻塞项
 
-- `M5A_BLOCKED`：
-  - 仍需用户提供真实答本/解析本原始输入，才能把答本候选从 seeded fixture 提升为正式对撞结果。
-- `M5B_FAIL`：
-  - 仍需接入真实 similarity/duplicate 服务，当前 admin-web 只验证了 empty-state 与人工决策审计，不存在真实相似题候选。
+- `M5A_IN_PROGRESS`：
+  - 需读取 `/home/carry/答本` 中真实答本/解析本原始输入，把答本候选从 seeded fixture 提升为正式对撞结果。
 - `M7`：
   - 本轮未启动，符合范围约束。
 
