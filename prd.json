@@ -322,8 +322,8 @@
         "保存 `debug/visual-question-review/<taskId>/evidence.md`"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "3 chart + 2 image 资产识别。visual_summary 包含完整图表数据 (年份/数值/单位)。bbox 覆盖完整图表区域。linked_question_no 归属正确。backend test PASS, build PASS。"
     },
     {
       "id": "US-017",
@@ -419,7 +419,7 @@
       ],
       "priority": 21,
       "passes": false,
-      "notes": "DELIVERY_REPORT.md 生成 (15/21 stories PASS)。6 stories (US-016-018/020/021) 需运行中服务或浏览器验证。git log 有 15 个 story 提交。progress.txt 有完整历史。"
+      "notes": "DELIVERY_REPORT.md 生成 (16/21 stories PASS)。5 stories (US-017/018/020/021) 需运行中服务或浏览器验证。git log 有 16 个 story 提交。progress.txt 有完整历史。"
     }
   ]
 }

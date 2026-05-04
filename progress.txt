@@ -413,3 +413,21 @@ History
 - 截图/trace/debug 路径: `debug/manual-review/836fec20-2628-44ed-9642-aedd57467864/`, `debug/ralph-e2e/US-015-20260504-201200/`
 - 发现的可复用模式: 题本 PDF 答案提取率 30% (6/20), 答本匹配率 100% (20/20); conflict 原因主要是 M4 解析与答本解析语义差异
 - 仍需后续 story 处理的问题: US-016~018 需要浏览器验证, US-020 性能基线
+
+[2026-05-04 20:14:00 CST (+0800)] US-016
+- 实现/测试了什么: 图表题与图片归属专项测试。验证 3 chart + 2 image 资产的 visual_summary、bbox、linked_question_no。
+- 修改文件: `debug/visual-question-review/836fec20-2628-44ed-9642-aedd57467864/evidence.md`, `prd.json`, `progress.txt`
+- 清理了什么: 无
+- 保留了什么: 现有 visual assets 数据
+- 运行了哪些命令: `curl GET /admin/pdf/task/836fec20/paper-candidates`, `npm run build` (backend + admin-web), backend test
+- 结果是否通过: 是。backend test PASS, build PASS。
+- 图表识别详情:
+  - Q1: chart (柱状图, 2017-2021年重庆收入数据, confidence=0.95)
+  - Q6: chart (组合图, 2016-2021年互联网业务收入, confidence=0.95) + image (图标题, confidence=0.7)
+  - Q7: 同 Q6 共享图表
+  - visual_summary 包含完整数据: 年份、数值、单位、增速
+  - bbox 覆盖完整图表区域
+  - linked_question_no 归属正确
+- 截图/trace/debug 路径: `debug/visual-question-review/836fec20-2628-44ed-9642-aedd57467864/`
+- 发现的可复用模式: chart 资产 confidence=0.95, image 资产 confidence=0.7; visual_summary 仅在图表类资产上生成
+- 仍需后续 story 处理的问题: US-017/018 需要浏览器验证, US-020 性能基线
