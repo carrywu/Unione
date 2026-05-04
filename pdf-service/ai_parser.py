@@ -42,7 +42,7 @@ def analyze_image(base64_str: str) -> Optional[Dict[str, Any]]:
 
     try:
         response = dashscope.MultiModalConversation.call(
-            model="qwen-vl-max",
+            model="qwen3-vl-plus",
             messages=messages,
         )
         content = response.output.choices[0].message.content

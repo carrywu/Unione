@@ -396,7 +396,7 @@ async function savePdfConfig() {
         description: '阿里云百炼 API Key（用于通义千问 VL/文本模型）',
       }),
       updateSystemConfig('AI_VISUAL_MODEL', {
-        value: 'qwen-vl-max',
+        value: 'qwen3-vl-plus',
         description: 'PDF 图文解析视觉模型',
       }),
       updateSystemConfig('AI_TEXT_MODEL', {

@@ -318,7 +318,7 @@ const seedConfigs: Array<Pick<SystemConfig, 'key' | 'value' | 'description' | 'v
   },
   {
     key: 'AI_VISUAL_MODEL',
-    value: 'qwen-vl-max',
+    value: 'qwen3-vl-plus',
     value_type: SystemConfigValueType.String,
     description: 'PDF 图文解析视觉模型',
   },

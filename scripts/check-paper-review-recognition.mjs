@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import { chromium, request } from 'playwright';
+import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DEFAULT_TASK_ID = '1a43676e-14d6-4a71-8b81-d4442f08fb43';
 const DEFAULT_BANK_ID = '1628f7cc-198f-4040-aab7-6c536bfb548f';
@@ -14,6 +16,7 @@ const DEFAULT_MAIN_TEST_PDF = '/Users/apple/Downloads/题本篇-1-8.pdf';
 const DEFAULT_PARTIAL_CONTEXT_NEGATIVE_PDF = '/Users/apple/Downloads/公考/project2/backend/sample-题本篇-3-7.pdf';
 const FOCUS_QUESTION_NOS = [1, 8, 9, 10];
 const BAD_UI_TERMS = ['question stem', '[object Object]', 'visual parse unavailable'];
+const SCRIPT_PATH = fileURLToPath(import.meta.url);
 
 function defaultOutputDir() {
   const now = new Date();
@@ -26,7 +29,7 @@ function defaultOutputDir() {
     `${now.getMinutes()}`.padStart(2, '0'),
     `${now.getSeconds()}`.padStart(2, '0'),
   ].join('');
-  return `/Users/apple/Downloads/公考/project2/debug/paper-review/${stamp}/negative-regression`;
+  return `/Users/apple/Downloads/公考/project2/debug/paper-review/${stamp}`;
 }
 
 const args = new Set(process.argv.slice(2));
@@ -53,10 +56,11 @@ const outputDir = process.env.OUTPUT_DIR || DEFAULT_DEBUG_DIR;
 const mainTestPdf = process.env.MAIN_TEST_PDF || DEFAULT_MAIN_TEST_PDF;
 const partialContextNegativePdf = process.env.PARTIAL_CONTEXT_NEGATIVE_PDF || DEFAULT_PARTIAL_CONTEXT_NEGATIVE_PDF;
 const screenshotsDir = path.join(outputDir, 'screenshots');
-const fixtureRole = process.env.FIXTURE_ROLE || 'partial_pdf_context_negative_regression';
+const fixtureRole = process.env.FIXTURE_ROLE || 'all';
 let pageUrl = buildPageUrl();
 let activeBrowser = null;
 let activeApiContext = null;
+let reusedTaskId = null;
 
 function trimTrailingSlash(value) {
   return String(value).replace(/\/+$/, '');
@@ -146,8 +150,10 @@ async function resolveFixtureTask(context, token) {
     String(task?.file_name || '').includes(basename) &&
     ['done', 'failed'].includes(String(task?.status || '')),
   );
-  if (existing?.status === 'done') {
+  const reuseExistingTask = !['1', 'true', 'yes'].includes(String(process.env.FORCE_NEW_PARSE || '').toLowerCase());
+  if (existing?.status === 'done' && reuseExistingTask) {
     taskId = existing.id;
+    reusedTaskId = existing.id;
   } else {
     const uploaded = await uploadPdf(context, token, mainTestPdf);
     const parsed = await postJson(context, token, '/admin/pdf/parse', {
@@ -447,18 +453,191 @@ ${manualList.join('\n')}
 `;
 }
 
+function buildZeroCandidateReport(audit) {
+  return `# 制卷页题目识别质量验收报告
+
+## 1. 本轮结论
+
+主正样例未生成候选题，不能进入第 1、8、9、10 题逐题人工核对。该结果按主样例失败处理，不能用人工强制加入兜底。
+
+- fixtureRole: ${audit.fixtureRole}
+- pageUrl: ${audit.pageUrl}
+- taskId: ${audit.taskId}
+- bankId: ${audit.bankId}
+- paperId: ${audit.paperId}
+- reusedTaskId: ${audit.reusedTaskId || '未复用'}
+- actualPdfPath: ${audit.main_positive_fixture.actualPdfPath}
+- sourcePdfPath: ${audit.main_positive_fixture.sourcePdfPath}
+- pageCount: ${audit.main_positive_fixture.pageCount ?? 'unknown'}
+- debugDir: ${audit.debugDir || 'unknown'}
+
+## 2. zero_questions_extracted
+
+- candidates.total: ${audit.candidateSummary?.total ?? 0}
+- firstFailedStage: ${audit.firstFailedStage?.firstFailedStage || 'unknown'}
+- failureReason: ${audit.firstFailedStage?.reason || 'unknown'}
+- canAutoIngest: false
+- canAutoCompose: false
+- manualForceAddAllowed: false
+
+## 3. 分阶段计数
+
+\`\`\`json
+${JSON.stringify(audit.stageCounts || {}, null, 2)}
+\`\`\`
+
+## 4. 结论
+
+当前主样例页段已经通过 fixture sanity 确认为题本页；0 题结果需要继续修复扫描渲染/视觉调用/page-understanding 入口，不得回退 partial_pdf_context/missing_previous_page_context 严格规则。
+`;
+}
+
+async function writeAuditFiles(audit, report) {
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(path.join(outputDir, 'recognition-audit.json'), `${JSON.stringify(audit, null, 2)}\n`);
+  await writeFile(path.join(outputDir, 'RECOGNITION_AUDIT_REPORT.md'), report);
+}
+
+async function writeZeroCandidateAudit(candidates, debug, taskStatus) {
+  const audit = {
+    taskId,
+    bankId,
+    paperId,
+    pageUrl,
+    fixtureRole,
+    checkedAt: new Date().toISOString(),
+    reusedTaskId,
+    debugDir: debug?.debug_dir || null,
+    overall: {
+      pageReachable: false,
+      canEnterManualReview: false,
+      canPublish: false,
+      canAutoIngest: false,
+      canAutoCompose: false,
+      summary: 'main_positive_fixture 解析完成但 paper-candidates 为空，判定为 zero_questions_extracted 失败。',
+    },
+    main_positive_fixture: {
+      actualPdfPath: mainTestPdf,
+      sourcePdfPath: '/Users/apple/Downloads/题本篇.pdf',
+      pageCount: debug?.stage_counts?.pages_count || candidates?.diagnostics?.stage_counts?.pages_count || null,
+      taskFileName: taskStatus?.file_name || null,
+      taskStatus: taskStatus?.status || null,
+      taskError: taskStatus?.error || null,
+    },
+    candidateSummary: candidates?.summary || { total: 0 },
+    stageCounts: debug?.stage_counts || candidates?.diagnostics?.stage_counts || null,
+    firstFailedStage: debug?.first_failed_stage || candidates?.diagnostics?.first_failed_stage || null,
+    diagnostics: candidates?.diagnostics || null,
+    questions: [],
+    artifacts: {
+      recognitionAudit: path.join(outputDir, 'recognition-audit.json'),
+      recognitionReport: path.join(outputDir, 'RECOGNITION_AUDIT_REPORT.md'),
+      debugDir: debug?.debug_dir || null,
+    },
+  };
+  await writeAuditFiles(audit, buildZeroCandidateReport(audit));
+  throw new Error(
+    `main_positive_fixture zero_questions_extracted: paper-candidates 为空，firstFailedStage=${audit.firstFailedStage?.firstFailedStage || 'unknown'}`,
+  );
+}
+
+async function runAllFixtures() {
+  await mkdir(outputDir, { recursive: true });
+  const fixtureResult = spawnSync(process.execPath, ['scripts/check-pdf-fixtures.mjs'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OUTPUT_DIR: outputDir,
+      FIXTURE_ROLE: undefined,
+    },
+  });
+  await writeFile(path.join(outputDir, 'check-pdf-fixtures.stdout.log'), fixtureResult.stdout || '');
+  await writeFile(path.join(outputDir, 'check-pdf-fixtures.stderr.log'), fixtureResult.stderr || '');
+  const runs = [
+    { role: 'main_positive_fixture', output: path.join(outputDir, 'main-positive') },
+    { role: 'partial_pdf_context_negative_regression', output: path.join(outputDir, 'negative-regression') },
+  ];
+  const results = [];
+  for (const run of runs) {
+    const result = spawnSync(process.execPath, [SCRIPT_PATH], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        FIXTURE_ROLE: run.role,
+        OUTPUT_DIR: run.output,
+      },
+    });
+    await writeFile(path.join(outputDir, `${run.role}.stdout.log`), result.stdout || '');
+    await writeFile(path.join(outputDir, `${run.role}.stderr.log`), result.stderr || '');
+    results.push({
+      role: run.role,
+      outputDir: run.output,
+      status: result.status,
+      error: result.error?.message || null,
+    });
+  }
+  const mainResult = results.find((item) => item.role === 'main_positive_fixture');
+  const negativeResult = results.find((item) => item.role === 'partial_pdf_context_negative_regression');
+  const fixtureGovernance = fixtureResult.status === 0 && !fixtureResult.error ? 'pass' : 'fail';
+  const mainPositiveRecognition = mainResult?.status === 0 && !mainResult?.error ? 'pass' : 'fail';
+  const negativeRegression = negativeResult?.status === 0 && !negativeResult?.error ? 'pass' : 'fail';
+  const uiRuleHardening = negativeRegression === 'pass' ? 'pass' : 'fail';
+  const overall =
+    fixtureGovernance === 'pass' &&
+    mainPositiveRecognition === 'pass' &&
+    negativeRegression === 'pass' &&
+    uiRuleHardening === 'pass'
+      ? 'pass'
+      : 'fail';
+  const fullMatrix = {
+    fixtureGovernance,
+    mainPositiveRecognition,
+    negativeRegression,
+    uiRuleHardening,
+    overall,
+    exitCodeShouldBeNonZero: overall === 'fail',
+    outputDir,
+    results: {
+      fixtureGovernance: {
+        status: fixtureResult.status,
+        error: fixtureResult.error?.message || null,
+      },
+      fixtures: results,
+    },
+  };
+  const payload = {
+    checkedAt: new Date().toISOString(),
+    ok: overall === 'pass',
+    results,
+    fullMatrix,
+  };
+  await writeFile(path.join(outputDir, 'recognition-suite-result.json'), `${JSON.stringify(payload, null, 2)}\n`);
+  await writeFile(path.join(outputDir, 'full-matrix-report.json'), `${JSON.stringify(fullMatrix, null, 2)}\n`);
+  console.log(JSON.stringify(payload, null, 2));
+  if (!payload.ok) process.exitCode = 1;
+}
+
 async function main() {
+  if (fixtureRole === 'all') {
+    await runAllFixtures();
+    return;
+  }
   await mkdir(screenshotsDir, { recursive: true });
   const artifacts = { screenshots: [] };
   const { context: apiContext, token } = await createApiContext();
   activeApiContext = apiContext;
   await resolveFixtureTask(apiContext, token);
-  const [candidates, debug, paperPreview, questionsPage] = await Promise.all([
+  const [candidates, debug, paperPreview, questionsPage, taskStatus] = await Promise.all([
     getJson(apiContext, token, `/admin/pdf/task/${taskId}/paper-candidates`),
     getJson(apiContext, token, `/admin/pdf/task/${taskId}/ai-preaudit-debug`),
     getJson(apiContext, token, `/admin/pdf/papers/${paperId}/preview`).catch((error) => ({ error: error.message, questions: [] })),
     getJson(apiContext, token, `/admin/questions?bankId=${encodeURIComponent(bankId)}&page=1&pageSize=100`).catch(() => ({ list: [] })),
+    getJson(apiContext, token, `/admin/pdf/task/${taskId}`).catch((error) => ({ error: error.message })),
   ]);
+
+  if (fixtureRole === 'main_positive_fixture' && !array(candidates.questions).length) {
+    await writeZeroCandidateAudit(candidates, debug, taskStatus);
+  }
 
   const localGroups = await readJsonIfExists(path.join(outputDir, 'semantic-groups.json'));
   const localRecrops = await readJsonIfExists(path.join(outputDir, 'recrop-plan.json'));
@@ -687,6 +866,7 @@ async function main() {
     pageUrl,
     fixtureRole,
     checkedAt: new Date().toISOString(),
+    reusedTaskId,
     overall: {
       pageReachable,
       canEnterManualReview,
@@ -730,6 +910,8 @@ async function main() {
     artifacts,
   };
 
+  await writeAuditFiles(audit, buildReport(audit));
+
   assert(questions.length === FOCUS_QUESTION_NOS.length, '未生成全部四道题的 audit 结果');
   assert(math.paperReviewSubscriptsOk, '第 9 题 paper-review 未检测到 19/20/21 下标 sub 节点');
   assert(!badUiTerms.length, `页面出现内部占位字段: ${badUiTerms.join(', ')}`);
@@ -772,8 +954,6 @@ async function main() {
     }
   }
 
-  await writeFile(path.join(outputDir, 'recognition-audit.json'), `${JSON.stringify(audit, null, 2)}\n`);
-  await writeFile(path.join(outputDir, 'RECOGNITION_AUDIT_REPORT.md'), buildReport(audit));
   await browser.close();
   await apiContext.dispose();
 

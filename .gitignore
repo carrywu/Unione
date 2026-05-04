@@ -6,6 +6,7 @@
 !.env.example
 auth.json
 auth.json.bak
+.mcp.json
 
 # Dependencies
 node_modules/
@@ -33,13 +34,27 @@ test-results/
 .playwright-mcp/
 artifacts/
 debug/
+debug/provider-trace/
+debug/commercial-ocr-eval/
+debug/e2e-upload/
 backend/debug/
+backend/uploads/
 pdf-service/tmp/
 pdf-service/*.pdf
 *.log
 *.tmp
+*.trace.zip
 h5-console-errors.txt
 *.zip
+.ralph/
+.ralph.pid
+logs/
+rest2.0ocrv1paper_cut_edu.js
+**/api-responses.json
+**/task-status.json
+题本/
+答本/
+scripts/ralph/.last-branch
 
 # Python caches
 .pytest_cache/

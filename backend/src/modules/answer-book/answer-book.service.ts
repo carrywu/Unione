@@ -532,6 +532,32 @@ export class AnswerBookService {
         { key: 'DEEPSEEK_API_KEY' },
         { key: 'DEEPSEEK_BASE_URL' },
         { key: 'DEEPSEEK_MODEL' },
+        { key: 'MIMO_API_KEY' },
+        { key: 'MIMO_BASE_URL' },
+        { key: 'MIMO_MODEL' },
+        { key: 'MIMO_VISION_MODEL' },
+        { key: 'ARK_API_KEY' },
+        { key: 'VOLCENGINE_ARK_API_KEY' },
+        { key: 'VOLC_ARK_API_KEY' },
+        { key: 'ARK_BASE_URL' },
+        { key: 'VOLCENGINE_ARK_BASE_URL' },
+        { key: 'ARK_CHAT_COMPLETIONS_URL' },
+        { key: 'VOLCENGINE_ARK_CHAT_COMPLETIONS_URL' },
+        { key: 'ARK_VISION_MODEL' },
+        { key: 'VOLCENGINE_ARK_VISION_MODEL' },
+        { key: 'ARK_MODEL' },
+        { key: 'VOLCENGINE_ARK_MODEL' },
+        { key: 'ARK_ENDPOINT_ID' },
+        { key: 'VOLCENGINE_ARK_ENDPOINT_ID' },
+        { key: 'ARK_API_MODE' },
+        { key: 'VOLCENGINE_ARK_API_MODE' },
+        { key: 'ARK_RESPONSES_PATH' },
+        { key: 'VOLCENGINE_ARK_RESPONSES_PATH' },
+        { key: 'VISION_AI_PROVIDER_ORDER' },
+        { key: 'VISION_AI_TIMEOUT_SECONDS' },
+        { key: 'VISION_AI_PROVIDER_TIMEOUT_SECONDS' },
+        { key: 'PDF_VISUAL_PAGE_TIMEOUT_SECONDS' },
+        { key: 'PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS' },
       ],
     });
     const values = new Map(configs.map((config) => [config.key, config.value]));
@@ -544,7 +570,7 @@ export class AnswerBookService {
           'DASHSCOPE_BASE_URL',
           'https://dashscope.aliyuncs.com/compatible-mode/v1',
         ),
-        visual_model: read('AI_VISUAL_MODEL', 'qwen-vl-max'),
+        visual_model: read('AI_VISUAL_MODEL', 'qwen3-vl-plus'),
         text_api_key:
           read('AI_TEXT_API_KEY') ||
           read('DEEPSEEK_API_KEY') ||
@@ -561,6 +587,43 @@ export class AnswerBookService {
         deepseek_api_key: read('DEEPSEEK_API_KEY'),
         deepseek_base_url: read('DEEPSEEK_BASE_URL'),
         deepseek_model: read('DEEPSEEK_MODEL'),
+        mimo_api_key: read('MIMO_API_KEY'),
+        mimo_base_url: read('MIMO_BASE_URL', 'https://token-plan-cn.xiaomimimo.com/v1'),
+        mimo_model: read('MIMO_MODEL', 'mimo-v2.5'),
+        mimo_vision_model: read('MIMO_VISION_MODEL', 'mimo-v2.5'),
+        ark_api_key:
+          read('ARK_API_KEY') ||
+          read('VOLCENGINE_ARK_API_KEY') ||
+          read('VOLC_ARK_API_KEY'),
+        ark_base_url:
+          read('ARK_BASE_URL') ||
+          read('VOLCENGINE_ARK_BASE_URL') ||
+          read('ARK_CHAT_COMPLETIONS_URL') ||
+          read('VOLCENGINE_ARK_CHAT_COMPLETIONS_URL') ||
+          'https://ark.cn-beijing.volces.com/api/v3',
+        ark_endpoint_id:
+          read('ARK_ENDPOINT_ID') || read('VOLCENGINE_ARK_ENDPOINT_ID'),
+        ark_vision_model:
+          read('ARK_VISION_MODEL') ||
+          read('VOLCENGINE_ARK_VISION_MODEL') ||
+          read('ARK_MODEL') ||
+          read('VOLCENGINE_ARK_MODEL'),
+        ark_api_mode:
+          read('ARK_API_MODE') ||
+          read('VOLCENGINE_ARK_API_MODE') ||
+          'responses',
+        ark_responses_path:
+          read('ARK_RESPONSES_PATH') ||
+          read('VOLCENGINE_ARK_RESPONSES_PATH') ||
+          '/responses',
+        vision_ai_provider_order: read(
+          'VISION_AI_PROVIDER_ORDER',
+          'volcengine_ark_vl,qwen_vl,mimo_vl',
+        ),
+        vision_ai_timeout_seconds: read('VISION_AI_TIMEOUT_SECONDS'),
+        vision_ai_provider_timeout_seconds: read('VISION_AI_PROVIDER_TIMEOUT_SECONDS'),
+        pdf_visual_page_timeout_seconds: read('PDF_VISUAL_PAGE_TIMEOUT_SECONDS'),
+        pdf_visual_provider_timeout_seconds: read('PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS'),
       }).filter(([, value]) => Boolean(value)),
     );
   }

@@ -538,3 +538,24 @@ History
 - 截图/trace/debug 路径: `debug/e2e-upload/836fec20-2628-44ed-9642-aedd57467864/`
 - 发现的可复用模式: 上传流程为 POST /admin/upload/file → POST /admin/pdf/parse (需 bank_id + file_url)；task 完成后 GET /admin/pdf/task/{id}/paper-candidates 获取候选题；fixture_only 是 M5A 字段名而非值标记
 - 仍需后续 story 处理的问题: US-012 答本上传与 M5A 对撞, US-014 制卷核对页, US-015 PDF 识别错误
+
+[2026-05-04 21:43:00 CST (+0800)] US-011 (re-run)
+- 实现/测试了什么: 20页题本上传解析真人式 smoke test (fresh run)。通过 API 上传题本篇.pdf，创建新解析任务，验证 20/20 完成。
+- 修改文件: `backend/test/pdf-review-workflow.test.ts` (fix mock delete), `prd.json`, `progress.txt`, `debug/e2e-upload/00cb2f2c-10ea-4ad1-a005-eb7649f07f3b/`
+- 清理了什么: 无
+- 保留了什么: 全部证据和源码
+- 运行了哪些命令: curl upload, curl parse, curl task status, curl paper-candidates, npm run build (backend + admin-web), backend test
+- 结果是否通过: 是。backend build PASS, admin-web build PASS, backend test PASS (EXIT: 0)。
+- 任务详情:
+  - New Task ID: 00cb2f2c-10ea-4ad1-a005-eb7649f07f3b
+  - Status: done, Progress: 100%, 20/20 questions
+  - No error (task succeeded cleanly)
+  - Provider: qwen_vl (qwen3-vl-plus)
+  - M5A: M5A_BLOCKED_BY_MISSING_ANSWER_BOOK (expected: no answer book)
+  - M5B: M5B_PASS
+  - Summary: 4 AI passed, 13 AI failed, 0 AI warning, 20 need_manual_fix
+  - fixture_only only in m5_answer_book (5/20, expected behavior)
+- 修复: test mock repository 缺少 delete 方法导致 testPdfReviewE2E 失败
+- 截图/trace/debug 路径: `debug/e2e-upload/00cb2f2c-10ea-4ad1-a005-eb7649f07f3b/`
+- 发现的可复用模式: mock repository 需要与 pdf.service.ts 中使用的方法同步（delete/softRemove/save/find/findOne/count/update）
+- 仍需后续 story 处理的问题: US-012 答本上传与 M5A 对撞, US-014~018 需浏览器验证
