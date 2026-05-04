@@ -73,7 +73,7 @@ class RepairQuestionRequest(BaseModel):
 class DebugSmokeByUrlRequest(BaseModel):
     url: str
     task_id: str | None = None
-    pages: str = "9-14"
+    pages: str = os.getenv("PDF_DEBUG_SMOKE_PAGES", "1-8")
     clean_output: bool = False
     refresh_cache: bool = False
     retry_failed_pages_only: bool = False
@@ -85,6 +85,21 @@ class RuntimeConfigUpdate(BaseModel):
     ai_provider_text: str | None = None
     qwen_api_key: str | None = None
     deepseek_api_key: str | None = None
+    mimo_api_key: str | None = None
+    mimo_base_url: str | None = None
+    mimo_model: str | None = None
+    mimo_vision_model: str | None = None
+    ark_api_key: str | None = None
+    ark_base_url: str | None = None
+    ark_vision_model: str | None = None
+    ark_endpoint_id: str | None = None
+    ark_api_mode: str | None = None
+    ark_responses_path: str | None = None
+    vision_ai_provider_order: str | None = None
+    vision_ai_timeout_seconds: float | None = None
+    vision_ai_provider_timeout_seconds: float | None = None
+    pdf_visual_page_timeout_seconds: float | None = None
+    pdf_visual_provider_timeout_seconds: float | None = None
     cache_ttl: int | None = None
 
 
@@ -123,7 +138,7 @@ async def parse_by_url(payload: ParseByUrlRequest):
     started = time.perf_counter()
     mark_parse_start()
     try:
-        result = await _run_parse(path, payload.url, payload.ai_config)
+        result = await _run_parse(path, payload.url, payload.ai_config, payload.debug_dir)
         mark_parse_finish(not _is_zero_question_result(result), len(result.questions), time.perf_counter() - started)
         if payload.callback_url:
             await _send_parse_callback(
@@ -223,7 +238,7 @@ def _repair_question_sync(payload: RepairQuestionRequest):
 
 
 async def _download_pdf(url: str) -> str:
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=120, trust_env=False) as client:
         response = await client.get(url)
         response.raise_for_status()
     return await _save_temp(response.content)
@@ -433,7 +448,7 @@ async def _send_parse_callback(
     headers = {"X-Internal-Token": callback_token} if callback_token else None
     timeout = httpx.Timeout(120.0, connect=10.0)
     base_url = callback_url.rstrip("/")
-    async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+    async with httpx.AsyncClient(timeout=timeout, headers=headers, trust_env=False) as client:
         if result.materials:
             await client.post(
                 f"{base_url}/materials",
@@ -630,6 +645,7 @@ async def _run_parse(
     pdf_path: str,
     pdf_url: str | None = None,
     ai_config: dict[str, str] | None = None,
+    debug_dir: str | None = None,
 ):
     """Run parsing away from the FastAPI event loop.
 
@@ -638,7 +654,7 @@ async def _run_parse(
     and /stats responsive while a large PDF is being parsed.
     """
     return await asyncio.to_thread(
-        lambda: asyncio.run(parse_pdf(pdf_path, pdf_url, ai_config)),
+        lambda: asyncio.run(parse_pdf(pdf_path, pdf_url, ai_config, debug_dir)),
     )
 
 

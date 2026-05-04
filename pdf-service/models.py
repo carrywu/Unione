@@ -93,8 +93,14 @@ class Question(BaseModel):
     source_page_start: Optional[int] = None
     source_page_end: Optional[int] = None
     source_bbox: Optional[List[float]] = None
+    source_text_span: Optional[str] = None
     source_anchor_text: Optional[str] = None
     source_confidence: Optional[float] = None
+    material_group_id: Optional[str] = None
+    material_group_question_indexes: List[int] = []
+    material_group_confidence: Optional[float] = None
+    material_group_reason: Optional[str] = None
+    shared_material: bool = False
     image_refs: List[str] = []
     visual_refs: List[Dict[str, Any]] = []
     source: Optional[str] = None
@@ -172,6 +178,7 @@ class ParseResult(BaseModel):
 class ParseByUrlRequest(BaseModel):
     url: str
     ai_config: Optional[Dict[str, str]] = None
+    debug_dir: Optional[str] = None
     callback_url: Optional[str] = None
     callback_token: Optional[str] = None
     callback_batch_size: int = 20

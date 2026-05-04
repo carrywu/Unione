@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 import base64
+import hashlib
 import queue
 import re
 import tempfile
 import threading
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,8 +28,10 @@ from parser_kernel.types import MaterialGroup, QuestionGroup
 OPTION_RE = re.compile(r"^\s*([A-D])[．.、。]\s*(.+)$")
 VISUAL_PAGE_DPI = 110
 VISUAL_PAGE_MAX_SIDE = 1600
-DEFAULT_VISUAL_PAGE_TIMEOUT_SECONDS = 120.0
+DEFAULT_VISUAL_PAGE_TIMEOUT_SECONDS = 180.0
 VISUAL_BBOX_CLAMP_EPSILON = 1e-3
+CHECKPOINT_SCHEMA_VERSION = "parse_checkpoint_v1"
+CHECKPOINT_STALE_SECONDS = 300
 
 load_dotenv()
 
@@ -153,15 +157,25 @@ def parse_extractor_with_kernel(
 
     _inject_semantic_debug_payload(
         debug_dir=debug_dir,
+        total_pages=total_pages,
         visual_pages=getattr(extractor, "_parser_kernel_visual_pages", []),
         failed_pages=getattr(extractor, "_parser_kernel_failed_pages", []),
+        failed_page_details=getattr(extractor, "_parser_kernel_failed_page_details", []),
         visual_links=visual_links,
+        page_elements_count=len(elements),
+        raw_questions_count=len(raw_questions),
+        output_questions_count=len(questions),
+        materials_count=len(materials),
+        output_questions=questions,
     )
 
     write_debug_bundle(
         debug_dir,
         visual_pages=getattr(extractor, "_parser_kernel_visual_pages", []),
-        failed_pages={"failed_pages": getattr(extractor, "_parser_kernel_failed_pages", [])},
+        failed_pages={
+            "failed_pages": getattr(extractor, "_parser_kernel_failed_pages", []),
+            "failed_page_details": getattr(extractor, "_parser_kernel_failed_page_details", []),
+        },
         page_elements=elements,
         annotated_elements=annotated,
         material_groups=material_groups,
@@ -206,6 +220,7 @@ def parse_extractor_with_kernel(
             ),
             "debug_dir": debug_dir,
             "vision_ai": vision_ai_stats,
+            "checkpoint_recovery_report": getattr(extractor, "_parser_kernel_recovery_report", None),
         },
     }
 
@@ -464,6 +479,7 @@ def _build_page_understanding_record(
 
     uncertain_regions: list[dict[str, Any]] = []
     failed = _visual_result_failed(visual_result)
+    failure_reason = _classify_vision_failure(visual_result)
     warnings = [str(item) for item in visual_result.get("warnings") or []]
     if failed:
         fallback_block = _debug_block(
@@ -506,10 +522,16 @@ def _build_page_understanding_record(
         "suspected_cross_page_links": suspected_cross_page_links,
         "uncertain_regions": uncertain_regions,
         "confidence": 0.0 if failed else float(page_analysis.get("confidence") or 0.6),
-        "reason": visual_result.get("error") or ("vision_ai_failed" if failed else "vision_ai_page_understanding"),
+        "reason": visual_result.get("error") or (failure_reason if failed else "vision_ai_page_understanding"),
+        "failureReason": failure_reason,
+        "recommendedFix": _vision_failure_recommended_fix(failure_reason),
+        "coarse_fallback": bool(failed),
+        "fallback_evidence": "full_page_image" if failed else None,
+        "can_synthesize_question": bool(detected_numbers),
         "page_warnings": warnings,
         "page_analysis": page_analysis,
         "schema_validation": visual_result.get("schema_validation") or {},
+        "vision_call_result": visual_result.get("vision_call_result") or {},
     }
 
 
@@ -527,11 +549,21 @@ def _debug_group(blocks: list[dict[str, Any]], *, complete: bool | None = None) 
     }
 
 
-def _build_semantic_debug_groups(visual_links: dict[str, Any]) -> list[dict[str, Any]]:
+def _build_semantic_debug_groups(
+    visual_links: dict[str, Any],
+    output_questions: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     raw_entries = _dict_items(visual_links.get("semantic_question_entries"))
     groups: list[dict[str, Any]] = []
+    output_by_question_no: dict[int, dict[str, Any]] = {}
+    for question in output_questions or []:
+        question_no = _coerce_int(question.get("index") or question.get("question_no"))
+        if question_no is not None:
+            output_by_question_no[question_no] = question
     if raw_entries:
         for entry in raw_entries:
+            question_no = _question_no_from_entry(entry)
+            output_question = output_by_question_no.get(question_no) if question_no is not None else None
             fallback_page = _coerce_int(entry.get("page_num") or entry.get("page_no")) or 1
             pages = _page_numbers_from_entry(entry, fallback_page)
             page_no = pages[0] if pages else fallback_page
@@ -598,9 +630,16 @@ def _build_semantic_debug_groups(visual_links: dict[str, Any]) -> list[dict[str,
             ]
             groups.append(
                 {
-                    "question_no": _question_no_from_entry(entry),
+                    "question_no": question_no,
                     "source_page_start": min(pages) if pages else page_no,
                     "source_page_end": max(pages) if pages else page_no,
+                    "source_text_span": (output_question or {}).get("source_text_span"),
+                    "source_bbox": (output_question or {}).get("source_bbox"),
+                    "material_group_id": (output_question or {}).get("material_group_id"),
+                    "material_group_question_indexes": (output_question or {}).get("material_group_question_indexes") or [],
+                    "material_group_confidence": (output_question or {}).get("material_group_confidence"),
+                    "material_group_reason": (output_question or {}).get("material_group_reason"),
+                    "shared_material": bool((output_question or {}).get("shared_material")),
                     "stem_group": _debug_group(stem_blocks, complete=content_quality.get("stem_complete")),
                     "options_group": _debug_group(option_blocks, complete=content_quality.get("options_complete")),
                     "visual_group": _debug_group(visual_blocks, complete=content_quality.get("visual_complete")),
@@ -635,6 +674,13 @@ def _build_semantic_debug_groups(visual_links: dict[str, Any]) -> list[dict[str,
                 "question_no": None,
                 "source_page_start": page_no,
                 "source_page_end": page_no,
+                "source_text_span": None,
+                "source_bbox": None,
+                "material_group_id": None,
+                "material_group_question_indexes": [],
+                "material_group_confidence": None,
+                "material_group_reason": None,
+                "shared_material": False,
                 "stem_group": _debug_group(_dict_items(page.get("stem_blocks")), complete=False),
                 "options_group": _debug_group(_dict_items(page.get("option_blocks")), complete=False),
                 "visual_group": _debug_group(visual_blocks, complete=False),
@@ -743,7 +789,13 @@ def _build_questions_from_semantic_payload(
         if entry.get("content"):
             question["content"] = _strip_placeholder_text(str(entry.get("content")))
         question["question_type"] = str(entry.get("question_type") or question["question_type"]).strip() or question["question_type"]
-        question["pages"] = _merge_unique_ints(question.get("pages", []), entry.get("pages"))
+        source_page_start = _coerce_int(entry.get("source_page_start") or entry.get("sourcePageStart"))
+        source_page_end = _coerce_int(entry.get("source_page_end") or entry.get("sourcePageEnd")) or source_page_start
+        source_pages = []
+        if source_page_start is not None and source_page_end is not None and source_page_end >= source_page_start:
+            source_pages = list(range(source_page_start, source_page_end + 1))
+        entry_pages = _coerce_int_list(entry.get("pages")) or source_pages
+        question["pages"] = _merge_unique_ints(question.get("pages", []), entry_pages)
         question["is_cross_page"] = bool(question.get("is_cross_page") or entry.get("is_cross_page"))
 
         direct_keys = ("option_a", "option_b", "option_c", "option_d")
@@ -807,7 +859,12 @@ def _build_questions_from_semantic_payload(
 
         page_num = _coerce_int(entry.get("page_num"))
         if page_num is None:
-            page_num = _coerce_int(entry.get("source_page_num")) or 1
+            page_num = (
+                _coerce_int(entry.get("source_page_num"))
+                or source_page_start
+                or _coerce_int(entry.get("page_no"))
+                or 1
+            )
         if page_num is not None and page_num not in question["question_pages"]:
             question["question_pages"].append(page_num)
 
@@ -841,11 +898,12 @@ def _build_questions_from_semantic_payload(
     for index in sorted(question_map):
         question = question_map[index]
         options = question["options"]
+        shared_group = _semantic_material_group_for_question(question_map, index)
 
-        page_min = min(question["question_pages"]) if question["question_pages"] else index
-        page_max = max(question["question_pages"]) if question["question_pages"] else page_min
+        source_pages = sorted(set(question["pages"] or question["question_pages"] or [index]))
+        page_min = source_pages[0]
+        page_max = source_pages[-1]
         page_no = page_min
-        source_pages = sorted(set(question["pages"] or question["question_pages"] or [page_no]))
 
         all_raw_questions.append(
             {
@@ -915,8 +973,8 @@ def _build_questions_from_semantic_payload(
 
         material_group = {
             "question_no": index,
-            "question_indexes": [index],
-            "question_ids": [f"q{index:03d}"],
+            "question_indexes": shared_group["question_indexes"],
+            "question_ids": [f"q{question_index:03d}" for question_index in shared_group["question_indexes"]],
             "warnings": list(dict.fromkeys(parse_warnings)),
         }
 
@@ -960,11 +1018,11 @@ def _build_questions_from_semantic_payload(
             "needs_review": bool(parse_warnings),
             "material_text": material_text,
             "material_temp_id": material_temp_id,
-            "material_group_id": f"sg_{index}",
-            "material_group_question_indexes": [index],
-            "material_group_confidence": None,
-            "material_group_reason": "semantic_group_by_qwen_vl",
-            "shared_material": False,
+            "material_group_id": shared_group["group_id"],
+            "material_group_question_indexes": shared_group["question_indexes"],
+            "material_group_confidence": shared_group["confidence"],
+            "material_group_reason": shared_group["reason"],
+            "shared_material": len(shared_group["question_indexes"]) > 1,
             "images": _dedupe_images(visuals_for_question),
             "image_refs": [str(image.get("ref") or "") for image in visuals_for_question if image.get("ref")],
             "visual_refs": [_region_to_visual_ref(region) for region in question_regions],
@@ -973,6 +1031,7 @@ def _build_questions_from_semantic_payload(
             "source_page_start": page_min,
             "source_page_end": page_max,
             "source_bbox": source_bbox,
+            "source_text_span": _question_source_text_span(index=index, content=question["content"], options=options),
             "source_anchor_text": f"{index}.",
             "source_confidence": 0.75 if has_visual_context else 0.45,
             "source": "parser_kernel_semantic",
@@ -1127,6 +1186,7 @@ def _build_questions_from_layout_groups(
                 "source_page_start": raw.page_num,
                 "source_page_end": raw.page_num,
                 "source_bbox": source_bbox,
+                "source_text_span": _question_source_text_span(index=raw.index, content=content, options=options),
                 "source_anchor_text": f"{raw.index}.",
                 "source_confidence": 0.7 if source_bbox else 0.4,
                 "source": "parser_kernel_scanned",
@@ -1495,6 +1555,93 @@ def _normalize_analysis_suggestion(value: Any) -> dict[str, Any]:
     return result
 
 
+def _question_source_text_span(*, index: int, content: str, options: dict[str, str]) -> str | None:
+    """Return source text assembled only from OCR/page-understanding text fields."""
+    lines: list[str] = []
+    stem = str(content or "").strip()
+    if stem:
+        lines.append(f"{index}. {stem}")
+    for label in ("A", "B", "C", "D"):
+        option = str(options.get(label) or "").strip()
+        if option:
+            lines.append(f"{label}. {option}")
+    return "\n".join(lines).strip() or None
+
+
+def _semantic_material_group_for_question(question_map: dict[int, dict[str, Any]], index: int) -> dict[str, Any]:
+    question = question_map[index]
+    keys = [str(item) for item in question.get("material_temp_ids") or [] if str(item)]
+    material_text = str(question.get("material_text") or "").strip()
+    if material_text:
+        keys.append(f"text:{material_text}")
+    visual_keys = _semantic_shared_visual_keys(question)
+    matched_indexes: set[int] = {index}
+    for candidate_index, candidate in question_map.items():
+        candidate_keys = {str(item) for item in candidate.get("material_temp_ids") or [] if str(item)}
+        candidate_text = str(candidate.get("material_text") or "").strip()
+        if candidate_text:
+            candidate_keys.add(f"text:{candidate_text}")
+        candidate_visual_keys = _semantic_shared_visual_keys(candidate)
+        if keys and candidate_keys.intersection(keys):
+            matched_indexes.add(candidate_index)
+        if visual_keys and candidate_visual_keys.intersection(visual_keys):
+            matched_indexes.add(candidate_index)
+    question_indexes = sorted(matched_indexes)
+    key = next((item for item in keys if item), None)
+    reason = "semantic_group_by_qwen_vl"
+    confidence = None
+    if len(question_indexes) > 1:
+        if key:
+            reason = "semantic_shared_material_binding"
+            confidence = 0.86
+        elif visual_keys:
+            key = sorted(visual_keys)[0]
+            reason = "semantic_shared_visual_material_binding"
+            confidence = 0.8
+    key = key or f"q{index:03d}"
+    safe_key = re.sub(r"[^0-9A-Za-z_\-]+", "_", key).strip("_") or f"q{index:03d}"
+    return {
+        "group_id": f"sg_{safe_key}",
+        "question_indexes": question_indexes,
+        "confidence": confidence,
+        "reason": reason,
+    }
+
+
+def _semantic_shared_visual_keys(question: dict[str, Any]) -> set[str]:
+    """Return stable keys for visual/material evidence shared across questions.
+
+    This uses only provider/page-understanding visual evidence (same visual group id,
+    bbox, caption/summary), never question numbers or task-specific constants.
+    """
+    keys: set[str] = set()
+    for visual_group in question.get("visual_groups") or []:
+        if not isinstance(visual_group, dict):
+            continue
+        explicit_group = str(
+            visual_group.get("same_visual_group_id")
+            or visual_group.get("group_id")
+            or visual_group.get("visual_group_id")
+            or ""
+        ).strip()
+        if explicit_group:
+            keys.add(f"visual-group:{explicit_group}")
+            continue
+        bbox = _coerce_visual_bbox(visual_group.get("merged_bbox") or visual_group.get("bbox"))
+        summary = str(
+            visual_group.get("visual_summary")
+            or visual_group.get("summary")
+            or visual_group.get("caption")
+            or visual_group.get("text")
+            or ""
+        ).strip()
+        if bbox and summary:
+            bbox_key = ",".join(str(round(value, 1)) for value in bbox)
+            text_key = re.sub(r"\s+", "", summary)[:80]
+            keys.add(f"visual-evidence:{bbox_key}:{text_key}")
+    return keys
+
+
 def _empty_semantic_bucket(index: int) -> dict[str, Any]:
     del index
     return {
@@ -1690,34 +1837,64 @@ def _safe_float(value: Any) -> float | None:
 def _inject_semantic_debug_payload(
     *,
     debug_dir: str,
+    total_pages: int,
     visual_pages: list[dict[str, Any]],
     failed_pages: list[int],
-    visual_links: dict[str, Any],
+    visual_links: dict[str, Any] | None,
+    page_elements_count: int,
+    raw_questions_count: int,
+    output_questions_count: int,
+    materials_count: int,
+    failed_page_details: list[dict[str, Any]] | None = None,
+    output_questions: list[dict[str, Any]] | None = None,
 ) -> None:
     try:
         debug_root = Path(debug_dir) / "debug"
         debug_root.mkdir(parents=True, exist_ok=True)
+        visual_links = visual_links or {}
+        failed_page_details = failed_page_details or []
+        output_questions = output_questions or []
+        semantic_groups_payload = _build_semantic_debug_groups(visual_links, output_questions=output_questions)
+        recrop_plan_payload = _build_recrop_debug_plan(semantic_groups_payload)
+        page_understanding_payload = visual_links.get("page_understanding", [])
+        stage_counts = _build_stage_counts_debug(
+            total_pages=total_pages,
+            visual_pages=visual_pages,
+            failed_pages=failed_pages,
+            failed_page_details=failed_page_details,
+            page_understanding=page_understanding_payload,
+            semantic_groups=semantic_groups_payload,
+            recrop_plan=recrop_plan_payload,
+            page_elements_count=page_elements_count,
+            raw_questions_count=raw_questions_count,
+            output_questions_count=output_questions_count,
+            materials_count=materials_count,
+        )
+        first_failed_stage = _first_failed_stage_debug(stage_counts)
         semantic_debug = {
             "task_pages": len(visual_pages),
             "failed_pages": failed_pages,
+            "failed_page_details": failed_page_details,
             "semantic_question_count": len(visual_links.get("semantic_question_entries", [])),
             "semantic_question_entries": visual_links.get("semantic_question_entries", []),
             "semantic_recrop_plans": visual_links.get("semantic_recrop_plans", []),
             "visual_merge_candidates": visual_links.get("visual_merge_candidates", []),
             "page_understanding": visual_links.get("page_understanding", []),
             "semantic_pages": visual_links.get("semantic_pages", []),
+            "stage_counts": stage_counts,
+            "first_failed_stage": first_failed_stage,
         }
         (debug_root / "semantic_debug_payload.json").write_text(
             json.dumps(semantic_debug, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        semantic_groups_payload = _build_semantic_debug_groups(visual_links)
-        recrop_plan_payload = _build_recrop_debug_plan(semantic_groups_payload)
         payload_groups = {
-            "page_understanding": visual_links.get("page_understanding", []),
+            "page_understanding": page_understanding_payload,
             "semantic_groups": semantic_groups_payload,
             "recrop_plan": recrop_plan_payload,
             "visual_merge_candidates": visual_links.get("visual_merge_candidates", []),
+            "stage_counts": stage_counts,
+            "first_failed_stage": first_failed_stage,
         }
         for name, payload in payload_groups.items():
             (debug_root / f"{name}.json").write_text(
@@ -1728,6 +1905,24 @@ def _inject_semantic_debug_payload(
             "page-understanding.json": payload_groups["page_understanding"],
             "semantic-groups.json": payload_groups["semantic_groups"],
             "recrop-plan.json": payload_groups["recrop_plan"],
+            "stage-counts.json": payload_groups["stage_counts"],
+            "first-failed-stage.json": payload_groups["first_failed_stage"],
+            "fallback-recovery.json": _build_fallback_recovery_debug(
+                visual_pages=visual_pages,
+                failed_page_details=failed_page_details,
+                page_understanding=page_understanding_payload,
+            ),
+            "question-number-scan.json": _build_question_number_scan_debug(
+                page_understanding=page_understanding_payload,
+                semantic_groups=semantic_groups_payload,
+                output_questions=output_questions,
+            ),
+            "page-understanding-recovered.json": _build_page_understanding_recovered_debug(
+                page_understanding=page_understanding_payload,
+                output_questions=output_questions,
+            ),
+            "source-text-span-report.json": _build_source_text_span_report(output_questions),
+            "material-group-binding-report.json": _build_material_group_binding_report(output_questions),
         }
         for alias_name, payload in legacy_alias.items():
             (debug_root / alias_name).write_text(
@@ -1736,6 +1931,314 @@ def _inject_semantic_debug_payload(
             )
     except Exception:
         return
+
+
+def _question_numbers_from_output(output_questions: list[dict[str, Any]]) -> list[int]:
+    numbers: list[int] = []
+    for question in output_questions or []:
+        number = _coerce_int(question.get("index") or question.get("question_no"))
+        if number is not None:
+            numbers.append(number)
+    return sorted(set(numbers))
+
+
+def _missing_numbers_between(numbers: list[int]) -> list[int]:
+    unique = sorted(set(number for number in numbers if number is not None))
+    if len(unique) < 2:
+        return []
+    expected = set(range(unique[0], unique[-1] + 1))
+    return sorted(expected.difference(unique))
+
+
+def _build_fallback_recovery_debug(
+    *,
+    visual_pages: list[dict[str, Any]],
+    failed_page_details: list[dict[str, Any]],
+    page_understanding: list[dict[str, Any]],
+) -> dict[str, Any]:
+    page_status: list[dict[str, Any]] = []
+    details_by_page = {int(item.get("page") or 0): item for item in failed_page_details if isinstance(item, dict)}
+    understanding_by_page = {
+        int(item.get("page_no") or item.get("page_num") or 0): item for item in page_understanding if isinstance(item, dict)
+    }
+    for page in visual_pages or []:
+        page_no = _coerce_int(page.get("page_num") or page.get("page") or page.get("page_no")) or 0
+        detail = details_by_page.get(page_no, {})
+        understanding = understanding_by_page.get(page_no, {})
+        fallback_attempted = bool(page.get("fallback_attempted") or detail.get("fallbackAttempted"))
+        fallback_success = bool(page.get("fallback_success") or detail.get("fallbackSuccess"))
+        detected = [int(number) for number in (understanding.get("detected_question_numbers") or [])]
+        page_status.append(
+            {
+                "page": page_no,
+                "initial_status": page.get("request_status"),
+                "failureReason": detail.get("failureReason") or understanding.get("failureReason"),
+                "providerAttempts": detail.get("providerAttempts") or [],
+                "recovery_chain": [
+                    {"step": "primary_page_understanding", "status": page.get("request_status") or "unknown"},
+                    {
+                        "step": "reduced_image_retry",
+                        "status": "success" if fallback_success else ("failed" if fallback_attempted else "not_attempted"),
+                    },
+                    {
+                        "step": "semantic_page_understanding_reuse",
+                        "status": "success" if detected else "not_applicable",
+                        "detected_question_numbers": detected,
+                    },
+                ],
+                "recovered": bool(detected),
+                "recovered_question_numbers": detected,
+            }
+        )
+    return {
+        "status": "success" if any(item["recovered"] for item in page_status) else "no_recovery",
+        "pages": page_status,
+        "failed_pages": sorted(details_by_page),
+    }
+
+
+def _build_question_number_scan_debug(
+    *,
+    page_understanding: list[dict[str, Any]],
+    semantic_groups: list[dict[str, Any]],
+    output_questions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    page_numbers = sorted(
+        set(
+            int(number)
+            for page in page_understanding or []
+            for number in (page.get("detected_question_numbers") or [])
+            if _coerce_int(number) is not None
+        )
+    )
+    semantic_numbers = sorted(
+        set(
+            int(number)
+            for number in (_coerce_int(group.get("question_no")) for group in semantic_groups or [])
+            if number is not None
+        )
+    )
+    output_numbers = _question_numbers_from_output(output_questions)
+    detected = sorted(set(page_numbers + semantic_numbers + output_numbers))
+    return {
+        "detected_question_numbers": detected,
+        "page_understanding_question_numbers": page_numbers,
+        "semantic_question_numbers": semantic_numbers,
+        "output_question_numbers": output_numbers,
+        "missing_question_numbers": _missing_numbers_between(detected),
+        "question_number_gap": bool(_missing_numbers_between(detected)),
+        "source": "page_understanding_semantic_output_scan",
+    }
+
+
+def _build_page_understanding_recovered_debug(
+    *,
+    page_understanding: list[dict[str, Any]],
+    output_questions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    before_numbers = sorted(
+        set(
+            int(number)
+            for page in page_understanding or []
+            for number in (page.get("detected_question_numbers") or [])
+            if _coerce_int(number) is not None
+        )
+    )
+    recovered_questions: dict[str, Any] = {}
+    recovered_numbers: list[int] = []
+    for question in output_questions or []:
+        number = _coerce_int(question.get("index") or question.get("question_no"))
+        if number is None:
+            continue
+        has_source = bool(question.get("source_text_span") and question.get("source_page_start") and question.get("source_page_end"))
+        has_group = bool(question.get("material_group_id") or question.get("material_text") or question.get("images"))
+        if has_source:
+            recovered_numbers.append(number)
+            recovered_questions[str(number)] = {
+                "source_text_span": question.get("source_text_span"),
+                "source_bbox": question.get("source_bbox"),
+                "source_page_refs": [question.get("source_page_start"), question.get("source_page_end")],
+                "material_group_id": question.get("material_group_id"),
+                "material_group_question_indexes": question.get("material_group_question_indexes") or [],
+                "material_group_bound": has_group,
+                "source": question.get("source"),
+            }
+    return {
+        "before_detected_question_numbers": before_numbers,
+        "recovered_question_numbers": sorted(set(recovered_numbers)),
+        "missing_question_numbers_after_recovery": _missing_numbers_between(sorted(set(recovered_numbers))),
+        "questions": recovered_questions,
+        "source": "validated_output_questions_with_source_text_span",
+    }
+
+
+def _build_source_text_span_report(output_questions: list[dict[str, Any]]) -> dict[str, Any]:
+    questions: dict[str, Any] = {}
+    for question in output_questions or []:
+        number = _coerce_int(question.get("index") or question.get("question_no"))
+        if number is None:
+            continue
+        questions[str(number)] = {
+            "source_text_span": question.get("source_text_span"),
+            "source_bbox": question.get("source_bbox"),
+            "source_page_refs": [question.get("source_page_start"), question.get("source_page_end")],
+            "has_real_text_span": bool(question.get("source_text_span")),
+            "source": question.get("source"),
+        }
+    return {"questions": questions}
+
+
+def _build_material_group_binding_report(output_questions: list[dict[str, Any]]) -> dict[str, Any]:
+    groups: dict[str, Any] = {}
+    questions: dict[str, Any] = {}
+    for question in output_questions or []:
+        number = _coerce_int(question.get("index") or question.get("question_no"))
+        if number is None:
+            continue
+        group_id = question.get("material_group_id")
+        question_payload = {
+            "material_group_id": group_id,
+            "material_group_question_indexes": question.get("material_group_question_indexes") or [],
+            "material_group_confidence": question.get("material_group_confidence"),
+            "material_group_reason": question.get("material_group_reason"),
+            "shared_material": bool(question.get("shared_material")),
+            "material_text": question.get("material_text"),
+        }
+        questions[str(number)] = question_payload
+        if group_id:
+            groups.setdefault(str(group_id), {"question_indexes": set(), "questions": []})
+            groups[str(group_id)]["question_indexes"].update(question_payload["material_group_question_indexes"] or [number])
+            groups[str(group_id)]["questions"].append(number)
+    serialized_groups = {
+        group_id: {**payload, "question_indexes": sorted(payload["question_indexes"])}
+        for group_id, payload in groups.items()
+    }
+    return {"questions": questions, "groups": serialized_groups}
+
+
+def _build_stage_counts_debug(
+    *,
+    total_pages: int,
+    visual_pages: list[dict[str, Any]],
+    failed_pages: list[int],
+    failed_page_details: list[dict[str, Any]] | None,
+    page_understanding: list[dict[str, Any]],
+    semantic_groups: list[dict[str, Any]],
+    recrop_plan: list[dict[str, Any]],
+    page_elements_count: int,
+    raw_questions_count: int,
+    output_questions_count: int,
+    materials_count: int,
+) -> dict[str, Any]:
+    failed_page_details = failed_page_details or []
+    detected_question_numbers = [
+        number
+        for page in page_understanding
+        for number in (page.get("detected_question_numbers") or [])
+        if number is not None
+    ]
+    reason_counts: dict[str, int] = {}
+    for detail in failed_page_details:
+        reason = str(detail.get("failureReason") or detail.get("reason") or "unknown")
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    def _visual_page_reason(page: dict[str, Any]) -> str | None:
+        raw = page.get("raw_result") if isinstance(page.get("raw_result"), dict) else {}
+        normalized = page.get("normalized_result") if isinstance(page.get("normalized_result"), dict) else {}
+        return _classify_vision_failure(normalized or raw, page.get("attempts"), page.get("attempt_errors") or [])
+
+    visual_reasons = [_visual_page_reason(page) for page in visual_pages]
+    vision_timeout_count = sum(1 for reason in visual_reasons if reason == "provider_timeout")
+    vision_empty_count = sum(1 for reason in visual_reasons if reason == "provider_empty_response")
+    schema_invalid_count = sum(1 for reason in visual_reasons if reason == "schema_invalid")
+    provider_error_count = sum(1 for reason in visual_reasons if reason in {"provider_error", "visual_model_failed"})
+    fallback_attempt_count = sum(1 for page in visual_pages if page.get("fallback_attempted"))
+    fallback_success_count = sum(1 for page in visual_pages if page.get("fallback_success"))
+    schema_repaired_count = sum(
+        1
+        for page in visual_pages
+        if any(str(err.get("retry_type") or "") == "schema_repair_retry" for err in (page.get("attempt_errors") or []))
+        and page.get("request_status") == "ok"
+    )
+    coarse_count = sum(1 for page in page_understanding if page.get("coarse_fallback") or page.get("fallback_evidence") == "full_page_image")
+    success_count = sum(1 for page in visual_pages if page.get("request_status") == "ok")
+
+    failure_reason = None
+    if reason_counts:
+        failure_reason = max(reason_counts.items(), key=lambda item: item[1])[0]
+    elif failed_pages:
+        failure_reason = "fallback_failed" if fallback_attempt_count else "provider_error"
+    elif detected_question_numbers and not semantic_groups:
+        failure_reason = "semantic_grouping_failed"
+    elif semantic_groups and output_questions_count == 0:
+        failure_reason = "candidate_synthesis_failed"
+    elif page_understanding and not detected_question_numbers and coarse_count:
+        failure_reason = "coarse_only_no_synthesizable_question"
+    elif page_understanding and not detected_question_numbers:
+        failure_reason = "page_understanding_failed"
+
+    recommended_fix = _vision_failure_recommended_fix(failure_reason)
+    return {
+        "pages_count": total_pages,
+        "visual_pages_count": len(visual_pages),
+        "failed_pages_count": len(failed_pages),
+        "failed_pages": failed_pages,
+        "failed_page_details": failed_page_details,
+        "page_understanding_count": len(page_understanding),
+        "page_understanding_detected_question_numbers_count": len(detected_question_numbers),
+        "semantic_groups_count": len(semantic_groups),
+        "recrop_plan_count": len(recrop_plan),
+        "page_elements_count": page_elements_count,
+        "raw_questions_count": raw_questions_count,
+        "output_questions_count": output_questions_count,
+        "materials_count": materials_count,
+        "visionCallCount": sum(int(page.get("attempts") or 1) for page in visual_pages),
+        "visionSuccessCount": success_count,
+        "visionTimeoutCount": vision_timeout_count,
+        "visionProviderErrorCount": provider_error_count,
+        "visionEmptyResponseCount": vision_empty_count,
+        "schemaInvalidCount": schema_invalid_count,
+        "schemaRepairedCount": schema_repaired_count,
+        "fallbackAttemptCount": fallback_attempt_count,
+        "fallbackSuccessCount": fallback_success_count,
+        "coarsePageUnderstandingCount": coarse_count,
+        "failureReason": failure_reason,
+        "recommendedFix": recommended_fix,
+        "visionFailureReasonCounts": reason_counts,
+    }
+
+
+def _first_failed_stage_debug(stage_counts: dict[str, Any]) -> dict[str, Any]:
+    total_pages = int(stage_counts.get("pages_count") or 0)
+    visual_pages_count = int(stage_counts.get("visual_pages_count") or 0)
+    failed_pages_count = int(stage_counts.get("failed_pages_count") or 0)
+    detected_count = int(stage_counts.get("page_understanding_detected_question_numbers_count") or 0)
+    semantic_groups_count = int(stage_counts.get("semantic_groups_count") or 0)
+    output_questions_count = int(stage_counts.get("output_questions_count") or 0)
+    failure_reason = stage_counts.get("failureReason")
+
+    if visual_pages_count == 0 or (total_pages > 0 and failed_pages_count >= total_pages):
+        stage = failure_reason or "provider_error"
+        reason = "visual_pages missing or every page is listed in failed_pages"
+    elif detected_count == 0:
+        stage = failure_reason or "page_understanding_failed"
+        reason = "page_understanding exists but detected_question_numbers is empty on all pages"
+    elif semantic_groups_count == 0:
+        stage = failure_reason or "semantic_grouping_failed"
+        reason = "page_understanding detected question numbers but semantic_groups is empty"
+    elif output_questions_count == 0:
+        stage = failure_reason or "candidate_synthesis_failed"
+        reason = "semantic_groups is non-empty but output_questions is empty"
+    else:
+        stage = None
+        reason = "no parser-stage failure detected before backend final preview"
+    return {
+        "firstFailedStage": stage,
+        "reason": reason,
+        "failureReason": failure_reason,
+        "recommendedFix": stage_counts.get("recommendedFix"),
+        "stage_counts": stage_counts,
+    }
 
 
 def _pages_from_extractor(extractor: Any, total_pages: int) -> list[PageContent]:
@@ -1779,6 +2282,238 @@ def _visual_page_indexes(total_pages: int, debug_dir: str, retry_failed_pages_on
     return indexes
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _parse_iso8601(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _is_stale_timestamp(value: str | None, *, stale_seconds: int = CHECKPOINT_STALE_SECONDS) -> bool:
+    timestamp = _parse_iso8601(value)
+    if timestamp is None:
+        return False
+    return timestamp < datetime.now(timezone.utc) - timedelta(seconds=stale_seconds)
+
+
+def _sha256_bytes(payload: bytes) -> str:
+    digest = hashlib.sha256()
+    digest.update(payload)
+    return digest.hexdigest()
+
+
+def _sha256_file(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _atomic_write_bytes(path: Path, payload: bytes) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f"{path.name}.tmp")
+    try:
+        with tmp_path.open("wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        tmp_path.replace(path)
+    finally:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+    return _sha256_bytes(payload)
+
+
+def _atomic_write_json(path: Path, payload: Any) -> str:
+    content = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    return _atomic_write_bytes(path, content)
+
+
+def _atomic_write_text(path: Path, payload: str) -> str:
+    return _atomic_write_bytes(path, str(payload).encode("utf-8"))
+
+
+def _read_json_file(path: Path) -> Any | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _checkpoint_manifest_path(debug_dir: str | Path) -> Path:
+    return Path(debug_dir) / "debug" / "checkpoint-manifest.json"
+
+
+def _page_cache_path(cache_dir: Path, page_num: int) -> Path:
+    return cache_dir / f"page_{page_num}.json"
+
+
+def _checkpoint_prompt_version() -> str:
+    return _sha256_bytes(PAGE_PARSE_PROMPT.encode("utf-8"))[:16]
+
+
+def _new_checkpoint_manifest(total_pages: int) -> dict[str, Any]:
+    return {
+        "schema_version": CHECKPOINT_SCHEMA_VERSION,
+        "updated_at": _utc_now_iso(),
+        "total_pages": total_pages,
+        "pages": {},
+        "artifacts": [],
+    }
+
+
+def _load_checkpoint_manifest(debug_dir: str | Path, total_pages: int) -> dict[str, Any]:
+    path = _checkpoint_manifest_path(debug_dir)
+    payload = _read_json_file(path)
+    if not isinstance(payload, dict):
+        return _new_checkpoint_manifest(total_pages)
+    payload.setdefault("schema_version", CHECKPOINT_SCHEMA_VERSION)
+    payload.setdefault("updated_at", _utc_now_iso())
+    payload.setdefault("total_pages", total_pages)
+    payload.setdefault("pages", {})
+    payload.setdefault("artifacts", [])
+    if not isinstance(payload["pages"], dict):
+        payload["pages"] = {}
+    if not isinstance(payload["artifacts"], list):
+        payload["artifacts"] = []
+    return payload
+
+
+def _save_checkpoint_manifest(debug_dir: str | Path, manifest: dict[str, Any]) -> None:
+    manifest["updated_at"] = _utc_now_iso()
+    _atomic_write_json(_checkpoint_manifest_path(debug_dir), manifest)
+
+
+def _upsert_checkpoint_artifact(
+    manifest: dict[str, Any],
+    *,
+    page_no: int,
+    artifact_type: str,
+    path: str,
+    sha256: str | None,
+    provider: str | None = None,
+    model: str | None = None,
+    prompt_version: str | None = None,
+) -> None:
+    artifacts = manifest.setdefault("artifacts", [])
+    normalized_path = str(path)
+    next_record = {
+        "page_no": page_no,
+        "artifact_type": artifact_type,
+        "path": normalized_path,
+        "sha256": sha256,
+        "provider": provider,
+        "model": model,
+        "prompt_version": prompt_version,
+        "created_at": _utc_now_iso(),
+    }
+    for index, artifact in enumerate(artifacts):
+        if (
+            isinstance(artifact, dict)
+            and artifact.get("page_no") == page_no
+            and artifact.get("artifact_type") == artifact_type
+            and artifact.get("path") == normalized_path
+        ):
+            artifacts[index] = next_record
+            break
+    else:
+        artifacts.append(next_record)
+
+
+def _update_checkpoint_page(
+    manifest: dict[str, Any],
+    *,
+    page_no: int,
+    status: str,
+    stage: str,
+    provider_used: str | None = None,
+    attempts: int | None = None,
+    last_error_type: str | None = None,
+    last_error_message: str | None = None,
+    artifact_path: str | None = None,
+    artifact_sha256: str | None = None,
+    image_sha256: str | None = None,
+    prompt_version: str | None = None,
+    recovered_from_cache: bool | None = None,
+) -> dict[str, Any]:
+    pages = manifest.setdefault("pages", {})
+    key = str(page_no)
+    entry = pages.get(key) if isinstance(pages.get(key), dict) else {}
+    now = _utc_now_iso()
+    started_at = entry.get("started_at") or now
+    updated = {
+        "page_no": page_no,
+        "status": status,
+        "stage": stage,
+        "provider_used": provider_used or entry.get("provider_used"),
+        "attempts": attempts if attempts is not None else int(entry.get("attempts") or 0),
+        "last_error_type": last_error_type,
+        "last_error_message": last_error_message,
+        "artifact_path": artifact_path or entry.get("artifact_path"),
+        "artifact_sha256": artifact_sha256 or entry.get("artifact_sha256"),
+        "image_sha256": image_sha256 or entry.get("image_sha256"),
+        "prompt_version": prompt_version or entry.get("prompt_version"),
+        "started_at": started_at,
+        "finished_at": now if status in {"success", "failed", "quarantined"} else entry.get("finished_at"),
+        "updated_at": now,
+        "recovered_from_cache": bool(recovered_from_cache) if recovered_from_cache is not None else bool(entry.get("recovered_from_cache")),
+    }
+    pages[key] = updated
+    return updated
+
+
+def _load_checkpointed_visual_result(
+    *,
+    manifest: dict[str, Any],
+    cache_dir: Path,
+    page_num: int,
+    image_sha256: str,
+    prompt_version: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    page_entry = manifest.get("pages", {}).get(str(page_num)) if isinstance(manifest.get("pages"), dict) else None
+    if not isinstance(page_entry, dict):
+        return None, None
+    if page_entry.get("status") != "success":
+        if page_entry.get("status") == "running" and _is_stale_timestamp(page_entry.get("updated_at")):
+            return None, "stale_running_page"
+        return None, None
+    if page_entry.get("image_sha256") != image_sha256 or page_entry.get("prompt_version") != prompt_version:
+        return None, "cache_input_mismatch"
+    cache_path = _page_cache_path(cache_dir, page_num)
+    cache_sha = _sha256_file(cache_path)
+    expected_sha = page_entry.get("artifact_sha256")
+    if not cache_sha or expected_sha != cache_sha:
+        return None, "artifact_sha_mismatch"
+    payload = _read_json_file(cache_path)
+    visual_result = payload.get("visual_result") if isinstance(payload, dict) else None
+    if not isinstance(visual_result, dict):
+        return None, "artifact_json_invalid"
+    return visual_result, "cache_reused"
+
+
+def _write_checkpoint_recovery_report(debug_dir: str | Path, actions: list[dict[str, Any]]) -> str | None:
+    if not actions:
+        return None
+    recovery_dir = Path(debug_dir) / "debug" / "recovery" / datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    payload = {
+        "generated_at": _utc_now_iso(),
+        "actions": actions,
+    }
+    _atomic_write_json(recovery_dir / "checkpoint-recovery.json", payload)
+    return str(recovery_dir / "checkpoint-recovery.json")
+
+
 def _get_page_screenshot(
     extractor: Any,
     page_index: int,
@@ -1809,13 +2544,10 @@ def _get_page_screenshot_size(
         return None
 
 
-def _write_visual_page_cache(cache_dir: Path, page_num: int, visual_result: dict[str, Any]) -> None:
+def _write_visual_page_cache(cache_dir: Path, page_num: int, visual_result: dict[str, Any]) -> str | None:
     if _visual_result_failed(visual_result):
-        return
-    (cache_dir / f"page_{page_num}.json").write_text(
-        json.dumps(visual_result, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+        return None
+    return _atomic_write_json(_page_cache_path(cache_dir, page_num), {"visual_result": visual_result})
 
 
 def _pages_from_visual_fallback(
@@ -1828,14 +2560,19 @@ def _pages_from_visual_fallback(
     pages: list[PageContent] = []
     visual_pages: list[dict[str, Any]] = []
     failed_pages: list[int] = []
+    failed_page_details: list[dict[str, Any]] = []
+    recovery_actions: list[dict[str, Any]] = []
     page_indexes = _visual_page_indexes(total_pages, debug_dir, retry_failed_pages_only)
-    cache_dir = Path(debug_dir) / "debug" / "visual_page_cache"
-    vision_ai_dir = Path(debug_dir) / "debug" / "vision_ai_inputs"
+    debug_root = Path(debug_dir) / "debug"
+    cache_dir = debug_root / "visual_page_cache"
+    vision_ai_dir = debug_root / "vision_ai_inputs"
     cache_dir.mkdir(parents=True, exist_ok=True)
     vision_ai_dir.mkdir(parents=True, exist_ok=True)
+    manifest = _load_checkpoint_manifest(debug_dir, total_pages)
+    prompt_version = _checkpoint_prompt_version()
     common_prompt_path = vision_ai_dir / "page_parse_prompt.txt"
     if not common_prompt_path.exists():
-        common_prompt_path.write_text(PAGE_PARSE_PROMPT, encoding="utf-8")
+        _atomic_write_text(common_prompt_path, PAGE_PARSE_PROMPT)
     visual_links: dict[str, Any] = {
         "materials": {},
         "questions": {},
@@ -1876,13 +2613,83 @@ def _pages_from_visual_fallback(
         page_prompt_path = common_prompt_path
         try:
             page_image_data = base64.b64decode(page_b64)
-            page_image_path.write_bytes(page_image_data)
         except Exception:
             page_image_data = b""
-        visual_result, attempt_errors, attempts = _parse_page_visual_with_retry(
-            page_b64,
-            timeout_seconds=visual_timeout,
+        if page_image_data:
+            render_sha256 = _atomic_write_bytes(page_image_path, page_image_data)
+            _upsert_checkpoint_artifact(
+                manifest,
+                page_no=page_num,
+                artifact_type="render",
+                path=str(page_image_path),
+                sha256=render_sha256,
+                prompt_version=prompt_version,
+            )
+        else:
+            render_sha256 = None
+        image_sha256 = _sha256_bytes(page_image_data or page_b64.encode("utf-8"))
+        recovered_visual_result, recovery_reason = _load_checkpointed_visual_result(
+            manifest=manifest,
+            cache_dir=cache_dir,
+            page_num=page_num,
+            image_sha256=image_sha256,
+            prompt_version=prompt_version,
         )
+        if recovered_visual_result is not None:
+            visual_result = recovered_visual_result
+            attempt_errors = []
+            attempts = 0
+            recovery_actions.append(
+                {
+                    "page_no": page_num,
+                    "action": "reuse_success_artifact",
+                    "reason": recovery_reason,
+                    "artifact_path": str(_page_cache_path(cache_dir, page_num)),
+                }
+            )
+            _update_checkpoint_page(
+                manifest,
+                page_no=page_num,
+                status="success",
+                stage="page_understood",
+                provider_used=visual_result.get("_vision_provider"),
+                attempts=int(manifest.get("pages", {}).get(str(page_num), {}).get("attempts") or 0),
+                artifact_path=str(_page_cache_path(cache_dir, page_num)),
+                artifact_sha256=_sha256_file(_page_cache_path(cache_dir, page_num)),
+                image_sha256=image_sha256,
+                prompt_version=prompt_version,
+                recovered_from_cache=True,
+            )
+            _save_checkpoint_manifest(debug_dir, manifest)
+        else:
+            previous_attempts = int(
+                manifest.get("pages", {}).get(str(page_num), {}).get("attempts") or 0
+            )
+            if recovery_reason:
+                recovery_actions.append(
+                    {
+                        "page_no": page_num,
+                        "action": "rerun_from_checkpoint",
+                        "reason": recovery_reason,
+                    }
+                )
+            _update_checkpoint_page(
+                manifest,
+                page_no=page_num,
+                status="running",
+                stage="rendered",
+                attempts=previous_attempts + 1,
+                artifact_path=str(page_image_path),
+                artifact_sha256=render_sha256,
+                image_sha256=image_sha256,
+                prompt_version=prompt_version,
+                recovered_from_cache=False,
+            )
+            _save_checkpoint_manifest(debug_dir, manifest)
+            visual_result, attempt_errors, attempts = _parse_page_visual_with_retry(
+                page_b64,
+                timeout_seconds=visual_timeout,
+            )
         initial_page_image_path = page_image_path
         initial_prompt_path = page_prompt_path
         fallback_attempted = False
@@ -1891,7 +2698,7 @@ def _pages_from_visual_fallback(
         fallback_prompt_path: Path | None = None
         fallback_attempt_errors: list[dict[str, Any]] = []
         fallback_attempt_count = 0
-        if _visual_result_failed(visual_result) and (
+        if recovered_visual_result is None and _visual_result_failed(visual_result) and (
             visual_result.get("error") or visual_result.get("schema_validation")
         ):
             compact_size = 1000
@@ -1913,13 +2720,13 @@ def _pages_from_visual_fallback(
                     try:
                         compact_image_data = base64.b64decode(compact_b64)
                         compact_image_path = vision_ai_dir / f"page_{page_num}_compact.png"
-                        compact_image_path.write_bytes(compact_image_data)
+                        _atomic_write_bytes(compact_image_path, compact_image_data)
                     except Exception:
                         compact_image_path = None
                     fallback_image_path = compact_image_path
                     fallback_result, fallback_errors, fallback_attempts = _parse_page_visual_with_retry(
                         compact_b64,
-                        timeout_seconds=max(20.0, min(visual_timeout, 60.0)),
+                        timeout_seconds=_reduced_image_retry_timeout_seconds(visual_timeout),
                     )
                     fallback_attempt_errors = fallback_errors
                     fallback_attempt_count = fallback_attempts
@@ -1933,13 +2740,32 @@ def _pages_from_visual_fallback(
                         page_prompt_path = compact_prompt_path
 
         if not page_prompt_path.exists():
-            page_prompt_path.write_text(PAGE_PARSE_PROMPT, encoding="utf-8")
+            _atomic_write_text(page_prompt_path, PAGE_PARSE_PROMPT)
         if fallback_success and fallback_prompt_path and not fallback_prompt_path.exists():
-            fallback_prompt_path.write_text(PAGE_PARSE_PROMPT, encoding="utf-8")
+            _atomic_write_text(fallback_prompt_path, PAGE_PARSE_PROMPT)
+        visual_result["vision_call_result"] = _vision_call_result_payload(
+            result=visual_result,
+            attempts=attempts,
+            attempt_errors=attempt_errors,
+            fallback_attempted=fallback_attempted,
+            fallback_success=fallback_success,
+        )
+        visual_result.setdefault("vision_retry_plan", {})
+        visual_result["vision_retry_plan"].setdefault(
+            "reduced_image_retry",
+            "success" if fallback_success else ("failed" if fallback_attempted else "not_attempted"),
+        )
+        visual_result["vision_retry_plan"].setdefault("simplified_prompt_retry", "skipped")
+        visual_result["vision_retry_plan"].setdefault(
+            "simplified_prompt_retry_reason",
+            "prompt_builder_not_yet_parameterized",
+        )
         request_payload = {
             "page": page_num,
             "provider": visual_result.get("_vision_provider") or "qwen_vl",
-            "model": visual_result.get("_vision_model") or os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+            "model": visual_result.get("_vision_model")
+            or os.getenv("AI_VISUAL_MODEL")
+            or ai_client.DEFAULT_QWEN_VISION_MODEL,
             "timeout_seconds": visual_timeout,
             "page_image_path": str(page_image_path),
             "prompt_path": str(page_prompt_path),
@@ -1959,7 +2785,9 @@ def _pages_from_visual_fallback(
         vision_call_record = {
             "page": page_num,
             "provider": visual_result.get("_vision_provider") or "qwen_vl",
-            "model": visual_result.get("_vision_model") or os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+            "model": visual_result.get("_vision_model")
+            or os.getenv("AI_VISUAL_MODEL")
+            or ai_client.DEFAULT_QWEN_VISION_MODEL,
             "timeout_seconds": visual_result.get("_vision_timeout_seconds") or visual_timeout,
             "elapsed_ms": visual_result.get("_vision_elapsed_ms"),
             "fallback_from": visual_result.get("_vision_fallback_from"),
@@ -1980,7 +2808,9 @@ def _pages_from_visual_fallback(
         visual_result["vision_ai"] = {
             "page": page_num,
             "provider": visual_result.get("_vision_provider") or "qwen_vl",
-            "model": visual_result.get("_vision_model") or os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+            "model": visual_result.get("_vision_model")
+            or os.getenv("AI_VISUAL_MODEL")
+            or ai_client.DEFAULT_QWEN_VISION_MODEL,
             "timeout_seconds": visual_result.get("_vision_timeout_seconds") or visual_timeout,
             "elapsed_ms": visual_result.get("_vision_elapsed_ms"),
             "fallback_from": visual_result.get("_vision_fallback_from"),
@@ -1999,12 +2829,22 @@ def _pages_from_visual_fallback(
         }
         raw_output_path = vision_ai_dir / f"page_{page_num}_raw_output.json"
         try:
-            raw_output_path.write_text(
-                json.dumps(vision_result_to_debug_payload(visual_result, page_num), ensure_ascii=False, indent=2),
-                encoding="utf-8",
+            raw_output_sha256 = _atomic_write_json(
+                raw_output_path,
+                vision_result_to_debug_payload(visual_result, page_num),
+            )
+            _upsert_checkpoint_artifact(
+                manifest,
+                page_no=page_num,
+                artifact_type="provider_response_summary",
+                path=str(raw_output_path),
+                sha256=raw_output_sha256,
+                provider=visual_result.get("_vision_provider"),
+                model=visual_result.get("_vision_model"),
+                prompt_version=prompt_version,
             )
         except Exception:
-            pass
+            raw_output_sha256 = None
         blocks = []
         regions: list[Region] = []
         lines: list[str] = []
@@ -2019,6 +2859,11 @@ def _pages_from_visual_fallback(
                 if key != "raw_model_result"
             },
             "request_status": "failed" if _visual_result_failed(visual_result) else "ok",
+            "failureReason": visual_result.get("vision_call_result", {}).get("failureReason"),
+            "recommendedFix": visual_result.get("vision_call_result", {}).get("recommendedFix"),
+            "fallback_attempted": fallback_attempted,
+            "fallback_success": fallback_success,
+            "fallback_attempts": fallback_attempt_count,
             "attempts": attempts,
             "attempt_errors": attempt_errors,
             "image_size": image_size,
@@ -2246,13 +3091,68 @@ def _pages_from_visual_fallback(
         visual_pages.append(visual_debug)
         if _visual_result_failed(visual_result):
             failed_pages.append(page_index + 1)
+            failed_page_details.append(
+                {
+                    "page": page_index + 1,
+                    "reason": visual_result.get("error") or visual_debug.get("failureReason") or "vision_call_failed",
+                    "failureReason": visual_debug.get("failureReason") or _classify_vision_failure(visual_result),
+                    "recommendedFix": visual_debug.get("recommendedFix"),
+                    "attempts": attempts,
+                    "attemptErrors": attempt_errors,
+                    "fallbackAttempted": fallback_attempted,
+                    "fallbackSuccess": fallback_success,
+                    "providerAttempts": visual_result.get("_vision_provider_attempts") or [],
+                    "visionCallResult": visual_result.get("vision_call_result") or {},
+                }
+            )
+            _update_checkpoint_page(
+                manifest,
+                page_no=page_num,
+                status="failed",
+                stage="page_understood",
+                provider_used=visual_result.get("_vision_provider"),
+                attempts=int(manifest.get("pages", {}).get(str(page_num), {}).get("attempts") or 0),
+                last_error_type=_classify_vision_failure(visual_result),
+                last_error_message=visual_result.get("error") or visual_debug.get("failureReason"),
+                artifact_path=str(raw_output_path),
+                artifact_sha256=raw_output_sha256,
+                image_sha256=image_sha256,
+                prompt_version=prompt_version,
+                recovered_from_cache=False,
+            )
+        else:
+            cache_sha256 = _write_visual_page_cache(cache_dir, page_index + 1, visual_result)
+            if cache_sha256:
+                _upsert_checkpoint_artifact(
+                    manifest,
+                    page_no=page_num,
+                    artifact_type="page_understanding",
+                    path=str(_page_cache_path(cache_dir, page_num)),
+                    sha256=cache_sha256,
+                    provider=visual_result.get("_vision_provider"),
+                    model=visual_result.get("_vision_model"),
+                    prompt_version=prompt_version,
+                )
+            _update_checkpoint_page(
+                manifest,
+                page_no=page_num,
+                status="success",
+                stage="page_understood",
+                provider_used=visual_result.get("_vision_provider"),
+                attempts=int(manifest.get("pages", {}).get(str(page_num), {}).get("attempts") or 0),
+                artifact_path=str(_page_cache_path(cache_dir, page_num)),
+                artifact_sha256=cache_sha256,
+                image_sha256=image_sha256,
+                prompt_version=prompt_version,
+                recovered_from_cache=recovered_visual_result is not None,
+            )
         parser_warnings.append(
             {
                 "page_num": page_index + 1,
                 "warnings": visual_debug["page_warnings"],
             }
         )
-        _write_visual_page_cache(cache_dir, page_index + 1, visual_result)
+        _save_checkpoint_manifest(debug_dir, manifest)
         pages.append(
             PageContent(
                 page_num=page_index + 1,
@@ -2265,7 +3165,11 @@ def _pages_from_visual_fallback(
     setattr(extractor, "_parser_kernel_visual_links", visual_links)
     setattr(extractor, "_parser_kernel_warnings", parser_warnings)
     setattr(extractor, "_parser_kernel_failed_pages", failed_pages)
+    setattr(extractor, "_parser_kernel_failed_page_details", failed_page_details)
     setattr(extractor, "_parser_kernel_vision_ai_calls", visual_links.get("vision_ai_calls", []))
+    recovery_report_path = _write_checkpoint_recovery_report(debug_dir, recovery_actions)
+    if recovery_report_path:
+        setattr(extractor, "_parser_kernel_recovery_report", recovery_report_path)
     return pages
 
 
@@ -2562,6 +3466,94 @@ def _cache_visual_render_size(extractor: Any, page_index: int, image_size: dict[
     _visual_render_size_cache(extractor)[page_index] = image_size
 
 
+def _classify_vision_failure(
+    result: dict[str, Any],
+    attempts: Any = None,
+    attempt_errors: list[dict[str, Any]] | None = None,
+) -> str | None:
+    warnings = {str(item) for item in (result.get("warnings") or [])}
+    schema_validation = result.get("schema_validation") if isinstance(result.get("schema_validation"), dict) else {}
+    provider_attempts = result.get("_vision_provider_attempts") or []
+    attempt_errors = attempt_errors or []
+    error = str(result.get("error") or "")
+    error_lc = error.lower()
+    explicit_failure = bool(error)
+    explicit_failure = explicit_failure or bool(
+        warnings & {"vision_page_timeout", "visual_model_failed", "visual_schema_invalid"}
+    )
+    explicit_failure = explicit_failure or schema_validation.get("valid") is False
+    all_attempts = []
+    if isinstance(provider_attempts, list):
+        all_attempts.extend(item for item in provider_attempts if isinstance(item, dict))
+    all_attempts.extend(item for item in attempt_errors if isinstance(item, dict))
+    provider_attempt_statuses = {
+        str(item.get("status") or "").lower()
+        for item in provider_attempts
+        if isinstance(item, dict)
+    }
+    attempt_error_types = {str(item.get("error_type") or "").lower() for item in all_attempts}
+    attempt_messages = " ".join(str(item.get("error_message") or item.get("error") or "") for item in all_attempts).lower()
+
+    # Provider fallback is expected to leave failed attempts behind. If the
+    # final normalized result is clean and at least one provider returned `ok`,
+    # treat the page as successful instead of failing on the earlier attempt.
+    if "ok" in provider_attempt_statuses and not explicit_failure:
+        return None
+
+    if "vision_page_timeout" in warnings or "timeout" in attempt_error_types or "timeout" in error_lc:
+        return "provider_timeout"
+    if "visual_schema_invalid" in warnings or schema_validation.get("valid") is False:
+        return "schema_invalid"
+    if "empty" in error_lc or "empty" in attempt_messages or error_lc == "visual_page_empty_result":
+        return "provider_empty_response"
+    if "visual_model_failed" in warnings or error or any(item.get("status") == "failed" for item in all_attempts):
+        return "provider_error"
+    return None
+
+
+def _vision_failure_recommended_fix(reason: Any) -> str | None:
+    reason = str(reason or "")
+    mapping = {
+        "provider_timeout": "increase visual provider timeout, inspect provider latency, retry the failed chunk with reduced_image_retry",
+        "provider_empty_response": "inspect raw provider response and retry with reduced image or simplified prompt",
+        "schema_invalid": "inspect raw output and run schema_repair_retry; update prompt/schema if repeated",
+        "schema_repair_failed": "capture raw output, add parser repair tests, and update schema normalization",
+        "provider_error": "inspect provider error details and environment/provider configuration",
+        "fallback_failed": "inspect reduced_image_retry artifacts and provider diagnostics",
+        "coarse_only_no_synthesizable_question": "coarse page evidence exists but no structured question; improve whole-page understanding prompt/parser",
+        "page_understanding_failed": "inspect page-understanding.json and raw visual output; improve page understanding extraction",
+        "semantic_grouping_failed": "inspect semantic-groups.json; improve semantic grouping from page understanding",
+        "candidate_synthesis_failed": "inspect recrop-plan and raw question synthesis; improve candidate construction",
+        "source_evidence_missing": "rerun with full PDF/source locator and block auto/manual publish until evidence is complete",
+    }
+    return mapping.get(reason)
+
+
+def _vision_call_result_payload(
+    *,
+    result: dict[str, Any],
+    attempts: int,
+    attempt_errors: list[dict[str, Any]],
+    fallback_attempted: bool = False,
+    fallback_success: bool = False,
+) -> dict[str, Any]:
+    failure_reason = _classify_vision_failure(result, attempts, attempt_errors)
+    if fallback_attempted and failure_reason and not fallback_success:
+        failure_reason = "fallback_failed"
+    status = "success" if not failure_reason else "failed"
+    return {
+        "status": status,
+        "failureReason": failure_reason,
+        "recommendedFix": _vision_failure_recommended_fix(failure_reason),
+        "attempts": attempts,
+        "providerAttempts": result.get("_vision_provider_attempts") or [],
+        "attemptErrors": attempt_errors,
+        "fallbackAttempted": fallback_attempted,
+        "fallbackSuccess": fallback_success,
+        "schemaValidation": result.get("schema_validation") or {},
+    }
+
+
 def _parse_page_visual_with_retry(
     page_b64: str,
     timeout_seconds: float | None = None,
@@ -2569,19 +3561,55 @@ def _parse_page_visual_with_retry(
     attempt_errors: list[dict[str, Any]] = []
     timeout = timeout_seconds or _visual_page_timeout_seconds()
     first_result = _parse_page_visual_with_timeout(page_b64, timeout_seconds=timeout)
+    first_reason = _classify_vision_failure(first_result, 1, attempt_errors)
     if not _visual_result_retryable(first_result):
+        first_result["vision_call_result"] = _vision_call_result_payload(
+            result=first_result,
+            attempts=1,
+            attempt_errors=attempt_errors,
+        )
+        first_result["vision_retry_plan"] = {
+            "reduced_image_retry": "handled_by_page_fallback" if first_reason else "not_needed",
+            "schema_repair_retry": "not_applicable",
+            "simplified_prompt_retry": "skipped",
+            "simplified_prompt_retry_reason": "prompt_builder_not_yet_parameterized",
+        }
         return first_result, attempt_errors, 1
     first_warnings = set(str(item) for item in first_result.get("warnings") or [])
     if "visual_schema_invalid" not in first_warnings:
+        first_result["vision_call_result"] = _vision_call_result_payload(
+            result=first_result,
+            attempts=1,
+            attempt_errors=attempt_errors,
+        )
+        first_result["vision_retry_plan"] = {
+            "reduced_image_retry": "handled_by_page_fallback" if first_reason else "not_needed",
+            "schema_repair_retry": "skipped_non_schema_retryable_result",
+            "simplified_prompt_retry": "skipped",
+            "simplified_prompt_retry_reason": "prompt_builder_not_yet_parameterized",
+        }
         return first_result, attempt_errors, 1
     attempt_errors.append(
         {
+            "retry_type": "schema_repair_retry",
             "warnings": list(first_result.get("warnings") or []),
             "schema_validation": first_result.get("schema_validation") or {},
             "error": first_result.get("error"),
         }
     )
     second_result = _parse_page_visual_with_timeout(page_b64, timeout_seconds=timeout)
+    second_reason = _classify_vision_failure(second_result, 2, attempt_errors)
+    second_result["vision_call_result"] = _vision_call_result_payload(
+        result=second_result,
+        attempts=2,
+        attempt_errors=attempt_errors,
+    )
+    second_result["vision_retry_plan"] = {
+        "reduced_image_retry": "handled_by_page_fallback" if second_reason else "not_needed",
+        "schema_repair_retry": "success" if not second_reason else "failed",
+        "simplified_prompt_retry": "skipped",
+        "simplified_prompt_retry_reason": "prompt_builder_not_yet_parameterized",
+    }
     return second_result, attempt_errors, 2
 
 
@@ -2630,15 +3658,23 @@ def _visual_result_retryable(result: dict[str, Any]) -> bool:
 
 
 def _visual_result_failed(result: dict[str, Any]) -> bool:
-    warnings = set(str(item) for item in result.get("warnings") or [])
-    return bool(warnings & {"vision_page_timeout", "visual_model_failed"})
+    return _classify_vision_failure(result) is not None
 
 
 def _visual_page_timeout_seconds() -> float:
     raw = (
-        os.getenv("VISION_AI_TIMEOUT_SECONDS")
-        or os.getenv("PDF_VISUAL_PAGE_TIMEOUT_SECONDS")
-        or os.getenv("PDF_VISUAL_OPENAI_TIMEOUT_SECONDS")
+        ai_client.current_config_value(
+            "vision_ai_timeout_seconds",
+            "VISION_AI_TIMEOUT_SECONDS",
+        )
+        or ai_client.current_config_value(
+            "pdf_visual_page_timeout_seconds",
+            "PDF_VISUAL_PAGE_TIMEOUT_SECONDS",
+        )
+        or ai_client.current_config_value(
+            "pdf_visual_openai_timeout_seconds",
+            "PDF_VISUAL_OPENAI_TIMEOUT_SECONDS",
+        )
     )
     if not raw:
         return DEFAULT_VISUAL_PAGE_TIMEOUT_SECONDS
@@ -2649,12 +3685,24 @@ def _visual_page_timeout_seconds() -> float:
     return timeout if timeout > 0 else DEFAULT_VISUAL_PAGE_TIMEOUT_SECONDS
 
 
+def _reduced_image_retry_timeout_seconds(page_timeout_seconds: float) -> float:
+    provider_timeout = ai_client._vision_provider_timeout_seconds(page_timeout_seconds)
+    return max(60.0, provider_timeout)
+
+
 def _visual_chain_timeout_seconds(provider_timeout_seconds: float) -> float:
-    fallback_enabled = bool(os.getenv("MIMO_API_KEY")) or bool(os.getenv("PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS")) or bool(
-        os.getenv("VISION_AI_PROVIDER_TIMEOUT_SECONDS")
+    configured_providers = ai_client.configured_vision_provider_order()
+    provider_slots = max(1, len(configured_providers))
+    sdk_fallback_enabled = (
+        "qwen_vl" in configured_providers
+        and ai_client.dashscope_sdk_page_fallback_enabled(
+            ai_client.current_config_value(
+                "dashscope_base_url",
+                "DASHSCOPE_BASE_URL",
+            ),
+        )
     )
-    provider_slots = 2 if fallback_enabled else 1
-    if os.getenv("VISION_AI_ENABLE_DASHSCOPE_SDK_FALLBACK", "").lower() in {"1", "true", "yes"}:
+    if sdk_fallback_enabled:
         provider_slots += 1
     return max(provider_timeout_seconds, provider_timeout_seconds * provider_slots + 10.0)
 
@@ -2670,13 +3718,23 @@ def _visual_timeout_result(timeout_seconds: float) -> dict[str, Any]:
         "schema_validation": {"timeout_seconds": timeout_seconds},
         "raw_model_result": {"error": "vision_page_timeout"},
         "_vision_provider": "qwen_vl",
-        "_vision_model": os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+        "_vision_model": ai_client.current_config_value(
+            "visual_model",
+            "AI_VISUAL_MODEL",
+            ai_client.DEFAULT_QWEN_VISION_MODEL,
+        )
+        or ai_client.DEFAULT_QWEN_VISION_MODEL,
         "_vision_timeout_seconds": timeout_seconds,
         "_vision_elapsed_ms": int(timeout_seconds * 1000),
         "_vision_provider_attempts": [
             {
                 "provider": "qwen_vl",
-                "model": os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+                "model": ai_client.current_config_value(
+                    "visual_model",
+                    "AI_VISUAL_MODEL",
+                    ai_client.DEFAULT_QWEN_VISION_MODEL,
+                )
+                or ai_client.DEFAULT_QWEN_VISION_MODEL,
                 "timeout_seconds": timeout_seconds,
                 "elapsed_ms": int(timeout_seconds * 1000),
                 "status": "failed",
@@ -2699,13 +3757,23 @@ def _visual_failure_result(message: str) -> dict[str, Any]:
         "schema_validation": {"exception": message},
         "raw_model_result": {"error": message},
         "_vision_provider": "qwen_vl",
-        "_vision_model": os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+        "_vision_model": ai_client.current_config_value(
+            "visual_model",
+            "AI_VISUAL_MODEL",
+            ai_client.DEFAULT_QWEN_VISION_MODEL,
+        )
+        or ai_client.DEFAULT_QWEN_VISION_MODEL,
         "_vision_timeout_seconds": _visual_page_timeout_seconds(),
         "_vision_elapsed_ms": 0,
         "_vision_provider_attempts": [
             {
                 "provider": "qwen_vl",
-                "model": os.getenv("AI_VISUAL_MODEL") or "qwen-vl-max",
+                "model": ai_client.current_config_value(
+                    "visual_model",
+                    "AI_VISUAL_MODEL",
+                    ai_client.DEFAULT_QWEN_VISION_MODEL,
+                )
+                or ai_client.DEFAULT_QWEN_VISION_MODEL,
                 "timeout_seconds": _visual_page_timeout_seconds(),
                 "elapsed_ms": 0,
                 "status": "failed",

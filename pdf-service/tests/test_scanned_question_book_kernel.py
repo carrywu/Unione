@@ -191,6 +191,173 @@ class ScannedQuestionBookKernelTest(unittest.TestCase):
             self.assertEqual([image["role"] for image in question["images"]], ["table"])
             self.assertEqual([ref["role"] for ref in question["visual_refs"]], ["table"])
 
+    def test_semantic_questions_emit_real_source_text_span_and_shared_material_group(self):
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [],
+                "semantic_questions": [
+                    {
+                        "question_no": 6,
+                        "content": "2015 年 D 省软件及信息服务业营业额同比增长约为",
+                        "pages": [1],
+                        "page_num": 1,
+                        "stem_bbox": [80, 300, 920, 360],
+                        "options_bbox": [80, 365, 920, 460],
+                        "options": [
+                            {"label": "A", "text": "10%", "bbox": [90, 370, 180, 390]},
+                            {"label": "B", "text": "20%", "bbox": [240, 370, 330, 390]},
+                            {"label": "C", "text": "30%", "bbox": [390, 370, 480, 390]},
+                            {"label": "D", "text": "40%", "bbox": [540, 370, 630, 390]},
+                        ],
+                        "material_temp_id": "shared-m1",
+                        "material_text": "2015~2018 年D 省软件及信息服务业营业额",
+                    },
+                    {
+                        "question_no": 7,
+                        "content": "2018 年 D 省软件及信息服务业营业额约为多少亿元",
+                        "pages": [1],
+                        "page_num": 1,
+                        "stem_bbox": [80, 500, 920, 560],
+                        "options_bbox": [80, 565, 920, 660],
+                        "options": [
+                            {"label": "A", "text": "300", "bbox": [90, 570, 180, 590]},
+                            {"label": "B", "text": "400", "bbox": [240, 570, 330, 590]},
+                            {"label": "C", "text": "500", "bbox": [390, 570, 480, 590]},
+                            {"label": "D", "text": "600", "bbox": [540, 570, 630, 590]},
+                        ],
+                        "material_temp_id": "shared-m1",
+                        "material_text": "2015~2018 年D 省软件及信息服务业营业额",
+                    },
+                ],
+                "visuals": [],
+            },
+        ):
+            result = parse_extractor_with_kernel(FakeScannedQuestionExtractor(), debug_dir=tmpdir)
+
+            by_index = {question["index"]: question for question in result["questions"]}
+            self.assertIn(7, by_index)
+            self.assertEqual(
+                by_index[7]["source_text_span"],
+                "7. 2018 年 D 省软件及信息服务业营业额约为多少亿元\nA. 300\nB. 400\nC. 500\nD. 600",
+            )
+            self.assertEqual(by_index[6]["material_group_id"], by_index[7]["material_group_id"])
+            self.assertEqual(by_index[7]["material_group_question_indexes"], [6, 7])
+            self.assertTrue(by_index[7]["shared_material"])
+
+            debug_dir = Path(tmpdir) / "debug"
+            question_number_scan = json.loads((debug_dir / "question-number-scan.json").read_text(encoding="utf-8"))
+            self.assertEqual(question_number_scan["detected_question_numbers"], [6, 7])
+            self.assertEqual(question_number_scan["missing_question_numbers"], [])
+            page_understanding_recovered = json.loads(
+                (debug_dir / "page-understanding-recovered.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(page_understanding_recovered["recovered_question_numbers"], [6, 7])
+            span_report = json.loads((debug_dir / "source-text-span-report.json").read_text(encoding="utf-8"))
+            self.assertEqual(span_report["questions"]["7"]["source_text_span"], by_index[7]["source_text_span"])
+            material_report = json.loads((debug_dir / "material-group-binding-report.json").read_text(encoding="utf-8"))
+            self.assertEqual(material_report["questions"]["7"]["material_group_question_indexes"], [6, 7])
+            semantic_groups = json.loads((debug_dir / "semantic-groups.json").read_text(encoding="utf-8"))
+            semantic_by_no = {group["question_no"]: group for group in semantic_groups}
+            self.assertEqual(semantic_by_no[7]["source_text_span"], by_index[7]["source_text_span"])
+            self.assertEqual(semantic_by_no[7]["material_group_id"], by_index[7]["material_group_id"])
+            self.assertEqual(semantic_by_no[7]["material_group_question_indexes"], [6, 7])
+
+    def test_semantic_questions_bind_shared_material_from_visual_evidence_without_material_text(self):
+        shared_visual = {
+            "group_id": "vg_page_2_1",
+            "kind": "chart",
+            "bbox": [88, 348, 576, 588],
+            "caption": "柱状图展示2016-2021年固定和移动数据及互联网业务收入（亿元），折线图展示其增速（%）",
+        }
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value={
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [],
+                "semantic_questions": [
+                    {
+                        "question_no": 6,
+                        "content": "2021年全国电信业务实现收入的同比增长额是",
+                        "pages": [1],
+                        "page_num": 1,
+                        "stem_bbox": [80, 670, 500, 700],
+                        "options_bbox": [80, 704, 500, 760],
+                        "options": [
+                            {"label": "A", "text": "0.07万亿元", "bbox": [90, 710, 180, 730]},
+                            {"label": "B", "text": "0.09万亿元", "bbox": [210, 710, 300, 730]},
+                            {"label": "C", "text": "0.11万亿元", "bbox": [330, 710, 420, 730]},
+                            {"label": "D", "text": "0.13万亿元", "bbox": [450, 710, 540, 730]},
+                        ],
+                        "visual_groups": [shared_visual],
+                    },
+                    {
+                        "question_no": 7,
+                        "content": "2021年全国数据及互联网业务总收入的同比增长率是",
+                        "pages": [1],
+                        "page_num": 1,
+                        "stem_bbox": [80, 790, 500, 820],
+                        "options_bbox": [80, 824, 500, 880],
+                        "options": [
+                            {"label": "A", "text": "4.5%", "bbox": [90, 830, 180, 850]},
+                            {"label": "B", "text": "5.1%", "bbox": [210, 830, 300, 850]},
+                            {"label": "C", "text": "6.2%", "bbox": [330, 830, 420, 850]},
+                            {"label": "D", "text": "7.0%", "bbox": [450, 830, 540, 850]},
+                        ],
+                        "visual_groups": [shared_visual],
+                    },
+                    {
+                        "question_no": 8,
+                        "content": "单独材料题不应被错误绑定",
+                        "pages": [1],
+                        "page_num": 1,
+                        "stem_bbox": [80, 900, 500, 930],
+                        "options_bbox": [80, 934, 500, 990],
+                        "options": [
+                            {"label": "A", "text": "2016年", "bbox": [90, 940, 180, 960]},
+                            {"label": "B", "text": "2017年", "bbox": [210, 940, 300, 960]},
+                            {"label": "C", "text": "2020年", "bbox": [330, 940, 420, 960]},
+                            {"label": "D", "text": "2021年", "bbox": [450, 940, 540, 960]},
+                        ],
+                        "visual_groups": [
+                            {
+                                "group_id": "vg_page_2_2",
+                                "kind": "chart",
+                                "bbox": [90, 1000, 570, 1200],
+                                "caption": "另一张不共享的图表",
+                            }
+                        ],
+                    },
+                ],
+                "visuals": [],
+            },
+        ):
+            result = parse_extractor_with_kernel(FakeScannedQuestionExtractor(), debug_dir=tmpdir)
+
+            by_index = {question["index"]: question for question in result["questions"]}
+            self.assertEqual(by_index[6]["material_group_id"], by_index[7]["material_group_id"])
+            self.assertEqual(by_index[6]["material_group_question_indexes"], [6, 7])
+            self.assertEqual(by_index[6]["material_group_reason"], "semantic_shared_visual_material_binding")
+            self.assertTrue(by_index[6]["shared_material"])
+            self.assertEqual(by_index[8]["material_group_question_indexes"], [8])
+            self.assertFalse(by_index[8]["shared_material"])
+            self.assertIn("7. 2021年全国数据及互联网业务总收入", by_index[7]["source_text_span"])
+
+            material_report = json.loads(
+                (Path(tmpdir) / "debug" / "material-group-binding-report.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(material_report["questions"]["7"]["material_group_question_indexes"], [6, 7])
+            semantic_groups = json.loads((Path(tmpdir) / "debug" / "semantic-groups.json").read_text(encoding="utf-8"))
+            semantic_by_no = {group["question_no"]: group for group in semantic_groups}
+            self.assertIn("7. 2021年全国数据及互联网业务总收入", semantic_by_no[7]["source_text_span"])
+            self.assertEqual(semantic_by_no[7]["material_group_id"], by_index[7]["material_group_id"])
+            self.assertEqual(semantic_by_no[7]["material_group_question_indexes"], [6, 7])
+
     def test_scanned_question_without_visual_keeps_images_empty(self):
         with TemporaryDirectory() as tmpdir, patch(
             "parser_kernel.adapter.ai_client.parse_page_visual",
@@ -358,6 +525,198 @@ class ScannedQuestionBookKernelTest(unittest.TestCase):
             failed_pages = json.loads(Path(tmpdir, "debug", "failed_pages.json").read_text(encoding="utf-8"))
             self.assertEqual(failed_pages["failed_pages"], [])
 
+    def test_completed_pages_are_reused_from_checkpoint_without_retry_flag(self):
+        class SevenPageExtractor(FakeScannedQuestionExtractor):
+            total_pages = 7
+            doc = [FakeScannedQuestionExtractor._FakePage() for _ in range(7)]
+
+            def get_page_screenshot(self, page_num: int, dpi: int = 150, max_side: int | None = None) -> str:
+                return f"page-{page_num + 1}-b64"
+
+        def first_run(page_b64: str):
+            page_num = int(page_b64.removeprefix("page-").removesuffix("-b64"))
+            if page_num == 7:
+                raise TimeoutError()
+            return {
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": page_num,
+                        "content": f"第{page_num}页题干",
+                        "bbox": [0, 300, 1000, 600],
+                        "stem_bbox": [0, 300, 1000, 360],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    }
+                ],
+                "visuals": [],
+            }
+
+        rerun_calls: list[str] = []
+
+        def rerun(page_b64: str):
+            rerun_calls.append(page_b64)
+            page_num = int(page_b64.removeprefix("page-").removesuffix("-b64"))
+            return {
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": page_num,
+                        "content": f"恢复第{page_num}页题干",
+                        "bbox": [0, 300, 1000, 600],
+                        "stem_bbox": [0, 300, 1000, 360],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    }
+                ],
+                "visuals": [],
+            }
+
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            side_effect=first_run,
+        ):
+            first_result = parse_extractor_with_kernel(SevenPageExtractor(), debug_dir=tmpdir)
+            self.assertEqual({question["index"] for question in first_result["questions"]}, {1, 2, 3, 4, 5, 6})
+
+            with patch("parser_kernel.adapter.ai_client.parse_page_visual", side_effect=rerun):
+                rerun_result = parse_extractor_with_kernel(SevenPageExtractor(), debug_dir=tmpdir)
+
+            self.assertEqual(rerun_calls, ["page-7-b64"])
+            self.assertEqual({question["index"] for question in rerun_result["questions"]}, {1, 2, 3, 4, 5, 6, 7})
+            recovery_reports = list(Path(tmpdir, "debug", "recovery").glob("*/checkpoint-recovery.json"))
+            self.assertTrue(recovery_reports)
+            recovery_payload = json.loads(recovery_reports[-1].read_text(encoding="utf-8"))
+            reused_pages = {
+                item["page_no"]
+                for item in recovery_payload["actions"]
+                if item["action"] == "reuse_success_artifact"
+            }
+            self.assertEqual(reused_pages, {1, 2, 3, 4, 5, 6})
+
+    def test_half_written_checkpoint_cache_is_not_treated_as_success(self):
+        class OnePageExtractor(FakeScannedQuestionExtractor):
+            total_pages = 1
+            doc = [FakeScannedQuestionExtractor._FakePage()]
+
+            def get_page_screenshot(self, page_num: int, dpi: int = 150, max_side: int | None = None) -> str:
+                return "page-1-b64"
+
+        def success_result():
+            return {
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [
+                    {
+                        "index": 1,
+                        "content": "第一页题干",
+                        "bbox": [0, 300, 1000, 600],
+                        "stem_bbox": [0, 300, 1000, 360],
+                        "option_a": "甲",
+                        "option_b": "乙",
+                        "option_c": "丙",
+                        "option_d": "丁",
+                    }
+                ],
+                "visuals": [],
+            }
+
+        rerun_calls: list[str] = []
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            return_value=success_result(),
+        ):
+            parse_extractor_with_kernel(OnePageExtractor(), debug_dir=tmpdir)
+            cache_file = Path(tmpdir, "debug", "visual_page_cache", "page_1.json")
+            cache_file.write_text('{"visual_result":', encoding="utf-8")
+
+            with patch(
+                "parser_kernel.adapter.ai_client.parse_page_visual",
+                side_effect=lambda page_b64: rerun_calls.append(page_b64) or success_result(),
+            ):
+                rerun_result = parse_extractor_with_kernel(OnePageExtractor(), debug_dir=tmpdir)
+
+        self.assertEqual(rerun_calls, ["page-1-b64"])
+        self.assertEqual([question["index"] for question in rerun_result["questions"]], [1])
+
+    def test_stale_running_checkpoint_page_reruns_and_writes_recovery_report(self):
+        class OnePageExtractor(FakeScannedQuestionExtractor):
+            total_pages = 1
+            doc = [FakeScannedQuestionExtractor._FakePage()]
+
+            def get_page_screenshot(self, page_num: int, dpi: int = 150, max_side: int | None = None) -> str:
+                return "page-1-b64"
+
+        with TemporaryDirectory() as tmpdir:
+            manifest_path = Path(tmpdir, "debug", "checkpoint-manifest.json")
+            manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "parse_checkpoint_v1",
+                        "updated_at": "2026-05-01T00:00:00+00:00",
+                        "total_pages": 1,
+                        "pages": {
+                            "1": {
+                                "page_no": 1,
+                                "status": "running",
+                                "stage": "page_understood",
+                                "attempts": 1,
+                                "updated_at": "2026-05-01T00:00:00+00:00",
+                            }
+                        },
+                        "artifacts": [],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            calls: list[str] = []
+            with patch(
+                "parser_kernel.adapter.ai_client.parse_page_visual",
+                side_effect=lambda page_b64: calls.append(page_b64)
+                or {
+                    "page_type": "question",
+                    "warnings": [],
+                    "materials": [],
+                    "questions": [
+                        {
+                            "index": 1,
+                            "content": "恢复后的第一页题干",
+                            "bbox": [0, 300, 1000, 600],
+                            "stem_bbox": [0, 300, 1000, 360],
+                            "option_a": "甲",
+                            "option_b": "乙",
+                            "option_c": "丙",
+                            "option_d": "丁",
+                        }
+                    ],
+                    "visuals": [],
+                },
+            ):
+                parse_extractor_with_kernel(OnePageExtractor(), debug_dir=tmpdir)
+
+            self.assertEqual(calls, ["page-1-b64"])
+            recovery_reports = list(Path(tmpdir, "debug", "recovery").glob("*/checkpoint-recovery.json"))
+            self.assertTrue(recovery_reports)
+            recovery_payload = json.loads(recovery_reports[-1].read_text(encoding="utf-8"))
+            self.assertTrue(
+                any(
+                    item["action"] == "rerun_from_checkpoint" and item["reason"] == "stale_running_page"
+                    for item in recovery_payload["actions"]
+                )
+            )
+
     def test_scanned_question_book_timeout_degrades_per_page_without_crashing_book(self):
         class TwoPageExtractor(FakeScannedQuestionExtractor):
             total_pages = 2
@@ -413,6 +772,80 @@ class ScannedQuestionBookKernelTest(unittest.TestCase):
             timeout_page = visual_pages[0]
             self.assertIn("vision_page_timeout", timeout_page.get("page_warnings", []))
             self.assertTrue(any(region.get("type") == "page_fallback" for region in timeout_page.get("regions", [])))
+
+    def test_semantic_questions_keep_real_source_page_numbers(self):
+        class ThreePageExtractor(FakeScannedQuestionExtractor):
+            total_pages = 3
+            doc = [
+                FakeScannedQuestionExtractor._FakePage(),
+                FakeScannedQuestionExtractor._FakePage(),
+                FakeScannedQuestionExtractor._FakePage(),
+            ]
+
+            def get_page_screenshot(self, page_num: int, dpi: int = 150, max_side: int | None = None) -> str:
+                return f"page-{page_num + 1}-b64"
+
+        def fake_visual_call(page_b64: str):
+            page_num = int(page_b64.removeprefix("page-").removesuffix("-b64"))
+            if page_num == 2:
+                return {
+                    "page_type": "question",
+                    "warnings": [],
+                    "materials": [],
+                    "questions": [
+                        {
+                            "index": 5,
+                            "content": "第二页题目",
+                            "bbox": [0, 100, 1000, 260],
+                            "stem_bbox": [0, 100, 1000, 160],
+                            "option_a": "甲",
+                            "option_b": "乙",
+                            "option_c": "丙",
+                            "option_d": "丁",
+                        }
+                    ],
+                    "visuals": [],
+                }
+            if page_num == 3:
+                return {
+                    "page_type": "question",
+                    "warnings": [],
+                    "materials": [],
+                    "questions": [
+                        {
+                            "index": 8,
+                            "content": "第三页题目",
+                            "bbox": [0, 200, 1000, 360],
+                            "stem_bbox": [0, 200, 1000, 260],
+                            "option_a": "甲",
+                            "option_b": "乙",
+                            "option_c": "丙",
+                            "option_d": "丁",
+                        }
+                    ],
+                    "visuals": [],
+                }
+            return {
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [],
+                "visuals": [],
+            }
+
+        with TemporaryDirectory() as tmpdir, patch(
+            "parser_kernel.adapter.ai_client.parse_page_visual",
+            side_effect=fake_visual_call,
+        ):
+            result = parse_extractor_with_kernel(ThreePageExtractor(), debug_dir=tmpdir)
+            by_index = {item["index"]: item for item in result["questions"]}
+
+            self.assertEqual(by_index[5]["page_num"], 2)
+            self.assertEqual(by_index[5]["source_page_start"], 2)
+            self.assertEqual(by_index[5]["source_page_end"], 2)
+            self.assertEqual(by_index[8]["page_num"], 3)
+            self.assertEqual(by_index[8]["source_page_start"], 3)
+            self.assertEqual(by_index[8]["source_page_end"], 3)
 
     def test_scanned_question_book_visual_result_flows_into_kernel_output(self):
         with TemporaryDirectory() as tmpdir, patch(
