@@ -388,7 +388,9 @@ export class PdfService {
       {
         url: task.file_url,
         task_id: task.id,
-        pages: typeof body.pages === 'string' ? body.pages : '9-14',
+        pages: typeof body.pages === 'string'
+          ? body.pages
+          : this.configService.get<string>('PDF_DEBUG_SMOKE_PAGES', '1-8'),
         clean_output: Boolean(body.clean_output),
         refresh_cache: Boolean(body.refresh_cache),
         retry_failed_pages_only: Boolean(body.retry_failed_pages_only),
@@ -448,9 +450,17 @@ export class PdfService {
     const debugPayload = await readLocalJson('ai-preaudit-debug.json');
     const finalPreviewPayload = await readLocalJson('final-preview-payload.json');
     const aiAuditResults = await readLocalJson('ai-audit-results.json');
+    const finalQuestions = await readLocalJson('final-questions.json');
     const pageUnderstanding = await readLocalJson('page-understanding.json');
     const semanticGroups = await readLocalJson('semantic-groups.json');
     const recropPlan = await readLocalJson('recrop-plan.json');
+    const stageCounts = await readLocalJson('stage-counts.json');
+    const firstFailedStage = await readLocalJson('first-failed-stage.json');
+    const fallbackRecovery = await readLocalJson('fallback-recovery.json');
+    const questionNumberScan = await readLocalJson('question-number-scan.json');
+    const pageUnderstandingRecovered = await readLocalJson('page-understanding-recovered.json');
+    const sourceTextSpanReport = await readLocalJson('source-text-span-report.json');
+    const materialGroupBindingReport = await readLocalJson('material-group-binding-report.json');
     if (!debugPayload && !finalPreviewPayload && !aiAuditResults) {
       throw new NotFoundException('AI 预审核调试产物不存在');
     }
@@ -463,17 +473,35 @@ export class PdfService {
       qwen_vl_call_count: Number(debugPayload?.qwen_vl_call_count_after || 0),
       final_verdict: debugPayload?.final_verdict || null,
       final_preview_payload: finalPreviewPayload || debugPayload?.final_preview_payload || null,
+      final_questions: finalQuestions || debugPayload?.final_questions_after_audit || [],
       ai_audit_results: aiAuditResults || debugPayload?.ai_audit_results || [],
       page_understanding: pageUnderstanding || debugPayload?.page_understanding || [],
       semantic_groups: semanticGroups || debugPayload?.semantic_groups || [],
       recrop_plan: recropPlan || debugPayload?.recrop_plan || [],
+      stage_counts: stageCounts || debugPayload?.stage_counts || null,
+      first_failed_stage: firstFailedStage || debugPayload?.first_failed_stage || null,
+      fallback_recovery: fallbackRecovery || debugPayload?.fallback_recovery || null,
+      question_number_scan: questionNumberScan || debugPayload?.question_number_scan || null,
+      page_understanding_recovered:
+        pageUnderstandingRecovered || debugPayload?.page_understanding_recovered || null,
+      source_text_span_report: sourceTextSpanReport || debugPayload?.source_text_span_report || null,
+      material_group_binding_report:
+        materialGroupBindingReport || debugPayload?.material_group_binding_report || null,
       artifact_refs: {
         ai_preaudit_debug: join(debugDir, 'ai-preaudit-debug.json'),
         final_preview_payload: join(debugDir, 'final-preview-payload.json'),
+        final_questions: join(debugDir, 'final-questions.json'),
         ai_audit_results: join(debugDir, 'ai-audit-results.json'),
         page_understanding: join(debugDir, 'page-understanding.json'),
         semantic_groups: join(debugDir, 'semantic-groups.json'),
         recrop_plan: join(debugDir, 'recrop-plan.json'),
+        stage_counts: join(debugDir, 'stage-counts.json'),
+        first_failed_stage: join(debugDir, 'first-failed-stage.json'),
+        fallback_recovery: join(debugDir, 'fallback-recovery.json'),
+        question_number_scan: join(debugDir, 'question-number-scan.json'),
+        page_understanding_recovered: join(debugDir, 'page-understanding-recovered.json'),
+        source_text_span_report: join(debugDir, 'source-text-span-report.json'),
+        material_group_binding_report: join(debugDir, 'material-group-binding-report.json'),
       },
     };
   }
@@ -495,13 +523,14 @@ export class PdfService {
       auditsByNo.set(key, audit);
     });
 
+    const sequenceDiagnostics = this.paperCandidateQuestionSequenceDiagnostics(previewQuestions);
     const questions = previewQuestions.map((question, index) => {
       const questionNo = question?.question_no ?? null;
       const audit =
         auditsByNo.get(this.paperCandidateQuestionKey(questionNo, index)) ||
         auditResults[index] ||
         {};
-      return this.buildPaperCandidate(task, question || {}, audit || {}, index, debug);
+      return this.buildPaperCandidate(task, question || {}, audit || {}, index, debug, sequenceDiagnostics);
     });
     const summary = {
       total: questions.length,
@@ -511,6 +540,39 @@ export class PdfService {
       ai_warning_count: questions.filter((item) => item.ai_audit_status === 'warning').length,
       ai_failed_count: questions.filter((item) => item.ai_audit_status === 'failed').length,
     };
+    const finalQuestionsCount = Array.isArray(debug.final_questions)
+      ? debug.final_questions.length
+      : Number(debug.stage_counts?.final_questions_count || 0);
+    const outputQuestionsCount = Number(debug.stage_counts?.output_questions_count || finalQuestionsCount || 0);
+    const diagnostics = {
+      stage_counts: debug.stage_counts || null,
+      first_failed_stage: debug.first_failed_stage || null,
+      invariants: [
+        outputQuestionsCount > 0 && !previewQuestions.length
+          ? {
+              code: 'backend_preview_drop_all',
+              severity: 'error',
+              message: 'kernel/output_questions 非空，但 final_preview_payload.questions 为空',
+            }
+          : null,
+        previewQuestions.length > 0 && !questions.length
+          ? {
+              code: 'backend_paper_candidates_empty',
+              severity: 'error',
+              message: 'final_preview_payload.questions 非空，但 paper-candidates 为空',
+            }
+          : null,
+        sequenceDiagnostics.missing_question_numbers.length
+          ? {
+              code: 'question_number_gap',
+              severity: 'error',
+              message: `候选题题号不连续，缺失题号：${sequenceDiagnostics.missing_question_numbers.join(',')}`,
+              observed_question_numbers: sequenceDiagnostics.observed_question_numbers,
+              missing_question_numbers: sequenceDiagnostics.missing_question_numbers,
+            }
+          : null,
+      ].filter(Boolean),
+    };
     const payload = {
       taskId: task.id,
       bankId: task.bank_id,
@@ -519,6 +581,7 @@ export class PdfService {
       provider: this.firstNonEmptyProvider(debug),
       model: this.firstNonEmptyModel(debug),
       summary,
+      diagnostics,
       questions,
       artifact_refs: {
         ...debug.artifact_refs,
@@ -540,7 +603,10 @@ export class PdfService {
     if (!sourceTaskId) throw new BadRequestException('source_task_id 必填');
     const candidates = await this.getPaperCandidates(sourceTaskId);
     const bodyQuestions = Array.isArray(body.questions)
-      ? (body.questions as Array<Record<string, any>>)
+      ? this.paperDraftQuestionsFromRequestedCandidates(
+          body.questions as Array<Record<string, any>>,
+          candidates.questions as Array<Record<string, any>>,
+        )
       : candidates.questions.filter((item: Record<string, any>) => item.can_add_to_paper);
     const paperId = randomUUID();
     const sections = this.normalizeDraftSections(body.sections, bodyQuestions);
@@ -569,12 +635,15 @@ export class PdfService {
 
   async updateDraftPaper(paperId: string, body: Record<string, unknown>) {
     const existing = await this.readDraftPaper(paperId);
-    const sections = this.normalizeDraftSections(
-      body.sections || existing.sections,
-      Array.isArray(body.questions) ? (body.questions as Array<Record<string, any>>) : existing.questions,
-    );
+    const requestedQuestions = Array.isArray(body.questions)
+      ? await this.paperDraftQuestionsFromExistingDraft(
+          existing,
+          body.questions as Array<Record<string, any>>,
+        )
+      : existing.questions;
+    const sections = this.normalizeDraftSections(body.sections || existing.sections, requestedQuestions);
     const questions = this.normalizeDraftQuestions(
-      Array.isArray(body.questions) ? (body.questions as Array<Record<string, any>>) : existing.questions,
+      requestedQuestions,
       sections[0]?.id || 'section-1',
     );
     const next = {
@@ -604,8 +673,104 @@ export class PdfService {
     };
   }
 
+  private paperDraftQuestionsFromRequestedCandidates(
+    requestedQuestions: Array<Record<string, any>>,
+    canonicalCandidates: Array<Record<string, any>>,
+  ) {
+    const candidatesById = new Map<string, Record<string, any>>();
+    const candidatesByQuestionNo = new Map<string, Record<string, any>>();
+    const duplicateQuestionNos = new Set<string>();
+
+    canonicalCandidates.forEach((candidate) => {
+      const candidateId = this.safeDisplayText(candidate.candidate_id || candidate.id, '');
+      if (candidateId) candidatesById.set(candidateId, candidate);
+      if (candidate.question_no !== null && candidate.question_no !== undefined) {
+        const key = String(candidate.question_no);
+        if (candidatesByQuestionNo.has(key)) duplicateQuestionNos.add(key);
+        else candidatesByQuestionNo.set(key, candidate);
+      }
+    });
+    duplicateQuestionNos.forEach((key) => candidatesByQuestionNo.delete(key));
+
+    return requestedQuestions.map((requested, index) => {
+      const item = requested && typeof requested === 'object' ? requested : {};
+      const requestedId = this.safeDisplayText(item.candidate_id || item.id, '');
+      const questionNoKey = item.question_no !== null && item.question_no !== undefined
+        ? String(item.question_no)
+        : '';
+      const canonical =
+        (requestedId ? candidatesById.get(requestedId) : null) ||
+        (questionNoKey ? candidatesByQuestionNo.get(questionNoKey) : null);
+
+      if (!canonical) {
+        throw new BadRequestException(`候选题 ${requestedId || questionNoKey || index + 1} 不存在或不属于当前解析任务`);
+      }
+      if (!this.paperDraftCandidateCanBeAdded(canonical)) {
+        throw new BadRequestException(
+          `候选题 ${canonical.question_no ?? canonical.candidate_id ?? index + 1} 不可入卷：${
+            canonical.missingContextReason || canonical.cannot_add_reason || '缺少可核验 source evidence'
+          }`,
+        );
+      }
+
+      return {
+        ...canonical,
+        section_id: item.section_id || canonical.section_id,
+        score: item.score ?? canonical.score,
+        order: item.order ?? canonical.order,
+      };
+    });
+  }
+
+  private async paperDraftQuestionsFromExistingDraft(
+    existing: Record<string, any>,
+    requestedQuestions: Array<Record<string, any>>,
+  ) {
+    const sourceTaskId = this.safeDisplayText(existing.source_task_id || existing.taskId, '');
+    if (!sourceTaskId) throw new BadRequestException('试卷草稿缺少 source_task_id，无法校验候选题来源');
+    const candidates = await this.getPaperCandidates(sourceTaskId);
+    return this.paperDraftQuestionsFromRequestedCandidates(
+      requestedQuestions,
+      candidates.questions as Array<Record<string, any>>,
+    );
+  }
+
+  private paperDraftCandidateCanBeAdded(candidate: Record<string, any>) {
+    const sourcePageRefs = Array.isArray(candidate.source_page_refs) ? candidate.source_page_refs : [];
+    const hasSourceEvidence = Boolean(candidate.source_bbox && candidate.source_text_span);
+    return Boolean(
+      (candidate.can_add_to_paper || candidate.manualForceAddAllowed) &&
+        candidate.source_locator_available &&
+        sourcePageRefs.length > 0 &&
+        hasSourceEvidence,
+    );
+  }
+
   private paperCandidateQuestionKey(questionNo: unknown, index: number) {
     return `${questionNo ?? `idx-${index}`}`;
+  }
+
+  private paperCandidateQuestionSequenceDiagnostics(questions: Array<Record<string, any>>) {
+    const observedQuestionNumbers = Array.from(
+      new Set(
+        questions
+          .map((question) => this.toOptionalNumber(question?.question_no))
+          .filter((value): value is number => Number.isInteger(value) && Number(value) > 0),
+      ),
+    ).sort((left, right) => left - right);
+    const missingQuestionNumbers: number[] = [];
+    if (observedQuestionNumbers.length > 1) {
+      const observed = new Set(observedQuestionNumbers);
+      const first = observedQuestionNumbers[0];
+      const last = observedQuestionNumbers[observedQuestionNumbers.length - 1];
+      for (let questionNo = first; questionNo <= last; questionNo += 1) {
+        if (!observed.has(questionNo)) missingQuestionNumbers.push(questionNo);
+      }
+    }
+    return {
+      observed_question_numbers: observedQuestionNumbers,
+      missing_question_numbers: missingQuestionNumbers,
+    };
   }
 
   private buildPaperCandidate(
@@ -614,6 +779,7 @@ export class PdfService {
     audit: Record<string, any>,
     index: number,
     debug: Record<string, any>,
+    sequenceDiagnostics: Record<string, any>,
   ) {
     const questionNo = question.question_no ?? audit.question_no ?? null;
     const semanticGroup = this.findSemanticGroup(debug.semantic_groups, questionNo, index);
@@ -638,9 +804,7 @@ export class PdfService {
       : Array.isArray(question.images)
         ? question.images
         : [];
-    const sourcePageRefs = Array.isArray(question.source_page_refs)
-      ? question.source_page_refs
-      : [];
+    const sourcePageRefs = this.paperCandidateSourcePageRefs(question, semanticGroup);
     const sourceBbox = this.firstBbox(
       question.source_bbox,
       question.sourceBbox,
@@ -654,6 +818,35 @@ export class PdfService {
         semanticGroup?.stem_group?.source_text_span,
       '',
     ) || null;
+    const sourceLocatorAvailable = this.paperCandidateSourceLocatorAvailable(
+      task,
+      sourcePageRefs,
+      sourceBbox,
+      sourceTextSpan,
+    );
+    const materialGroupId = this.safeDisplayText(
+      question.material_group_id || question.materialGroupId || semanticGroup?.material_group_id,
+      '',
+    ) || null;
+    const materialGroupQuestionIndexes = this.toNumberArray(
+      question.material_group_question_indexes ||
+        question.materialGroupQuestionIndexes ||
+        semanticGroup?.material_group_question_indexes,
+    ) || [];
+    const materialGroupConfidence = this.toOptionalNumber(
+      question.material_group_confidence ??
+        question.materialGroupConfidence ??
+        semanticGroup?.material_group_confidence,
+    );
+    const materialGroupReason = this.safeDisplayText(
+      question.material_group_reason || question.materialGroupReason || semanticGroup?.material_group_reason,
+      '',
+    ) || null;
+    const sharedMaterial = Boolean(
+      question.shared_material ??
+        question.sharedMaterial ??
+        (materialGroupQuestionIndexes.length > 1),
+    );
     let aiStatus = this.safeDisplayText(
       audit.ai_audit_status || question.ai_audit_status,
       'failed',
@@ -667,13 +860,33 @@ export class PdfService {
       Boolean(question.preview_image_path) ||
       (Array.isArray(question.image_refs) && question.image_refs.length > 0);
     const imageMissing = visualRisk && !hasVisualPayload;
+    const missingQuestionNumbers = Array.isArray(sequenceDiagnostics.missing_question_numbers)
+      ? (sequenceDiagnostics.missing_question_numbers as number[])
+      : [];
+    const sequenceGateFailed = missingQuestionNumbers.length > 0;
+    const fallbackFailedPages = Array.isArray(debug.fallback_recovery?.pages)
+      ? debug.fallback_recovery.pages
+          .filter((p: Record<string, any>) => p.failureReason === 'fallback_failed')
+          .map((p: Record<string, any>) => p.page)
+      : [];
+    const questionOnFallbackFailedPage = sourcePageRefs.some((pageNo: number) =>
+      fallbackFailedPages.includes(pageNo),
+    );
+    if (sequenceGateFailed) {
+      ['question_number_gap', 'question_boundary_uncertain'].forEach((flag) => {
+        if (!riskFlags.includes(flag)) riskFlags.push(flag);
+      });
+    }
     const sourceReview = this.paperCandidateManualReviewDecision({
       riskFlags,
       stem,
       sourcePageRefs,
       sourceBbox,
       sourceTextSpan,
+      sourceLocatorAvailable,
       semanticGroup,
+      materialGroupId,
+      sharedMaterial,
     });
     sourceReview.riskFlags.forEach((flag) => {
       if (!riskFlags.includes(flag)) riskFlags.push(flag);
@@ -701,20 +914,32 @@ export class PdfService {
         stemMissing ||
         optionMissing.length ||
         imageMissing ||
+        sequenceGateFailed ||
+        questionOnFallbackFailedPage ||
         riskFlags.includes('need_manual_fix'),
     );
     const cannotReasons = [
       stemMissing ? '题干缺失或包含占位文本' : '',
       optionMissing.length ? `选项缺失: ${optionMissing.join(',')}` : '',
       imageMissing ? '图表题图片或图表预览缺失' : '',
+      sequenceGateFailed ? `题号不连续，缺失题号: ${missingQuestionNumbers.join(',')}` : '',
+      questionOnFallbackFailedPage ? `页面解析失败(fallback_failed): pages=[${fallbackFailedPages.join(',')}]` : '',
       auditFailed ? `AI 预审核失败: ${this.safeDisplayText(audit.ai_audit_summary, '未给出摘要')}` : '',
       auditWarning && sourceReview.manualReviewable ? 'AI 预审核 warning，需人工核验原卷后才可强制加入' : '',
       !sourceReview.manualReviewable ? sourceReview.missingContextReason : '',
       riskFlags.includes('chart_title_missing_or_unlocalized') ? '图表标题缺失或未定位' : '',
       riskFlags.includes('table_header_missing_or_unlocalized') ? '表头缺失或未定位' : '',
     ].filter(Boolean);
-    const canAdd = !cannotReasons.length && aiStatus === 'passed' && !needManualFix && sourceReview.manualReviewable;
-    const manualForceAddAllowed = auditWarning && sourceReview.manualReviewable && !canAdd;
+    const m2FailClosed = fallbackFailedPages.length > 0;
+    const canAdd = !m2FailClosed && !cannotReasons.length && aiStatus === 'passed' && !needManualFix && sourceReview.manualReviewable;
+    const manualForceAddAllowed =
+      !m2FailClosed &&
+      auditWarning &&
+      sourceReview.manualReviewable &&
+      !needManualFix &&
+      !canAdd &&
+      !sequenceGateFailed &&
+      !questionOnFallbackFailedPage;
 
     return {
       candidate_id: `${task.id}:${questionNo ?? index + 1}`,
@@ -742,6 +967,11 @@ export class PdfService {
       source_page_refs: sourcePageRefs,
       source_bbox: sourceBbox,
       source_text_span: sourceTextSpan,
+      material_group_id: materialGroupId,
+      material_group_question_indexes: materialGroupQuestionIndexes,
+      material_group_confidence: materialGroupConfidence,
+      material_group_reason: materialGroupReason,
+      shared_material: sharedMaterial,
       visual_parse_status: visualStatus,
       ai_audit_status: aiStatus,
       ai_audit_verdict: audit.ai_audit_verdict || question.ai_audit_verdict || null,
@@ -755,7 +985,7 @@ export class PdfService {
       manualForceAddAllowed,
       missingContextReason: sourceReview.manualReviewable ? null : sourceReview.missingContextReason,
       recommendedAction: sourceReview.recommendedAction,
-      source_locator_available: false,
+      source_locator_available: sourceLocatorAvailable,
       source_artifacts_refs: {
         ...(question.source_artifacts_refs || {}),
         ...(debug.artifact_refs || {}),
@@ -799,45 +1029,92 @@ export class PdfService {
     return null;
   }
 
+  private paperCandidateSourcePageRefs(question: Record<string, any>, semanticGroup: Record<string, any> | null) {
+    const direct = this.toNumberArray(
+      question.source_page_refs || question.sourcePageRefs || question.page_range || question.pageRange,
+    );
+    if (direct?.length) return direct;
+
+    const start = this.toOptionalNumber(
+      question.source_page_start ??
+        question.sourcePageStart ??
+        semanticGroup?.source_page_start ??
+        semanticGroup?.sourcePageStart ??
+        question.page_num ??
+        question.page ??
+        semanticGroup?.page_num ??
+        semanticGroup?.page,
+    );
+    if (!start || start < 1) return [];
+    const end = this.toOptionalNumber(
+      question.source_page_end ??
+        question.sourcePageEnd ??
+        semanticGroup?.source_page_end ??
+        semanticGroup?.sourcePageEnd,
+    ) || start;
+    if (end < start || end - start > 50) return [start];
+    return Array.from({ length: end - start + 1 }, (_unused, index) => start + index);
+  }
+
+  private paperCandidateSourceLocatorAvailable(
+    task: ParseTask,
+    sourcePageRefs: unknown[],
+    sourceBbox: number[] | null,
+    sourceTextSpan: string | null,
+  ) {
+    return Boolean(
+      this.safeDisplayText(task.file_url, '') &&
+        sourcePageRefs.length > 0 &&
+        sourceBbox &&
+        sourceTextSpan,
+    );
+  }
+
   private paperCandidateManualReviewDecision(input: {
     riskFlags: string[];
     stem: string;
     sourcePageRefs: unknown[];
     sourceBbox: number[] | null;
     sourceTextSpan: string | null;
+    sourceLocatorAvailable: boolean;
     semanticGroup: Record<string, any> | null;
+    materialGroupId?: string | null;
+    sharedMaterial?: boolean;
   }) {
     const riskText = input.riskFlags.join(' ');
     const materialDependent = this.isMaterialDependentCandidate(input.stem, input.riskFlags);
-    const hasMaterialEvidence = this.hasMaterialEvidence(input.semanticGroup);
+    const hasMaterialEvidence = Boolean(input.materialGroupId || input.sharedMaterial || this.hasMaterialEvidence(input.semanticGroup));
     const hasSourcePage = input.sourcePageRefs.length > 0;
     const hasSourceEvidence = Boolean(input.sourceBbox || input.sourceTextSpan);
-    const sourceLocatorMissing = true;
+    const hasSourceTextSpan = Boolean(input.sourceTextSpan);
+    const sourceLocatorMissing = !input.sourceLocatorAvailable;
     const extraRiskFlags = new Set<string>();
 
     if (!hasSourcePage) extraRiskFlags.add('source_page_missing');
-    if (!hasSourceEvidence) extraRiskFlags.add('source_unverified');
-    extraRiskFlags.add('paper_review_original_pdf_locator_missing');
+    if (!hasSourceEvidence || !hasSourceTextSpan) {
+      extraRiskFlags.add('source_unverified');
+      extraRiskFlags.add('source_evidence_missing');
+    }
+    if (!input.sourceBbox) extraRiskFlags.add('source_bbox_missing');
+    if (!hasSourceTextSpan) extraRiskFlags.add('source_text_span_missing');
+    if (sourceLocatorMissing) extraRiskFlags.add('paper_review_original_pdf_locator_missing');
 
-    const missingPreviousPage =
-      /partial_pdf_context|missing_previous_page_context|question_cross_page/i.test(riskText);
+    const missingPreviousPage = /partial_pdf_context|missing_previous_page_context/i.test(riskText);
     const questionNotFound = /question_not_found_in_pdf/i.test(riskText);
+    const materialBindingMissing =
+      /shared_material_missing|material_group_unbound|material_locator_missing|semantic_visual_incomplete|缺少.*(?:材料|图表|数据)/i.test(
+        riskText,
+      );
     const sourceUnverified =
-      /source_unverified|paper_review_original_pdf_locator_missing/i.test(riskText) ||
-      !hasSourcePage ||
-      !hasSourceEvidence ||
-      sourceLocatorMissing;
-    const missingMaterial =
-      materialDependent &&
-      (!hasMaterialEvidence ||
-        /shared_material_missing|material_group_unbound|semantic_visual_incomplete|缺少.*(?:材料|图表|数据)/i.test(riskText));
+      /source_unverified/i.test(riskText) || sourceLocatorMissing || !input.sourceBbox || !hasSourceTextSpan;
+    const missingMaterial = materialDependent && (!hasMaterialEvidence || materialBindingMissing);
 
     if (missingMaterial) {
       extraRiskFlags.add('shared_material_missing');
       extraRiskFlags.add('material_group_unbound');
+      extraRiskFlags.add('material_locator_missing');
+      extraRiskFlags.add('source_evidence_missing');
       extraRiskFlags.add('semantic_visual_incomplete');
-      extraRiskFlags.add('partial_pdf_context');
-      extraRiskFlags.add('missing_previous_page_context');
     }
     if (missingPreviousPage) {
       extraRiskFlags.add('partial_pdf_context');
@@ -867,8 +1144,8 @@ export class PdfService {
       return {
         status: 'not_reviewable_missing_material_group',
         manualReviewable: false,
-        missingContextReason: '无法人工核验：资料分析题缺少材料组或图表证据，当前 PDF 片段无法核验',
-        recommendedAction: '补齐上一页重新识别或使用完整 PDF 重新解析',
+        missingContextReason: '无法人工核验：资料分析题材料组或图表证据尚未绑定，不能确认共享材料来源',
+        recommendedAction: '补齐材料/图表绑定与 locator 后重新识别',
         riskFlags: Array.from(extraRiskFlags),
       };
     }
@@ -1123,6 +1400,13 @@ export class PdfService {
         {
           url: task.file_url,
           ai_config: await this.getAiConfig(),
+          debug_dir: join(
+            process.cwd(),
+            'debug',
+            'pdf-ai-preaudit',
+            task.id,
+            'kernel-run',
+          ),
           callback_url: `${backendUrl}/internal/pdf/tasks/${task.id}`,
           callback_token: internalToken,
           callback_batch_size: 20,
@@ -1190,6 +1474,7 @@ export class PdfService {
           progress: 100,
           total_count: questions.length,
           done_count: questions.length,
+          error: null,
           result_summary: JSON.stringify({
             stats: result.stats || {},
             detection: result.detection || result.stats?.detection || null,
@@ -1214,11 +1499,16 @@ export class PdfService {
         const savedCount = await this.questionRepository.count({
           where: { parse_task_id: task.id },
         });
+        const finalQuestions = await this.questionRepository.find({
+          where: { parse_task_id: task.id },
+          order: { index_num: 'ASC' },
+        });
         await this.taskRepository.update(task.id, {
           status: ParseTaskStatus.Done,
           progress: 100,
           total_count: Number(result.questions_count || savedCount || 0),
           done_count: Number(result.questions_count || savedCount || 0),
+          error: null,
           result_summary: JSON.stringify({
             stats: result.stats || {},
             detection: result.detection || result.stats?.detection || null,
@@ -1234,6 +1524,7 @@ export class PdfService {
           detection: result.detection || result.stats?.detection || null,
           warnings: result.warnings || result.stats?.warnings || [],
           totalCount: Number(result.questions_count || savedCount || 0),
+          finalQuestions,
         });
         await this.refreshBankTotal(task.bank_id);
         this.logger.log(
@@ -1246,6 +1537,11 @@ export class PdfService {
       });
       if (current?.status === ParseTaskStatus.Paused) {
         this.logger.warn(`Paused parse task id=${task.id}`);
+        return;
+      }
+      if (current?.status === ParseTaskStatus.Done) {
+        this.logger.warn(`Parse task id=${task.id} finished via late callback after direct PDF call error; preserving done state`);
+        await this.taskRepository.update(task.id, { error: null });
         return;
       }
       const message = this.resolveErrorMessage(error);
@@ -1308,6 +1604,7 @@ export class PdfService {
         : task.progress,
       total_count: total || task.total_count,
       done_count: doneCount,
+      error: null,
     });
     return {
       saved_count: saved.length,
@@ -1357,6 +1654,7 @@ export class PdfService {
       progress: 100,
       total_count: totalCount,
       done_count: doneCount,
+      error: null,
       result_summary: JSON.stringify({
         stats: body.stats || {},
         detection: body.detection || body.stats?.detection || null,
@@ -1446,6 +1744,28 @@ export class PdfService {
         { key: 'MIMO_BASE_URL' },
         { key: 'MIMO_MODEL' },
         { key: 'MIMO_VISION_MODEL' },
+        { key: 'ARK_API_KEY' },
+        { key: 'VOLCENGINE_ARK_API_KEY' },
+        { key: 'VOLC_ARK_API_KEY' },
+        { key: 'ARK_BASE_URL' },
+        { key: 'VOLCENGINE_ARK_BASE_URL' },
+        { key: 'ARK_CHAT_COMPLETIONS_URL' },
+        { key: 'VOLCENGINE_ARK_CHAT_COMPLETIONS_URL' },
+        { key: 'ARK_VISION_MODEL' },
+        { key: 'VOLCENGINE_ARK_VISION_MODEL' },
+        { key: 'ARK_MODEL' },
+        { key: 'VOLCENGINE_ARK_MODEL' },
+        { key: 'ARK_ENDPOINT_ID' },
+        { key: 'VOLCENGINE_ARK_ENDPOINT_ID' },
+        { key: 'ARK_API_MODE' },
+        { key: 'VOLCENGINE_ARK_API_MODE' },
+        { key: 'ARK_RESPONSES_PATH' },
+        { key: 'VOLCENGINE_ARK_RESPONSES_PATH' },
+        { key: 'VISION_AI_PROVIDER_ORDER' },
+        { key: 'VISION_AI_TIMEOUT_SECONDS' },
+        { key: 'VISION_AI_PROVIDER_TIMEOUT_SECONDS' },
+        { key: 'PDF_VISUAL_PAGE_TIMEOUT_SECONDS' },
+        { key: 'PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS' },
         { key: 'PDF_HEADER_FOOTER_BLACKLIST' },
       ],
     });
@@ -1463,7 +1783,7 @@ export class PdfService {
         'DASHSCOPE_BASE_URL',
         'https://dashscope.aliyuncs.com/compatible-mode/v1',
       ),
-      visual_model: read('AI_VISUAL_MODEL', 'qwen-vl-max'),
+      visual_model: read('AI_VISUAL_MODEL', 'qwen3-vl-plus'),
       text_api_key:
         read('AI_TEXT_API_KEY') ||
         read('DEEPSEEK_API_KEY') ||
@@ -1484,6 +1804,39 @@ export class PdfService {
       mimo_base_url: read('MIMO_BASE_URL', 'https://token-plan-cn.xiaomimimo.com/v1'),
       mimo_model: read('MIMO_MODEL', 'mimo-v2.5'),
       mimo_vision_model: read('MIMO_VISION_MODEL', 'mimo-v2.5'),
+      ark_api_key:
+        read('ARK_API_KEY') ||
+        read('VOLCENGINE_ARK_API_KEY') ||
+        read('VOLC_ARK_API_KEY'),
+      ark_base_url:
+        read('ARK_BASE_URL') ||
+        read('VOLCENGINE_ARK_BASE_URL') ||
+        read('ARK_CHAT_COMPLETIONS_URL') ||
+        read('VOLCENGINE_ARK_CHAT_COMPLETIONS_URL') ||
+        'https://ark.cn-beijing.volces.com/api/v3',
+      ark_endpoint_id:
+        read('ARK_ENDPOINT_ID') || read('VOLCENGINE_ARK_ENDPOINT_ID'),
+      ark_vision_model:
+        read('ARK_VISION_MODEL') ||
+        read('VOLCENGINE_ARK_VISION_MODEL') ||
+        read('ARK_MODEL') ||
+        read('VOLCENGINE_ARK_MODEL'),
+      ark_api_mode:
+        read('ARK_API_MODE') ||
+        read('VOLCENGINE_ARK_API_MODE') ||
+        'responses',
+      ark_responses_path:
+        read('ARK_RESPONSES_PATH') ||
+        read('VOLCENGINE_ARK_RESPONSES_PATH') ||
+        '/responses',
+      vision_ai_provider_order: read(
+        'VISION_AI_PROVIDER_ORDER',
+        'volcengine_ark_vl,qwen_vl,mimo_vl',
+      ),
+      vision_ai_timeout_seconds: read('VISION_AI_TIMEOUT_SECONDS'),
+      vision_ai_provider_timeout_seconds: read('VISION_AI_PROVIDER_TIMEOUT_SECONDS'),
+      pdf_visual_page_timeout_seconds: read('PDF_VISUAL_PAGE_TIMEOUT_SECONDS'),
+      pdf_visual_provider_timeout_seconds: read('PDF_VISUAL_PROVIDER_TIMEOUT_SECONDS'),
       header_footer_blacklist: read('PDF_HEADER_FOOTER_BLACKLIST'),
     });
   }
@@ -1633,10 +1986,22 @@ export class PdfService {
           source.source_page_end ?? source.sourcePageEnd,
         ),
         source_bbox: this.toNumberArray(source.source_bbox ?? source.sourceBbox),
+        source_text_span:
+          this.cleanParsedText(source.source_text_span ?? source.sourceTextSpan) || null,
         source_anchor_text: source.source_anchor_text || source.sourceAnchorText || null,
         source_confidence: this.toOptionalNumber(
           source.source_confidence ?? source.sourceConfidence,
         ),
+        material_group_id: source.material_group_id || source.materialGroupId || null,
+        material_group_question_indexes: this.toNumberArray(
+          source.material_group_question_indexes ?? source.materialGroupQuestionIndexes,
+        ),
+        material_group_confidence: this.toOptionalNumber(
+          source.material_group_confidence ?? source.materialGroupConfidence,
+        ),
+        material_group_reason:
+          source.material_group_reason || source.materialGroupReason || null,
+        shared_material: Boolean(source.shared_material ?? source.sharedMaterial),
         image_refs: this.toStringArray(source.image_refs ?? source.imageRefs),
         visual_refs: Array.isArray(source.visual_refs ?? source.visualRefs)
           ? source.visual_refs ?? source.visualRefs
@@ -2057,6 +2422,31 @@ export class PdfService {
     const recropPlan = await readJson(
       kernelDebugDir ? join(kernelDebugDir, 'debug', 'recrop-plan.json') : null,
     );
+    const kernelStageCounts = await readJson(
+      kernelDebugDir ? join(kernelDebugDir, 'debug', 'stage-counts.json') : null,
+    );
+    const kernelFirstFailedStage = await readJson(
+      kernelDebugDir ? join(kernelDebugDir, 'debug', 'first-failed-stage.json') : null,
+    );
+    const fallbackRecovery = await readJson(
+      kernelDebugDir ? join(kernelDebugDir, 'debug', 'fallback-recovery.json') : null,
+    );
+    const questionNumberScan = await readJson(
+      kernelDebugDir ? join(kernelDebugDir, 'debug', 'question-number-scan.json') : null,
+    );
+    const pageUnderstandingRecovered = await readJson(
+      kernelDebugDir
+        ? join(kernelDebugDir, 'debug', 'page-understanding-recovered.json')
+        : null,
+    );
+    const sourceTextSpanReport = await readJson(
+      kernelDebugDir ? join(kernelDebugDir, 'debug', 'source-text-span-report.json') : null,
+    );
+    const materialGroupBindingReport = await readJson(
+      kernelDebugDir
+        ? join(kernelDebugDir, 'debug', 'material-group-binding-report.json')
+        : null,
+    );
     const visualMergeCandidates = await readJson(
       kernelDebugDir
         ? join(kernelDebugDir, 'debug', 'visual_merge_candidates.json')
@@ -2128,7 +2518,15 @@ export class PdfService {
         images: question.images || [],
         image_refs: question.image_refs || [],
         preview_image_path: firstImage?.url || null,
-        source_page_refs: [],
+        source_page_refs: this.questionSourcePageRefsFromEntity(question),
+        source_bbox: question.source_bbox || null,
+        source_text_span: question.source_text_span || null,
+        source_anchor_text: question.source_anchor_text || null,
+        material_group_id: question.material_group_id || null,
+        material_group_question_indexes: question.material_group_question_indexes || [],
+        material_group_confidence: question.material_group_confidence ?? null,
+        material_group_reason: question.material_group_reason || null,
+        shared_material: Boolean(question.shared_material),
         visual_summary: question.visual_summary,
         visual_parse_status: question.visual_parse_status,
         ai_audit_status: question.ai_audit_status,
@@ -2148,6 +2546,27 @@ export class PdfService {
       bankId: task.bank_id,
       questions: [...finalQuestionPreviews, ...previewFallbacks],
     };
+    const stageCounts = {
+      ...(kernelStageCounts && typeof kernelStageCounts === 'object' ? kernelStageCounts : {}),
+      final_questions_count: finalQuestionsPayload.length,
+      final_preview_questions_count: finalPreviewPayload.questions.length,
+    };
+    const backendFinalPreviewDropAll =
+      Number(stageCounts.output_questions_count || finalQuestionsPayload.length || 0) > 0 &&
+      finalPreviewPayload.questions.length === 0;
+    const firstFailedStage = backendFinalPreviewDropAll
+      ? {
+          firstFailedStage: 'backend_final_preview',
+          reason: 'kernel/output_questions 非空，但 final_preview_payload.questions 为空',
+          stage_counts: stageCounts,
+        }
+      : kernelFirstFailedStage || {
+          firstFailedStage: finalPreviewPayload.questions.length ? null : 'backend_final_preview',
+          reason: finalPreviewPayload.questions.length
+            ? 'no backend final preview failure detected'
+            : 'final_preview_payload.questions is empty',
+          stage_counts: stageCounts,
+        };
     const aiAuditResults = finalQuestions.length
       ? finalQuestions.map((question) => {
           const optionsComplete = Boolean(question.option_a && question.option_b && question.option_c && question.option_d);
@@ -2264,9 +2683,16 @@ export class PdfService {
       })),
       final_questions_after_audit: finalQuestionsPayload,
       final_preview_payload: finalPreviewPayload,
+      stage_counts: stageCounts,
+      first_failed_stage: firstFailedStage,
       page_understanding: pageUnderstanding || payload.stats?.scanned_fallback_debug?.page_understanding || null,
       semantic_groups: semanticGroups || payload.stats?.scanned_fallback_debug?.semantic_groups || null,
       recrop_plan: recropPlan || payload.stats?.scanned_fallback_debug?.recrop_plan || null,
+      fallback_recovery: fallbackRecovery || null,
+      question_number_scan: questionNumberScan || null,
+      page_understanding_recovered: pageUnderstandingRecovered || null,
+      source_text_span_report: sourceTextSpanReport || null,
+      material_group_binding_report: materialGroupBindingReport || null,
       visual_merge_candidates:
         visualMergeCandidates ||
         payload.stats?.scanned_fallback_debug?.visual_merge_candidates ||
@@ -2322,6 +2748,8 @@ export class PdfService {
     await writeArtifact('final-questions.json', finalQuestionsPayload);
     await writeArtifact('final-preview-payload.json', finalPreviewPayload);
     await writeArtifact('ai-audit-results.json', aiAuditResults);
+    await writeArtifact('stage-counts.json', stageCounts);
+    await writeArtifact('first-failed-stage.json', firstFailedStage);
     if (qwenPromptPath) {
       await writeArtifact('qwen-vl-prompt.txt', qwenPrompt || '');
     } else if (qwenPrompt) {
@@ -2342,6 +2770,27 @@ export class PdfService {
     }
     if (recropPlan) {
       await writeArtifact('recrop-plan.json', recropPlan);
+    }
+    if (fallbackRecovery) {
+      await writeArtifact('fallback-recovery.json', fallbackRecovery);
+    }
+    if (questionNumberScan) {
+      await writeArtifact('question-number-scan.json', questionNumberScan);
+    }
+    if (pageUnderstandingRecovered) {
+      await writeArtifact(
+        'page-understanding-recovered.json',
+        pageUnderstandingRecovered,
+      );
+    }
+    if (sourceTextSpanReport) {
+      await writeArtifact('source-text-span-report.json', sourceTextSpanReport);
+    }
+    if (materialGroupBindingReport) {
+      await writeArtifact(
+        'material-group-binding-report.json',
+        materialGroupBindingReport,
+      );
     }
     if (visualMergeCandidates) {
       await writeArtifact('visual-merge-candidates.json', visualMergeCandidates);
@@ -2367,6 +2816,16 @@ export class PdfService {
       debugFile: debugPath,
       aiPreauditCount: finalQuestions.length,
     };
+  }
+
+  private questionSourcePageRefsFromEntity(question: Question) {
+    const start = this.toOptionalNumber(question.source_page_start ?? question.page_num);
+    const end = this.toOptionalNumber(question.source_page_end) || start;
+    if (start && end && end >= start && end - start <= 50) {
+      return Array.from({ length: end - start + 1 }, (_unused, index) => start + index);
+    }
+    const pageRange = this.toNumberArray(question.page_range);
+    return pageRange || [];
   }
 
   private serializeQuestionForDebug(question: Question) {
@@ -2408,7 +2867,14 @@ export class PdfService {
       source_page_start: question.source_page_start,
       source_page_end: question.source_page_end,
       source_bbox: question.source_bbox,
+      source_text_span: question.source_text_span,
       source_anchor_text: question.source_anchor_text,
+      source_confidence: question.source_confidence,
+      material_group_id: question.material_group_id,
+      material_group_question_indexes: question.material_group_question_indexes || [],
+      material_group_confidence: question.material_group_confidence,
+      material_group_reason: question.material_group_reason,
+      shared_material: Boolean(question.shared_material),
       created_at: question.created_at,
     };
   }
