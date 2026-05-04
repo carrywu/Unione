@@ -1,0 +1,15 @@
+{
+  "question_no": 7,
+  "error_type": "answer_extraction_missing",
+  "m4_answer": null,
+  "answer_book_answer": "C",
+  "final_answer": "C",
+  "conflict_reason": "M4解析与答本解析语义差异较大",
+  "match_confidence": 1,
+  "stem_present": true,
+  "options_present": true,
+  "images_present": 6,
+  "diagnosis": "PDF parser (M4) could not extract answer from question-only PDF. Answer book (M5A) provides correct answer. Stems, options, and images are correctly extracted. This is expected behavior, not a recognition error.",
+  "fix_needed": false,
+  "fix_applied": false
+}

@@ -30,7 +30,7 @@ PDF → 路由判定（text_layer_book | scanned_question_book | scanned_answer_
 - base64 编码后放在返回 JSON 里
 
 # AI 配置
-图片解析：dashscope qwen-vl-max（DASHSCOPE_API_KEY）
+图片解析：dashscope qwen3-vl-plus（DASHSCOPE_API_KEY）
 文字结构化：DeepSeek deepseek-chat（DEEPSEEK_API_KEY，openai兼容格式）
 
 # 返回格式

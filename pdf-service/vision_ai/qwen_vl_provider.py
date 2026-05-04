@@ -27,7 +27,7 @@ class QwenVLProvider(VisionAIProvider):
         base_url: str | None = None,
     ):
         self.api_key = api_key
-        self.model = model or os.getenv("QWEN_VL_MODEL") or "qwen-vl-plus"
+        self.model = model or os.getenv("QWEN_VL_MODEL") or "qwen3-vl-plus"
         self.timeout_seconds = timeout_seconds or _float_env("VISION_AI_TIMEOUT_SECONDS", 60.0)
         self.max_retries = max_retries if max_retries is not None else _int_env("VISION_AI_MAX_RETRIES", 2)
         self.base_url = base_url or os.getenv("DASHSCOPE_BASE_URL") or "https://dashscope.aliyuncs.com/compatible-mode/v1"

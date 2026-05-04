@@ -88,6 +88,12 @@ function createRepository<T extends Row>(rows: T[]) {
       const row = rows.find((item) => item.id === entity.id);
       if (row) row.deleted_at = new Date();
     },
+    async delete(criteria: string | Record<string, any>) {
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const matched = typeof criteria === 'string' ? rows[i].id === criteria : matchesWhere(rows[i], criteria);
+        if (matched) rows.splice(i, 1);
+      }
+    },
   };
 }
 
@@ -254,6 +260,17 @@ async function run() {
   await testAcceptAiAnalysisRecordsAuditLog();
   await testAcceptAiBothRecordsAuditLog();
   await testIgnoreAiSuggestionRecordsAuditLog();
+  await testCancelTaskFromProcessing();
+  await testCancelTaskFromPending();
+  await testCancelTaskFromPaused();
+  await testCancelTaskRejectsDoneTask();
+  await testRetryTaskFromFailed();
+  await testRetryTaskFromCanceled();
+  await testRetryTaskFromPaused();
+  await testRetryTaskRejectsDoneTask();
+  await testRetryTaskRejectsProcessingTask();
+  await testPauseTaskFromProcessing();
+  await testPauseTaskRejectsDoneTask();
 }
 
 async function testPublishSkipsLowConfidenceAndWarningQuestions() {
@@ -2231,6 +2248,135 @@ async function testIgnoreAiSuggestionRecordsAuditLog() {
   assert.equal(h.aiActionLogs[0].old_value, '');
   assert.equal(h.aiActionLogs[0].new_value, '');
   assert.equal((result as any).ai_action_logs[0].action, QuestionAiAction.IgnoreSuggestion);
+}
+
+async function testCancelTaskFromProcessing() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Processing;
+
+  const result = await h.pdfService.cancel('task-1');
+
+  assert.equal(result.task_id, 'task-1');
+  assert.equal(result.status, ParseTaskStatus.Canceled);
+  assert.equal(h.tasks[0].status, ParseTaskStatus.Canceled);
+  assert.ok(h.tasks[0].error.includes('取消'));
+}
+
+async function testCancelTaskFromPending() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Pending;
+
+  const result = await h.pdfService.cancel('task-1');
+
+  assert.equal(result.status, ParseTaskStatus.Canceled);
+  assert.equal(h.tasks[0].status, ParseTaskStatus.Canceled);
+}
+
+async function testCancelTaskFromPaused() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Paused;
+
+  const result = await h.pdfService.cancel('task-1');
+
+  assert.equal(result.status, ParseTaskStatus.Canceled);
+  assert.equal(h.tasks[0].status, ParseTaskStatus.Canceled);
+}
+
+async function testCancelTaskRejectsDoneTask() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Done;
+
+  try {
+    await h.pdfService.cancel('task-1');
+    assert.fail('Should throw');
+  } catch (e: any) {
+    assert.ok(e.message.includes('取消') || e.message.includes('暂停'));
+  }
+}
+
+async function testRetryTaskFromFailed() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Failed;
+  h.tasks[0].error = 'some error';
+  h.tasks[0].attempt = 1;
+
+  const result = await h.pdfService.retry('task-1');
+
+  assert.equal(result.task_id, 'task-1');
+  assert.equal(result.status, ParseTaskStatus.Pending);
+  assert.equal(h.tasks[0].status, ParseTaskStatus.Pending);
+  assert.equal(h.tasks[0].error, null);
+  assert.equal(h.tasks[0].attempt, 2);
+}
+
+async function testRetryTaskFromCanceled() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Canceled;
+  h.tasks[0].attempt = 0;
+
+  const result = await h.pdfService.retry('task-1');
+
+  assert.equal(result.status, ParseTaskStatus.Pending);
+  assert.equal(h.tasks[0].attempt, 1);
+}
+
+async function testRetryTaskFromPaused() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Paused;
+  h.tasks[0].attempt = 0;
+
+  const result = await h.pdfService.retry('task-1');
+
+  assert.equal(result.status, ParseTaskStatus.Pending);
+  assert.equal(h.tasks[0].attempt, 1);
+}
+
+async function testRetryTaskRejectsDoneTask() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Done;
+
+  try {
+    await h.pdfService.retry('task-1');
+    assert.fail('Should throw');
+  } catch (e: any) {
+    assert.ok(e.message.includes('失败') || e.message.includes('暂停') || e.message.includes('取消'));
+  }
+}
+
+async function testRetryTaskRejectsProcessingTask() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Processing;
+
+  try {
+    await h.pdfService.retry('task-1');
+    assert.fail('Should throw');
+  } catch (e: any) {
+    assert.ok(e.message.includes('失败') || e.message.includes('暂停') || e.message.includes('取消'));
+  }
+}
+
+async function testPauseTaskFromProcessing() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Processing;
+
+  const result = await h.pdfService.pause('task-1');
+
+  assert.equal(result.task_id, 'task-1');
+  assert.equal(result.status, ParseTaskStatus.Paused);
+  assert.equal(h.tasks[0].status, ParseTaskStatus.Paused);
+  assert.ok(h.tasks[0].error.includes('暂停'));
+}
+
+async function testPauseTaskRejectsDoneTask() {
+  const h = harness();
+  h.tasks[0].status = ParseTaskStatus.Done;
+
+  try {
+    await h.pdfService.pause('task-1');
+    assert.fail('Should throw');
+  } catch (e: any) {
+    assert.ok(e.message.includes('等待') || e.message.includes('解析'));
+  }
 }
 
 run().catch((error) => {

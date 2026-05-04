@@ -606,6 +606,92 @@ class AiClientPageVisualFallbacksTest(unittest.TestCase):
         self.assertEqual(first["questions"][0]["index"], 6)
         self.assertEqual(second["questions"][0]["index"], 6)
 
+    def test_single_provider_order_only_calls_specified_provider(self):
+        """When ORDER=volcengine_ark_vl only, qwen_vl and mimo_vl must NOT be called."""
+        with ai_client.use_config(
+            {
+                "ark_api_key": "ark-test",
+                "ark_base_url": "https://ark.example.com/v3",
+                "ark_endpoint_id": "ep-test",
+                "vision_ai_provider_order": "volcengine_ark_vl",
+                "vision_ai_timeout_seconds": "5",
+                "vision_ai_provider_timeout_seconds": "5",
+            }
+        ):
+            with patch("ai_client._call_openai_vision_provider") as mock_qwen, \
+                 patch("ai_client._call_ark_vision_provider") as mock_ark:
+                mock_ark.return_value = (
+                    {
+                        "page_type": "question",
+                        "warnings": [],
+                        "materials": [],
+                        "questions": [{"index": 1, "content": "单 provider 测试"}],
+                        "visuals": [],
+                    },
+                    {
+                        "provider": "volcengine_ark_vl",
+                        "model": "ep-test",
+                        "timeout_seconds": 5.0,
+                        "elapsed_ms": 100,
+                        "status": "ok",
+                        "error_type": None,
+                        "error_message": None,
+                        "fallback_from": None,
+                    },
+                )
+                result = ai_client.parse_page_visual("ZmFrZS1wYWdl")
+
+        mock_ark.assert_called_once()
+        mock_qwen.assert_not_called()
+        self.assertEqual(result["_vision_provider"], "volcengine_ark_vl")
+        self.assertEqual(len(result["_vision_provider_attempts"]), 1)
+        self.assertEqual(result["_vision_provider_attempts"][0]["provider"], "volcengine_ark_vl")
+
+    def test_provider_timing_payload_has_required_fields(self):
+        """Provider attempt payload must contain taskId, pageNo, provider, startedAt, finishedAt, elapsed_ms, error_type, fallback_reason."""
+        with ai_client.use_config(
+            {
+                "dashscope_api_key": "qwen-test",
+                "dashscope_base_url": "https://dashscope.example.com/compatible-mode/v1",
+                "visual_model": "qwen3-vl-plus",
+                "vision_ai_provider_order": "qwen_vl",
+                "vision_ai_timeout_seconds": "5",
+            }
+        ):
+            with patch("ai_client._call_openai_vision_provider") as mock_qwen:
+                mock_qwen.return_value = (
+                    {
+                        "page_type": "question",
+                        "warnings": [],
+                        "materials": [],
+                        "questions": [{"index": 1, "content": "timing 测试"}],
+                        "visuals": [],
+                    },
+                    {
+                        "provider": "qwen_vl",
+                        "model": "qwen3-vl-plus",
+                        "timeout_seconds": 5.0,
+                        "elapsed_ms": 42,
+                        "status": "ok",
+                        "error_type": None,
+                        "error_message": None,
+                        "fallback_from": None,
+                        "fallback_reason": None,
+                        "startedAt": "2026-05-04T10:00:00Z",
+                        "finishedAt": "2026-05-04T10:00:00.042Z",
+                    },
+                )
+                result = ai_client.parse_page_visual("ZmFrZS1wYWdl")
+
+        self.assertEqual(len(result["_vision_provider_attempts"]), 1)
+        attempt = result["_vision_provider_attempts"][0]
+        self.assertIn("provider", attempt)
+        self.assertIn("elapsed_ms", attempt)
+        self.assertIn("status", attempt)
+        self.assertIn("startedAt", attempt)
+        self.assertIn("finishedAt", attempt)
+        self.assertIn("fallback_reason", attempt)
+
 
 if __name__ == "__main__":
     unittest.main()

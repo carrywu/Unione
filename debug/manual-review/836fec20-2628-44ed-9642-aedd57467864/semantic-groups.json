@@ -1,0 +1,6166 @@
+[
+  {
+    "question_no": 1,
+    "source_page_start": 1,
+    "source_page_end": 1,
+    "source_text_span": "1. 2017～2021 五年间重庆市城镇常住居民人均可支配收入与农村常住居民人均可支配收入之比最小的是：\nA. 2018年\nB. 2019年\nC. 2020年\nD. 2021年",
+    "source_bbox": [
+      49.70901107788086,
+      134.8258819580078,
+      389.300048828125,
+      550.8749389648438
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 1,
+          "kind": "stem",
+          "bbox": [
+            100,
+            537,
+            510,
+            555
+          ],
+          "text": "2021 年 7 月份，全国发电量大约是多少亿千瓦时？",
+          "label": "1",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2021 年 7 月份，全国发电量大约是多少亿千瓦时？",
+      "bbox": [
+        100,
+        537,
+        510,
+        555
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            124,
+            563,
+            190,
+            579
+          ],
+          "text": "6570",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            478,
+            563,
+            544,
+            579
+          ],
+          "text": "6920",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            124,
+            588,
+            190,
+            604
+          ],
+          "text": "7712",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            478,
+            588,
+            544,
+            604
+          ],
+          "text": "7800",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "6570\n6920\n7712\n7800",
+      "bbox": [
+        124,
+        563,
+        544,
+        604
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        100,
+        537,
+        510,
+        555
+      ],
+      [
+        124,
+        563,
+        190,
+        579
+      ],
+      [
+        478,
+        563,
+        544,
+        579
+      ],
+      [
+        124,
+        588,
+        190,
+        604
+      ],
+      [
+        478,
+        588,
+        544,
+        604
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [],
+    "uncertain": false
+  },
+  {
+    "question_no": 2,
+    "source_page_start": 1,
+    "source_page_end": 1,
+    "source_text_span": "2. 2020年重庆市农村常住居民经营性收入比城镇常住居民经营性收入大约：\nA. 多1083元\nB. 少1083元\nC. 多1216元\nD. 少1216元",
+    "source_bbox": [
+      49.70901107788086,
+      56.94102478027344,
+      389.300048828125,
+      464.6911315917969
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 1,
+          "kind": "stem",
+          "bbox": [
+            100,
+            617,
+            677,
+            634
+          ],
+          "text": "2022 年 1～7 月份，全国城乡居民生活用电量比 2021 年 1～7 月份约多：",
+          "label": "2",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2022 年 1～7 月份，全国城乡居民生活用电量比 2021 年 1～7 月份约多：",
+      "bbox": [
+        100,
+        617,
+        677,
+        634
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            124,
+            643,
+            254,
+            659
+          ],
+          "text": "672 亿千瓦时",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            478,
+            643,
+            608,
+            659
+          ],
+          "text": "843 亿千瓦时",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            124,
+            668,
+            254,
+            684
+          ],
+          "text": "925 亿千瓦时",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            478,
+            668,
+            615,
+            684
+          ],
+          "text": "1020 亿千瓦时",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "672 亿千瓦时\n843 亿千瓦时\n925 亿千瓦时\n1020 亿千瓦时",
+      "bbox": [
+        124,
+        643,
+        615,
+        684
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        100,
+        617,
+        677,
+        634
+      ],
+      [
+        124,
+        643,
+        254,
+        659
+      ],
+      [
+        478,
+        643,
+        608,
+        659
+      ],
+      [
+        124,
+        668,
+        254,
+        684
+      ],
+      [
+        478,
+        668,
+        615,
+        684
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [],
+    "uncertain": false
+  },
+  {
+    "question_no": 3,
+    "source_page_start": 1,
+    "source_page_end": 1,
+    "source_text_span": "3. 2020年重庆市城镇常住居民人均消费支出与可支配收入之比大约是：\nA. 58.2%\nB. 66.1%\nC. 69.6%\nD. 72.3%",
+    "source_bbox": [
+      49.70901107788086,
+      110.60958099365234,
+      389.300048828125,
+      516.3961791992188
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 1,
+          "kind": "stem",
+          "bbox": [
+            100,
+            696,
+            842,
+            713
+          ],
+          "text": "2021 年 7 月份，全社会用电量中第三产业用电量的占比与城乡居民生活用电量的占比相比较约：",
+          "label": "3",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2021 年 7 月份，全社会用电量中第三产业用电量的占比与城乡居民生活用电量的占比相比较约：",
+      "bbox": [
+        100,
+        696,
+        842,
+        713
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            124,
+            722,
+            210,
+            738
+          ],
+          "text": "高 3.3%",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            478,
+            722,
+            564,
+            738
+          ],
+          "text": "低 3.8%",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            124,
+            747,
+            210,
+            763
+          ],
+          "text": "高 9.8%",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            478,
+            747,
+            571,
+            763
+          ],
+          "text": "低 10.3%",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "高 3.3%\n低 3.8%\n高 9.8%\n低 10.3%",
+      "bbox": [
+        124,
+        722,
+        571,
+        763
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        100,
+        696,
+        842,
+        713
+      ],
+      [
+        124,
+        722,
+        210,
+        738
+      ],
+      [
+        478,
+        722,
+        564,
+        738
+      ],
+      [
+        124,
+        747,
+        210,
+        763
+      ],
+      [
+        478,
+        747,
+        571,
+        763
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [],
+    "uncertain": false
+  },
+  {
+    "question_no": 4,
+    "source_page_start": 1,
+    "source_page_end": 1,
+    "source_text_span": "4. 2017年～2021年期间，重庆市城镇常住居民人均可支配收入平均增长率比农村常住居民人均可支配收入平均增长率约：\nA. 高8.09%\nB. 低8.09%\nC. 高1.57%\nD. 低1.57%",
+    "source_bbox": [
+      49.70901107788086,
+      161.0056610107422,
+      389.300048828125,
+      550.8749389648438
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 1,
+          "kind": "stem",
+          "bbox": [
+            100,
+            775,
+            515,
+            792
+          ],
+          "text": "2021 年 1～6 月全社会用电量累计约多少亿千瓦时？",
+          "label": "4",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2021 年 1～6 月全社会用电量累计约多少亿千瓦时？",
+      "bbox": [
+        100,
+        775,
+        515,
+        792
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            124,
+            801,
+            196,
+            817
+          ],
+          "text": "38258",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            478,
+            801,
+            550,
+            817
+          ],
+          "text": "39851",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            124,
+            826,
+            196,
+            842
+          ],
+          "text": "40472",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 1,
+          "kind": "option",
+          "bbox": [
+            478,
+            826,
+            550,
+            842
+          ],
+          "text": "41279",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "38258\n39851\n40472\n41279",
+      "bbox": [
+        124,
+        801,
+        550,
+        842
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        100,
+        775,
+        515,
+        792
+      ],
+      [
+        124,
+        801,
+        196,
+        817
+      ],
+      [
+        478,
+        801,
+        550,
+        817
+      ],
+      [
+        124,
+        826,
+        196,
+        842
+      ],
+      [
+        478,
+        826,
+        550,
+        842
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [],
+    "uncertain": false
+  },
+  {
+    "question_no": 5,
+    "source_page_start": 2,
+    "source_page_end": 2,
+    "source_text_span": "5. 能够从上述材料中推出的是：\nA. 2020年城镇常住居民工资性收入低于2020年全市居民人均消费支出\nB. 2021年城镇常住居民财产性收入增长率高于农村常住居民财产性收入增长率\nC. 2019年农村常住居民人均可支配收入增长率高于城镇常住居民人均可支配收入增长率\nD. 2021年城镇居民人均可支配收入增长率高于农村居民人均可支配收入增长率",
+    "source_bbox": [
+      48.40087890625,
+      61.52248764038086,
+      389.300048828125,
+      340.9916687011719
+    ],
+    "material_group_id": "sg_q005",
+    "material_group_question_indexes": [
+      5
+    ],
+    "material_group_confidence": null,
+    "material_group_reason": "semantic_group_by_qwen_vl",
+    "shared_material": false,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "stem",
+          "bbox": [
+            98,
+            118,
+            358,
+            138
+          ],
+          "text": "能够从上述材料中推出的是：",
+          "label": "5",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "能够从上述材料中推出的是：",
+      "bbox": [
+        98,
+        118,
+        358,
+        138
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            126,
+            146,
+            468,
+            166
+          ],
+          "text": "2022年7月全国太阳能发电增长量最大",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            126,
+            176,
+            452,
+            196
+          ],
+          "text": "2022年6月全国核电发电量比5月份高",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            126,
+            206,
+            676,
+            226
+          ],
+          "text": "2022年7月第二产业用电量高于上半年第二产业平均用电量",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            126,
+            226,
+            685,
+            246
+          ],
+          "text": "2021年7月第一产业用电量低于2021年上半年第一产业平均用电量",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2022年7月全国太阳能发电增长量最大\n2022年6月全国核电发电量比5月份高\n2022年7月第二产业用电量高于上半年第二产业平均用电量\n2021年7月第一产业用电量低于2021年上半年第一产业平均用电量",
+      "bbox": [
+        126,
+        146,
+        685,
+        246
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        98,
+        118,
+        358,
+        138
+      ],
+      [
+        126,
+        146,
+        468,
+        166
+      ],
+      [
+        126,
+        176,
+        452,
+        196
+      ],
+      [
+        126,
+        206,
+        676,
+        226
+      ],
+      [
+        126,
+        226,
+        685,
+        246
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "material_missing",
+      "对应原材料缺失"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 6,
+    "source_page_start": 2,
+    "source_page_end": 2,
+    "source_text_span": "6. 2017年，新疆棉花总产量同比增速在以下哪个范围内：\nA. 不到一成\nB. 一成多\nC. 两成多\nD. 超过三成",
+    "source_bbox": [
+      35.63869094848633,
+      146.21339416503906,
+      389.300048828125,
+      550.8749389648438
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "stem",
+          "bbox": [
+            101,
+            725,
+            504,
+            747
+          ],
+          "text": "2021全国电信业务实现收入的同比增长额是：",
+          "label": "6",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2021全国电信业务实现收入的同比增长额是：",
+      "bbox": [
+        101,
+        725,
+        504,
+        747
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            126,
+            753,
+            350,
+            773
+          ],
+          "text": "0.07万亿元",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            470,
+            753,
+            615,
+            773
+          ],
+          "text": "0.09万亿元",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            126,
+            778,
+            350,
+            798
+          ],
+          "text": "0.11万亿元",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            470,
+            778,
+            615,
+            798
+          ],
+          "text": "0.13万亿元",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "0.07万亿元\n0.09万亿元\n0.11万亿元\n0.13万亿元",
+      "bbox": [
+        126,
+        753,
+        615,
+        798
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "chart",
+          "bbox": [
+            120,
+            378,
+            898,
+            691
+          ],
+          "text": "2016~2021年全国数据及互联网业务收入组合图：柱状图分两类展示每年收入：固定数据及互联网业务收入、移动数据及互联网业务收入，单位亿元；两条折线分别展示两类业务的同比增速（%），数据：2016年固定1811亿增速7.4%，移动4333亿增速38.3%；2017年固定1950亿增速7.7%，移动5528亿增速27.6%；2018年固定2074亿增速6.4%，移动5984亿增速8.2%；2019年固定2176亿增速1.9%，移动6096亿增速4.9%；2020年固定2369亿增速1.8%，移动6204亿增速8.9%；2021年固定2601亿增速3.3%，移动6409亿增速9.8%",
+          "label": null,
+          "source": "visual_group",
+          "uncertain": false,
+          "reason": null,
+          "group_id": "vg_page_2_1",
+          "confidence": 0.95,
+          "visual_summary": "2016~2021年全国数据及互联网业务收入组合图：柱状图分两类展示每年收入：固定数据及互联网业务收入、移动数据及互联网业务收入，单位亿元；两条折线分别展示两类业务的同比增速（%），数据：2016年固定1811亿增速7.4%，移动4333亿增速38.3%；2017年固定1950亿增速7.7%，移动5528亿增速27.6%；2018年固定2074亿增速6.4%，移动5984亿增速8.2%；2019年固定2176亿增速1.9%，移动6096亿增速4.9%；2020年固定2369亿增速1.8%，移动6204亿增速8.9%；2021年固定2601亿增速3.3%，移动6409亿增速9.8%",
+          "is_fragmented_before_merge": false
+        }
+      ],
+      "text": "2016~2021年全国数据及互联网业务收入组合图：柱状图分两类展示每年收入：固定数据及互联网业务收入、移动数据及互联网业务收入，单位亿元；两条折线分别展示两类业务的同比增速（%），数据：2016年固定1811亿增速7.4%，移动4333亿增速38.3%；2017年固定1950亿增速7.7%，移动5528亿增速27.6%；2018年固定2074亿增速6.4%，移动5984亿增速8.2%；2019年固定2176亿增速1.9%，移动6096亿增速4.9%；2020年固定2369亿增速1.8%，移动6204亿增速8.9%；2021年固定2601亿增速3.3%，移动6409亿增速9.8%",
+      "bbox": [
+        120,
+        378,
+        898,
+        691
+      ],
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "chart_title",
+          "bbox": [
+            288,
+            671,
+            719,
+            690
+          ],
+          "text": null,
+          "label": null,
+          "source": "visual_group",
+          "uncertain": false,
+          "reason": null,
+          "group_id": "vg_page_2_1"
+        }
+      ],
+      "text": "",
+      "bbox": [
+        288,
+        671,
+        719,
+        690
+      ],
+      "complete": true
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "legend",
+          "bbox": [
+            159,
+            624,
+            856,
+            663
+          ],
+          "text": null,
+          "label": null,
+          "source": "visual_group",
+          "uncertain": false,
+          "reason": null,
+          "group_id": "vg_page_2_1"
+        }
+      ],
+      "text": "",
+      "bbox": [
+        159,
+        624,
+        856,
+        663
+      ],
+      "complete": true
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        101,
+        725,
+        504,
+        747
+      ],
+      [
+        126,
+        753,
+        350,
+        773
+      ],
+      [
+        470,
+        753,
+        615,
+        773
+      ],
+      [
+        126,
+        778,
+        350,
+        798
+      ],
+      [
+        470,
+        778,
+        615,
+        798
+      ],
+      [
+        120,
+        378,
+        898,
+        691
+      ],
+      [
+        288,
+        671,
+        719,
+        690
+      ],
+      [
+        159,
+        624,
+        856,
+        663
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [],
+    "uncertain": false
+  },
+  {
+    "question_no": 7,
+    "source_page_start": 2,
+    "source_page_end": 2,
+    "source_text_span": "7. 2017年，新疆棉花播种面积约是其他产棉区棉花播种面积之和的：\nA. 不到1.3倍\nB. 1.3～1.5倍之间\nC. 1.5～1.7倍之间\nD. 1.7倍以上",
+    "source_bbox": [
+      35.63869094848633,
+      60.213497161865234,
+      389.300048828125,
+      550.8749389648438
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "stem",
+          "bbox": [
+            100,
+            805,
+            539,
+            826
+          ],
+          "text": "2021年全国数据及互联网业务总收入的同比增长率是：",
+          "label": "7",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2021年全国数据及互联网业务总收入的同比增长率是：",
+      "bbox": [
+        100,
+        805,
+        539,
+        826
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            126,
+            831,
+            260,
+            851
+          ],
+          "text": "4.5%",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            470,
+            831,
+            565,
+            851
+          ],
+          "text": "5.1%",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            126,
+            856,
+            260,
+            876
+          ],
+          "text": "6.2%",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 2,
+          "kind": "option",
+          "bbox": [
+            470,
+            856,
+            565,
+            876
+          ],
+          "text": "7.0%",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "4.5%\n5.1%\n6.2%\n7.0%",
+      "bbox": [
+        126,
+        831,
+        565,
+        876
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "chart",
+          "bbox": [
+            120,
+            378,
+            898,
+            691
+          ],
+          "text": "2016~2021年全国数据及互联网业务收入组合图：柱状图分两类展示每年收入：固定数据及互联网业务收入、移动数据及互联网业务收入，单位亿元；两条折线分别展示两类业务的同比增速（%），数据：2016年固定1811亿增速7.4%，移动4333亿增速38.3%；2017年固定1950亿增速7.7%，移动5528亿增速27.6%；2018年固定2074亿增速6.4%，移动5984亿增速8.2%；2019年固定2176亿增速1.9%，移动6096亿增速4.9%；2020年固定2369亿增速1.8%，移动6204亿增速8.9%；2021年固定2601亿增速3.3%，移动6409亿增速9.8%",
+          "label": null,
+          "source": "visual_group",
+          "uncertain": false,
+          "reason": null,
+          "group_id": "vg_page_2_1",
+          "confidence": 0.95,
+          "visual_summary": "2016~2021年全国数据及互联网业务收入组合图：柱状图分两类展示每年收入：固定数据及互联网业务收入、移动数据及互联网业务收入，单位亿元；两条折线分别展示两类业务的同比增速（%），数据：2016年固定1811亿增速7.4%，移动4333亿增速38.3%；2017年固定1950亿增速7.7%，移动5528亿增速27.6%；2018年固定2074亿增速6.4%，移动5984亿增速8.2%；2019年固定2176亿增速1.9%，移动6096亿增速4.9%；2020年固定2369亿增速1.8%，移动6204亿增速8.9%；2021年固定2601亿增速3.3%，移动6409亿增速9.8%",
+          "is_fragmented_before_merge": false
+        }
+      ],
+      "text": "2016~2021年全国数据及互联网业务收入组合图：柱状图分两类展示每年收入：固定数据及互联网业务收入、移动数据及互联网业务收入，单位亿元；两条折线分别展示两类业务的同比增速（%），数据：2016年固定1811亿增速7.4%，移动4333亿增速38.3%；2017年固定1950亿增速7.7%，移动5528亿增速27.6%；2018年固定2074亿增速6.4%，移动5984亿增速8.2%；2019年固定2176亿增速1.9%，移动6096亿增速4.9%；2020年固定2369亿增速1.8%，移动6204亿增速8.9%；2021年固定2601亿增速3.3%，移动6409亿增速9.8%",
+      "bbox": [
+        120,
+        378,
+        898,
+        691
+      ],
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "chart_title",
+          "bbox": [
+            288,
+            671,
+            719,
+            690
+          ],
+          "text": null,
+          "label": null,
+          "source": "visual_group",
+          "uncertain": false,
+          "reason": null,
+          "group_id": "vg_page_2_1"
+        }
+      ],
+      "text": "",
+      "bbox": [
+        288,
+        671,
+        719,
+        690
+      ],
+      "complete": true
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [
+        {
+          "page_no": 2,
+          "kind": "legend",
+          "bbox": [
+            159,
+            624,
+            856,
+            663
+          ],
+          "text": null,
+          "label": null,
+          "source": "visual_group",
+          "uncertain": false,
+          "reason": null,
+          "group_id": "vg_page_2_1"
+        }
+      ],
+      "text": "",
+      "bbox": [
+        159,
+        624,
+        856,
+        663
+      ],
+      "complete": true
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        100,
+        805,
+        539,
+        826
+      ],
+      [
+        126,
+        831,
+        260,
+        851
+      ],
+      [
+        470,
+        831,
+        565,
+        851
+      ],
+      [
+        126,
+        856,
+        260,
+        876
+      ],
+      [
+        470,
+        856,
+        565,
+        876
+      ],
+      [
+        120,
+        378,
+        898,
+        691
+      ],
+      [
+        288,
+        671,
+        719,
+        690
+      ],
+      [
+        159,
+        624,
+        856,
+        663
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [],
+    "uncertain": false
+  },
+  {
+    "question_no": 8,
+    "source_page_start": 3,
+    "source_page_end": 3,
+    "source_text_span": "8. 2016年，黄河、长江流域棉区棉花播种面积之和约占全国棉花播种面积的：\nA. 四成多\nB. 三成多\nC. 两成多\nD. 不到两成",
+    "source_bbox": [
+      46.438682556152344,
+      58.25001525878906,
+      389.300048828125,
+      191.11241149902344
+    ],
+    "material_group_id": "sg_q008",
+    "material_group_question_indexes": [
+      8
+    ],
+    "material_group_confidence": null,
+    "material_group_reason": "semantic_group_by_qwen_vl",
+    "shared_material": false,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 3,
+          "kind": "stem",
+          "bbox": [
+            100,
+            113,
+            693,
+            137
+          ],
+          "text": "2016～2021年全国移动数据及互联网业务收入同比增长额最多的年份是：",
+          "label": "8",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2016～2021年全国移动数据及互联网业务收入同比增长额最多的年份是：",
+      "bbox": [
+        100,
+        113,
+        693,
+        137
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            135,
+            145,
+            215,
+            165
+          ],
+          "text": "2016年",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            475,
+            145,
+            555,
+            165
+          ],
+          "text": "2017年",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            135,
+            175,
+            215,
+            195
+          ],
+          "text": "2020年",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            475,
+            175,
+            555,
+            195
+          ],
+          "text": "2021年",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2016年\n2017年\n2020年\n2021年",
+      "bbox": [
+        135,
+        145,
+        555,
+        195
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        100,
+        113,
+        693,
+        137
+      ],
+      [
+        135,
+        145,
+        215,
+        165
+      ],
+      [
+        475,
+        145,
+        555,
+        165
+      ],
+      [
+        135,
+        175,
+        215,
+        195
+      ],
+      [
+        475,
+        175,
+        555,
+        195
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "材料缺失",
+      "材料缺失导致无法解答"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 9,
+    "source_page_start": 3,
+    "source_page_end": 3,
+    "source_text_span": "9. 2017年，长江流域棉区棉花总产量同比约下降：\nA. 4%\nB. 7%\nC. 15%\nD. 18%",
+    "source_bbox": [
+      46.438682556152344,
+      110.60958099365234,
+      389.300048828125,
+      243.4719696044922
+    ],
+    "material_group_id": "sg_q009",
+    "material_group_question_indexes": [
+      9
+    ],
+    "material_group_confidence": null,
+    "material_group_reason": "semantic_group_by_qwen_vl",
+    "shared_material": false,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 3,
+          "kind": "stem",
+          "bbox": [
+            100,
+            193,
+            858,
+            235
+          ],
+          "text": "分别以R₁₉、R₂₀、R₂₁表示2019年、2020年、2021年全国固定数据及互联网业务收入占电信业务实现收入的比重，R₁₉、R₂₀、R₂₁的大小关系：",
+          "label": "9",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "分别以R₁₉、R₂₀、R₂₁表示2019年、2020年、2021年全国固定数据及互联网业务收入占电信业务实现收入的比重，R₁₉、R₂₀、R₂₁的大小关系：",
+      "bbox": [
+        100,
+        193,
+        858,
+        235
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            135,
+            243,
+            325,
+            263
+          ],
+          "text": "R₁₉＜R₂₁＜R₂₀",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            475,
+            243,
+            665,
+            263
+          ],
+          "text": "R₂₀＜R₁₉＜R₂₁",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            135,
+            273,
+            325,
+            293
+          ],
+          "text": "R₂₀＜R₂₁＜R₁₉",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            475,
+            273,
+            665,
+            293
+          ],
+          "text": "R₁₉＜R₂₀＜R₂₁",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "R₁₉＜R₂₁＜R₂₀\nR₂₀＜R₁₉＜R₂₁\nR₂₀＜R₂₁＜R₁₉\nR₁₉＜R₂₀＜R₂₁",
+      "bbox": [
+        135,
+        243,
+        665,
+        293
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        100,
+        193,
+        858,
+        235
+      ],
+      [
+        135,
+        243,
+        325,
+        263
+      ],
+      [
+        475,
+        243,
+        665,
+        263
+      ],
+      [
+        135,
+        273,
+        325,
+        293
+      ],
+      [
+        475,
+        273,
+        665,
+        293
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "材料缺失",
+      "材料缺失导致无法解答"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 10,
+    "source_page_start": 3,
+    "source_page_end": 3,
+    "source_text_span": "10. 以下信息中，能够从上述材料中推出的有几条：\n①2017年新疆每公顷棉花单位面积产量是全国的1.2倍以上\n②2017年全国棉花播种面积同比增长5%以上\n③除新疆、黄河流域、长江流域外，其余地区2017年棉花播种面积之和高于上年水平\n④2017年棉花产量同比增长3%以上\nA. 1\nB. 2\nC. 3\nD. 4",
+    "source_bbox": [
+      46.438682556152344,
+      182.60397338867188,
+      389.300048828125,
+      358.66302490234375
+    ],
+    "material_group_id": "sg_q010",
+    "material_group_question_indexes": [
+      10
+    ],
+    "material_group_confidence": null,
+    "material_group_reason": "semantic_group_by_qwen_vl",
+    "shared_material": false,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 3,
+          "kind": "stem",
+          "bbox": [
+            100,
+            303,
+            693,
+            327
+          ],
+          "text": "关于2017～2021年全国数据及互联网业务收入发展情况，下列判断正确是：",
+          "label": "10",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "关于2017～2021年全国数据及互联网业务收入发展情况，下列判断正确是：",
+      "bbox": [
+        100,
+        303,
+        693,
+        327
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            135,
+            335,
+            435,
+            355
+          ],
+          "text": "移动数据及互联网业务收入增速逐年减小",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            475,
+            335,
+            775,
+            355
+          ],
+          "text": "固定数据及互联网业务收入增速逐年增大",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            135,
+            365,
+            535,
+            385
+          ],
+          "text": "数据及互联网业务总收入增速呈逐年减小趋势",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 3,
+          "kind": "option",
+          "bbox": [
+            475,
+            365,
+            805,
+            385
+          ],
+          "text": "移动数据及互联网业务收入年均增速小于10%",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "移动数据及互联网业务收入增速逐年减小\n固定数据及互联网业务收入增速逐年增大\n数据及互联网业务总收入增速呈逐年减小趋势\n移动数据及互联网业务收入年均增速小于10%",
+      "bbox": [
+        135,
+        335,
+        805,
+        385
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        100,
+        303,
+        693,
+        327
+      ],
+      [
+        135,
+        335,
+        435,
+        355
+      ],
+      [
+        475,
+        335,
+        775,
+        355
+      ],
+      [
+        135,
+        365,
+        535,
+        385
+      ],
+      [
+        475,
+        365,
+        805,
+        385
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "材料缺失",
+      "材料缺失导致无法解答"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 11,
+    "source_page_start": 4,
+    "source_page_end": 4,
+    "source_text_span": "11. 2022年该市粮食总产量为多少万吨：\nA. 85.7\nB. 89.4\nC. 91.1\nD. 92.4",
+    "source_bbox": [
+      41.86022186279297,
+      147.915771484375,
+      374.77978515625,
+      226.45510864257812
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 4,
+          "kind": "stem",
+          "bbox": [
+            88,
+            250,
+            429,
+            274
+          ],
+          "text": "2022年该市粮食总产量为多少万吨：",
+          "label": "11",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2022年该市粮食总产量为多少万吨：",
+      "bbox": [
+        88,
+        250,
+        429,
+        274
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            120,
+            279,
+            200,
+            299
+          ],
+          "text": "85.7",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            470,
+            279,
+            548,
+            299
+          ],
+          "text": "89.4",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            120,
+            304,
+            200,
+            322
+          ],
+          "text": "91.1",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            470,
+            304,
+            548,
+            322
+          ],
+          "text": "92.4",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "85.7\n89.4\n91.1\n92.4",
+      "bbox": [
+        120,
+        279,
+        548,
+        322
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        88,
+        250,
+        429,
+        274
+      ],
+      [
+        120,
+        279,
+        200,
+        299
+      ],
+      [
+        470,
+        279,
+        548,
+        299
+      ],
+      [
+        120,
+        304,
+        200,
+        322
+      ],
+      [
+        470,
+        304,
+        548,
+        322
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "完整材料缺失，所需粮食总产量数据不在本页",
+      "仅题目和选项完整，材料核心数据缺失"
+    ],
+    "uncertain": false
+  },
+  {
+    "question_no": 12,
+    "source_page_start": 4,
+    "source_page_end": 4,
+    "source_text_span": "12. 2023年该市牛羊禽肉产量比2022年：\nA. 增长了21.3%\nB. 下降了21.3%\nC. 增长了27.0%\nD. 下降了27.0%",
+    "source_bbox": [
+      41.86022186279297,
+      201.58432006835938,
+      389.300048828125,
+      278.8146667480469
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 4,
+          "kind": "stem",
+          "bbox": [
+            88,
+            332,
+            429,
+            354
+          ],
+          "text": "2023年该市牛羊禽肉产量比2022年：",
+          "label": "12",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2023年该市牛羊禽肉产量比2022年：",
+      "bbox": [
+        88,
+        332,
+        429,
+        354
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            120,
+            359,
+            265,
+            379
+          ],
+          "text": "增长了21.3%",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            470,
+            359,
+            616,
+            379
+          ],
+          "text": "下降了21.3%",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            120,
+            384,
+            265,
+            402
+          ],
+          "text": "增长了27.0%",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            470,
+            384,
+            616,
+            402
+          ],
+          "text": "下降了27.0%",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "增长了21.3%\n下降了21.3%\n增长了27.0%\n下降了27.0%",
+      "bbox": [
+        120,
+        359,
+        616,
+        402
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        88,
+        332,
+        429,
+        354
+      ],
+      [
+        120,
+        359,
+        265,
+        379
+      ],
+      [
+        470,
+        359,
+        616,
+        379
+      ],
+      [
+        120,
+        384,
+        265,
+        402
+      ],
+      [
+        470,
+        384,
+        616,
+        402
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "完整材料缺失，所需牛羊禽肉产量数据不在本页",
+      "仅题目和选项完整，材料核心数据缺失"
+    ],
+    "uncertain": false
+  },
+  {
+    "question_no": 13,
+    "source_page_start": 4,
+    "source_page_end": 4,
+    "source_text_span": "13. 2023年前六大主导行业产值增长率约为：\nA. 6.5%\nB. 5.6%\nC. 4.7%\nD. 3.8%",
+    "source_bbox": [
+      41.86022186279297,
+      253.9438934326172,
+      378.05010986328125,
+      331.17425537109375
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 4,
+          "kind": "stem",
+          "bbox": [
+            88,
+            412,
+            445,
+            434
+          ],
+          "text": "2023年前六大主导行业产值增长率约为：",
+          "label": "13",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2023年前六大主导行业产值增长率约为：",
+      "bbox": [
+        88,
+        412,
+        445,
+        434
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            120,
+            439,
+            200,
+            459
+          ],
+          "text": "6.5%",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            470,
+            439,
+            552,
+            459
+          ],
+          "text": "5.6%",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            120,
+            464,
+            200,
+            482
+          ],
+          "text": "4.7%",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            470,
+            464,
+            552,
+            482
+          ],
+          "text": "3.8%",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "6.5%\n5.6%\n4.7%\n3.8%",
+      "bbox": [
+        120,
+        439,
+        552,
+        482
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        88,
+        412,
+        445,
+        434
+      ],
+      [
+        120,
+        439,
+        200,
+        459
+      ],
+      [
+        470,
+        439,
+        552,
+        459
+      ],
+      [
+        120,
+        464,
+        200,
+        482
+      ],
+      [
+        470,
+        464,
+        552,
+        482
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "完整材料缺失，所需六大主导行业产值数据不在本页",
+      "仅题目和选项完整，材料核心数据缺失"
+    ],
+    "uncertain": false
+  },
+  {
+    "question_no": 14,
+    "source_page_start": 4,
+    "source_page_end": 4,
+    "source_text_span": "14. 2022年该市城镇常住居民与农村常住居民的人均可支配收入比为：\nA. 1.79:1\nB. 1.82:1\nC. 1.83:1\nD. 1.85:1",
+    "source_bbox": [
+      41.86022186279297,
+      301.0675048828125,
+      389.300048828125,
+      382.2248229980469
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 4,
+          "kind": "stem",
+          "bbox": [
+            88,
+            484,
+            700,
+            506
+          ],
+          "text": "2022年该市城镇常住居民与农村常住居民的人均可支配收入比为：",
+          "label": "14",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2022年该市城镇常住居民与农村常住居民的人均可支配收入比为：",
+      "bbox": [
+        88,
+        484,
+        700,
+        506
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            120,
+            511,
+            235,
+            531
+          ],
+          "text": "1.79:1",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            470,
+            511,
+            600,
+            531
+          ],
+          "text": "1.82:1",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            120,
+            540,
+            235,
+            560
+          ],
+          "text": "1.83:1",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            470,
+            540,
+            600,
+            560
+          ],
+          "text": "1.85:1",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "1.79:1\n1.82:1\n1.83:1\n1.85:1",
+      "bbox": [
+        120,
+        511,
+        600,
+        560
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        88,
+        484,
+        700,
+        506
+      ],
+      [
+        120,
+        511,
+        235,
+        531
+      ],
+      [
+        470,
+        511,
+        600,
+        531
+      ],
+      [
+        120,
+        540,
+        235,
+        560
+      ],
+      [
+        470,
+        540,
+        600,
+        560
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [],
+    "uncertain": false
+  },
+  {
+    "question_no": 15,
+    "source_page_start": 4,
+    "source_page_end": 4,
+    "source_text_span": "15. 2023年该市农村居民人均消费支出较上一年增加了多少元：\nA. 2874\nB. 2746\nC. 2647\nD. 2584",
+    "source_bbox": [
+      41.86022186279297,
+      356.0450439453125,
+      389.300048828125,
+      431.9664001464844
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 4,
+          "kind": "stem",
+          "bbox": [
+            88,
+            568,
+            590,
+            588
+          ],
+          "text": "2023年该市农村居民人均消费支出较上一年增加了多少元：",
+          "label": "15",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2023年该市农村居民人均消费支出较上一年增加了多少元：",
+      "bbox": [
+        88,
+        568,
+        590,
+        588
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            120,
+            593,
+            200,
+            613
+          ],
+          "text": "2874",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            470,
+            593,
+            548,
+            613
+          ],
+          "text": "2746",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            120,
+            622,
+            200,
+            636
+          ],
+          "text": "2647",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 4,
+          "kind": "option",
+          "bbox": [
+            470,
+            622,
+            548,
+            636
+          ],
+          "text": "2584",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2874\n2746\n2647\n2584",
+      "bbox": [
+        120,
+        593,
+        548,
+        636
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        88,
+        568,
+        590,
+        588
+      ],
+      [
+        120,
+        593,
+        200,
+        613
+      ],
+      [
+        470,
+        593,
+        548,
+        613
+      ],
+      [
+        120,
+        622,
+        200,
+        636
+      ],
+      [
+        470,
+        622,
+        548,
+        636
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [],
+    "uncertain": false
+  },
+  {
+    "question_no": 16,
+    "source_page_start": 5,
+    "source_page_end": 5,
+    "source_text_span": "16. 2020年，珠三角九市技术合同数占广东省比重约为：\nA. 57.3%\nB. 86.8%\nC. 93.4%\nD. 97.8%",
+    "source_bbox": [
+      33.357364654541016,
+      272.2697448730469,
+      385.2448425292969,
+      352.7725524902344
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 5,
+          "kind": "stem",
+          "bbox": [
+            75,
+            440,
+            530,
+            465
+          ],
+          "text": "2020年，珠三角九市技术合同数占广东省比重约为：",
+          "label": "16",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2020年，珠三角九市技术合同数占广东省比重约为：",
+      "bbox": [
+        75,
+        440,
+        530,
+        465
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            468,
+            200,
+            488
+          ],
+          "text": "57.3%",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            465,
+            468,
+            550,
+            488
+          ],
+          "text": "86.8%",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            495,
+            200,
+            515
+          ],
+          "text": "93.4%",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            465,
+            495,
+            550,
+            515
+          ],
+          "text": "97.8%",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "57.3%\n86.8%\n93.4%\n97.8%",
+      "bbox": [
+        112,
+        468,
+        550,
+        515
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        75,
+        440,
+        530,
+        465
+      ],
+      [
+        112,
+        468,
+        200,
+        488
+      ],
+      [
+        465,
+        468,
+        550,
+        488
+      ],
+      [
+        112,
+        495,
+        200,
+        515
+      ],
+      [
+        465,
+        495,
+        550,
+        515
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "incomplete_material_data"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 17,
+    "source_page_start": 5,
+    "source_page_end": 5,
+    "source_text_span": "17. 2020年，技术交易额占合同成交额比重有所提高的地市有：\nA. 7个\nB. 6个\nC. 5个\nD. 4个",
+    "source_bbox": [
+      33.357364654541016,
+      327.9017639160156,
+      388.5151672363281,
+      405.13214111328125
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 5,
+          "kind": "stem",
+          "bbox": [
+            75,
+            525,
+            570,
+            545
+          ],
+          "text": "2020年，技术交易额占合同成交额比重有所提高的地市有：",
+          "label": "17",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2020年，技术交易额占合同成交额比重有所提高的地市有：",
+      "bbox": [
+        75,
+        525,
+        570,
+        545
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            550,
+            185,
+            570
+          ],
+          "text": "7个",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            465,
+            550,
+            530,
+            570
+          ],
+          "text": "6个",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            575,
+            185,
+            595
+          ],
+          "text": "5个",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            465,
+            575,
+            530,
+            595
+          ],
+          "text": "4个",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "7个\n6个\n5个\n4个",
+      "bbox": [
+        112,
+        550,
+        530,
+        595
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        75,
+        525,
+        570,
+        545
+      ],
+      [
+        112,
+        550,
+        185,
+        570
+      ],
+      [
+        465,
+        550,
+        530,
+        570
+      ],
+      [
+        112,
+        575,
+        185,
+        595
+      ],
+      [
+        465,
+        575,
+        530,
+        595
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "incomplete_material_data",
+      "unclear_column_meaning"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 18,
+    "source_page_start": 5,
+    "source_page_end": 5,
+    "source_text_span": "18. 2020年，平均每项技术合同成交额高于1000万元的地市有：\nA. 5个\nB. 4个\nC. 3个\nD. 2个",
+    "source_bbox": [
+      33.357364654541016,
+      380.2613220214844,
+      389.300048828125,
+      457.49169921875
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 5,
+          "kind": "stem",
+          "bbox": [
+            75,
+            605,
+            610,
+            625
+          ],
+          "text": "2020年，平均每项技术合同成交额高于1000万元的地市有：",
+          "label": "18",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2020年，平均每项技术合同成交额高于1000万元的地市有：",
+      "bbox": [
+        75,
+        605,
+        610,
+        625
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            630,
+            185,
+            650
+          ],
+          "text": "5个",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            465,
+            630,
+            530,
+            650
+          ],
+          "text": "4个",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            655,
+            185,
+            675
+          ],
+          "text": "3个",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            465,
+            655,
+            530,
+            675
+          ],
+          "text": "2个",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "5个\n4个\n3个\n2个",
+      "bbox": [
+        112,
+        630,
+        530,
+        675
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        75,
+        605,
+        610,
+        625
+      ],
+      [
+        112,
+        630,
+        185,
+        650
+      ],
+      [
+        465,
+        630,
+        530,
+        650
+      ],
+      [
+        112,
+        655,
+        185,
+        675
+      ],
+      [
+        465,
+        655,
+        530,
+        675
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "incomplete_material_data",
+      "unclear_column_meaning"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 19,
+    "source_page_start": 5,
+    "source_page_end": 5,
+    "source_text_span": "19. 2020年，下列地市的合同成交额同比增量最大的是：\nA. 珠海市\nB. 佛山市\nC. 惠州市\nD. 云浮市",
+    "source_bbox": [
+      33.357364654541016,
+      429.3484191894531,
+      375.4338684082031,
+      506.57879638671875
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 5,
+          "kind": "stem",
+          "bbox": [
+            75,
+            680,
+            510,
+            700
+          ],
+          "text": "2020年，下列地市的合同成交额同比增量最大的是：",
+          "label": "19",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2020年，下列地市的合同成交额同比增量最大的是：",
+      "bbox": [
+        75,
+        680,
+        510,
+        700
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            705,
+            205,
+            725
+          ],
+          "text": "珠海市",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            465,
+            705,
+            550,
+            725
+          ],
+          "text": "佛山市",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            730,
+            205,
+            750
+          ],
+          "text": "惠州市",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            465,
+            730,
+            550,
+            750
+          ],
+          "text": "云浮市",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "珠海市\n佛山市\n惠州市\n云浮市",
+      "bbox": [
+        112,
+        705,
+        550,
+        750
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        75,
+        680,
+        510,
+        700
+      ],
+      [
+        112,
+        705,
+        205,
+        725
+      ],
+      [
+        465,
+        705,
+        550,
+        725
+      ],
+      [
+        112,
+        730,
+        205,
+        750
+      ],
+      [
+        465,
+        730,
+        550,
+        750
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "incomplete_material_data"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 20,
+    "source_page_start": 5,
+    "source_page_end": 5,
+    "source_text_span": "20. 根据上表，下列说法正确的是：\nA. 2020年，广东省技术合同数排前三的地市，其技术合同成交额也排前三\nB. 2019年，广东省技术合同数超百项的地市共有13个\nC. 与上年相比，2020年广东省各地市的技术合同数与技术合同成交额变动呈正相关\nD. 与上年相比，2020年深圳市技术交易额占广东省技术交易额比重有所提高",
+    "source_bbox": [
+      33.357364654541016,
+      481.7079772949219,
+      389.300048828125,
+      550.8749389648438
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 5,
+          "kind": "stem",
+          "bbox": [
+            75,
+            760,
+            360,
+            780
+          ],
+          "text": "根据上表，下列说法正确的是：",
+          "label": "20",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "根据上表，下列说法正确的是：",
+      "bbox": [
+        75,
+        760,
+        360,
+        780
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            785,
+            670,
+            805
+          ],
+          "text": "2020年，广东省技术合同数排前三的地市，其技术合同成交额也排前三",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            815,
+            590,
+            835
+          ],
+          "text": "2019年，广东省技术合同数超百项的地市共有13个",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            840,
+            740,
+            860
+          ],
+          "text": "与上年相比，2020年广东省各地市的技术合同数与技术合同成交额变动呈正相关",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 5,
+          "kind": "option",
+          "bbox": [
+            112,
+            855,
+            720,
+            875
+          ],
+          "text": "与上年相比，2020年深圳市技术交易额占广东省技术交易额比重有所提高",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2020年，广东省技术合同数排前三的地市，其技术合同成交额也排前三\n2019年，广东省技术合同数超百项的地市共有13个\n与上年相比，2020年广东省各地市的技术合同数与技术合同成交额变动呈正相关\n与上年相比，2020年深圳市技术交易额占广东省技术交易额比重有所提高",
+      "bbox": [
+        112,
+        785,
+        740,
+        875
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        75,
+        760,
+        360,
+        780
+      ],
+      [
+        112,
+        785,
+        670,
+        805
+      ],
+      [
+        112,
+        815,
+        590,
+        835
+      ],
+      [
+        112,
+        840,
+        740,
+        860
+      ],
+      [
+        112,
+        855,
+        720,
+        875
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "incomplete_material_data"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 1,
+    "source_page_start": 6,
+    "source_page_end": 6,
+    "source_text_span": "1. 2017～2021 五年间重庆市城镇常住居民人均可支配收入与农村常住居民人均可支配收入之比最小的是：\nA. 2018年\nB. 2019年\nC. 2020年\nD. 2021年",
+    "source_bbox": [
+      49.70901107788086,
+      134.8258819580078,
+      389.300048828125,
+      550.8749389648438
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 6,
+          "kind": "stem",
+          "bbox": [
+            115,
+            790,
+            910,
+            825
+          ],
+          "text": "2017～2021 五年间重庆市城镇常住居民人均可支配收入与农村常住居民人均可支配收入之比最小的是：",
+          "label": "1",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2017～2021 五年间重庆市城镇常住居民人均可支配收入与农村常住居民人均可支配收入之比最小的是：",
+      "bbox": [
+        115,
+        790,
+        910,
+        825
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 6,
+          "kind": "option",
+          "bbox": [
+            135,
+            848,
+            235,
+            870
+          ],
+          "text": "2018年",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 6,
+          "kind": "option",
+          "bbox": [
+            490,
+            848,
+            590,
+            870
+          ],
+          "text": "2019年",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 6,
+          "kind": "option",
+          "bbox": [
+            135,
+            875,
+            235,
+            898
+          ],
+          "text": "2020年",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 6,
+          "kind": "option",
+          "bbox": [
+            490,
+            875,
+            590,
+            898
+          ],
+          "text": "2021年",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2018年\n2019年\n2020年\n2021年",
+      "bbox": [
+        135,
+        848,
+        590,
+        898
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [
+        {
+          "page_no": 6,
+          "kind": "chart",
+          "bbox": [
+            160,
+            230,
+            855,
+            495
+          ],
+          "text": "该柱状图统计2017-2021年重庆市全市、城镇常住居民、农村常住居民人均可支配收入，单位为元：2017年城镇32193、农村12638；2018年城镇34889、农村13781；2019年城镇37938、农村15133；2020年城镇40006、农村16361；2021年城镇43502、农村18100。",
+          "label": null,
+          "source": "visual_group",
+          "uncertain": false,
+          "reason": null,
+          "group_id": "vg_page_6_1",
+          "confidence": 0.95,
+          "visual_summary": "该柱状图统计2017-2021年重庆市全市、城镇常住居民、农村常住居民人均可支配收入，单位为元：2017年城镇32193、农村12638；2018年城镇34889、农村13781；2019年城镇37938、农村15133；2020年城镇40006、农村16361；2021年城镇43502、农村18100。",
+          "is_fragmented_before_merge": false
+        }
+      ],
+      "text": "该柱状图统计2017-2021年重庆市全市、城镇常住居民、农村常住居民人均可支配收入，单位为元：2017年城镇32193、农村12638；2018年城镇34889、农村13781；2019年城镇37938、农村15133；2020年城镇40006、农村16361；2021年城镇43502、农村18100。",
+      "bbox": [
+        160,
+        230,
+        855,
+        495
+      ],
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [
+        {
+          "page_no": 6,
+          "kind": "chart_title",
+          "bbox": [
+            325,
+            478,
+            690,
+            500
+          ],
+          "text": null,
+          "label": null,
+          "source": "visual_group",
+          "uncertain": false,
+          "reason": null,
+          "group_id": "vg_page_6_1"
+        }
+      ],
+      "text": "",
+      "bbox": [
+        325,
+        478,
+        690,
+        500
+      ],
+      "complete": true
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [
+        {
+          "page_no": 6,
+          "kind": "legend",
+          "bbox": [
+            170,
+            235,
+            380,
+            285
+          ],
+          "text": null,
+          "label": null,
+          "source": "visual_group",
+          "uncertain": false,
+          "reason": null,
+          "group_id": "vg_page_6_1"
+        }
+      ],
+      "text": "",
+      "bbox": [
+        170,
+        235,
+        380,
+        285
+      ],
+      "complete": true
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        115,
+        790,
+        910,
+        825
+      ],
+      [
+        135,
+        848,
+        235,
+        870
+      ],
+      [
+        490,
+        848,
+        590,
+        870
+      ],
+      [
+        135,
+        875,
+        235,
+        898
+      ],
+      [
+        490,
+        875,
+        590,
+        898
+      ],
+      [
+        160,
+        230,
+        855,
+        495
+      ],
+      [
+        325,
+        478,
+        690,
+        500
+      ],
+      [
+        170,
+        235,
+        380,
+        285
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [],
+    "uncertain": false
+  },
+  {
+    "question_no": 2,
+    "source_page_start": 7,
+    "source_page_end": 7,
+    "source_text_span": "2. 2020年重庆市农村常住居民经营性收入比城镇常住居民经营性收入大约：\nA. 多1083元\nB. 少1083元\nC. 多1216元\nD. 少1216元",
+    "source_bbox": [
+      49.70901107788086,
+      56.94102478027344,
+      389.300048828125,
+      464.6911315917969
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 7,
+          "kind": "stem",
+          "bbox": [
+            101,
+            111,
+            699,
+            134
+          ],
+          "text": "2020年重庆市农村常住居民经营性收入比城镇常住居民经营性收入大约：",
+          "label": "2",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2020年重庆市农村常住居民经营性收入比城镇常住居民经营性收入大约：",
+      "bbox": [
+        101,
+        111,
+        699,
+        134
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            125,
+            141,
+            236,
+            160
+          ],
+          "text": "多1083元",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            478,
+            142,
+            599,
+            161
+          ],
+          "text": "少1083元",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            126,
+            166,
+            241,
+            185
+          ],
+          "text": "多1216元",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            478,
+            167,
+            601,
+            186
+          ],
+          "text": "少1216元",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "多1083元\n少1083元\n多1216元\n少1216元",
+      "bbox": [
+        125,
+        141,
+        601,
+        186
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        101,
+        111,
+        699,
+        134
+      ],
+      [
+        125,
+        141,
+        236,
+        160
+      ],
+      [
+        478,
+        142,
+        599,
+        161
+      ],
+      [
+        126,
+        166,
+        241,
+        185
+      ],
+      [
+        478,
+        167,
+        601,
+        186
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "missing_background_material"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 3,
+    "source_page_start": 7,
+    "source_page_end": 7,
+    "source_text_span": "3. 2020年重庆市城镇常住居民人均消费支出与可支配收入之比大约是：\nA. 58.2%\nB. 66.1%\nC. 69.6%\nD. 72.3%",
+    "source_bbox": [
+      49.70901107788086,
+      110.60958099365234,
+      389.300048828125,
+      516.3961791992188
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 7,
+          "kind": "stem",
+          "bbox": [
+            103,
+            193,
+            659,
+            213
+          ],
+          "text": "2020年重庆市城镇常住居民人均消费支出与可支配收入之比大约是：",
+          "label": "3",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2020年重庆市城镇常住居民人均消费支出与可支配收入之比大约是：",
+      "bbox": [
+        103,
+        193,
+        659,
+        213
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            125,
+            221,
+            214,
+            239
+          ],
+          "text": "58.2%",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            477,
+            222,
+            565,
+            240
+          ],
+          "text": "66.1%",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            125,
+            246,
+            214,
+            264
+          ],
+          "text": "69.6%",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            477,
+            247,
+            565,
+            265
+          ],
+          "text": "72.3%",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "58.2%\n66.1%\n69.6%\n72.3%",
+      "bbox": [
+        125,
+        221,
+        565,
+        265
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        103,
+        193,
+        659,
+        213
+      ],
+      [
+        125,
+        221,
+        214,
+        239
+      ],
+      [
+        477,
+        222,
+        565,
+        240
+      ],
+      [
+        125,
+        246,
+        214,
+        264
+      ],
+      [
+        477,
+        247,
+        565,
+        265
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "missing_background_material"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 4,
+    "source_page_start": 7,
+    "source_page_end": 7,
+    "source_text_span": "4. 2017年～2021年期间，重庆市城镇常住居民人均可支配收入平均增长率比农村常住居民人均可支配收入平均增长率约：\nA. 高8.09%\nB. 低8.09%\nC. 高1.57%\nD. 低1.57%",
+    "source_bbox": [
+      49.70901107788086,
+      161.0056610107422,
+      389.300048828125,
+      550.8749389648438
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 7,
+          "kind": "stem",
+          "bbox": [
+            102,
+            270,
+            901,
+            313
+          ],
+          "text": "2017年～2021年期间，重庆市城镇常住居民人均可支配收入平均增长率比农村常住居民人均可支配收入平均增长率约：",
+          "label": "4",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2017年～2021年期间，重庆市城镇常住居民人均可支配收入平均增长率比农村常住居民人均可支配收入平均增长率约：",
+      "bbox": [
+        102,
+        270,
+        901,
+        313
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            124,
+            321,
+            230,
+            340
+          ],
+          "text": "高8.09%",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            476,
+            322,
+            582,
+            341
+          ],
+          "text": "低8.09%",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            124,
+            348,
+            230,
+            366
+          ],
+          "text": "高1.57%",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            476,
+            349,
+            582,
+            367
+          ],
+          "text": "低1.57%",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "高8.09%\n低8.09%\n高1.57%\n低1.57%",
+      "bbox": [
+        124,
+        321,
+        582,
+        367
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        102,
+        270,
+        901,
+        313
+      ],
+      [
+        124,
+        321,
+        230,
+        340
+      ],
+      [
+        476,
+        322,
+        582,
+        341
+      ],
+      [
+        124,
+        348,
+        230,
+        366
+      ],
+      [
+        476,
+        349,
+        582,
+        367
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "missing_background_material"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 5,
+    "source_page_start": 7,
+    "source_page_end": 7,
+    "source_text_span": "5. 能够从上述材料中推出的是：\nA. 2020年城镇常住居民工资性收入低于2020年全市居民人均消费支出\nB. 2021年城镇常住居民财产性收入增长率高于农村常住居民财产性收入增长率\nC. 2019年农村常住居民人均可支配收入增长率高于城镇常住居民人均可支配收入增长率\nD. 2021年城镇居民人均可支配收入增长率高于农村居民人均可支配收入增长率",
+    "source_bbox": [
+      48.40087890625,
+      61.52248764038086,
+      389.300048828125,
+      340.9916687011719
+    ],
+    "material_group_id": "sg_q005",
+    "material_group_question_indexes": [
+      5
+    ],
+    "material_group_confidence": null,
+    "material_group_reason": "semantic_group_by_qwen_vl",
+    "shared_material": false,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 7,
+          "kind": "stem",
+          "bbox": [
+            102,
+            377,
+            360,
+            397
+          ],
+          "text": "能够从上述材料中推出的是：",
+          "label": "5",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "能够从上述材料中推出的是：",
+      "bbox": [
+        102,
+        377,
+        360,
+        397
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            124,
+            405,
+            672,
+            424
+          ],
+          "text": "2020年城镇常住居民工资性收入低于2020年全市居民人均消费支出",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            124,
+            431,
+            746,
+            451
+          ],
+          "text": "2021年城镇常住居民财产性收入增长率高于农村常住居民财产性收入增长率",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            124,
+            458,
+            818,
+            477
+          ],
+          "text": "2019年农村常住居民人均可支配收入增长率高于城镇常住居民人均可支配收入增长率",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            124,
+            483,
+            818,
+            502
+          ],
+          "text": "2021年城镇居民人均可支配收入增长率高于农村居民人均可支配收入增长率",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2020年城镇常住居民工资性收入低于2020年全市居民人均消费支出\n2021年城镇常住居民财产性收入增长率高于农村常住居民财产性收入增长率\n2019年农村常住居民人均可支配收入增长率高于城镇常住居民人均可支配收入增长率\n2021年城镇居民人均可支配收入增长率高于农村居民人均可支配收入增长率",
+      "bbox": [
+        124,
+        405,
+        818,
+        502
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        102,
+        377,
+        360,
+        397
+      ],
+      [
+        124,
+        405,
+        672,
+        424
+      ],
+      [
+        124,
+        431,
+        746,
+        451
+      ],
+      [
+        124,
+        458,
+        818,
+        477
+      ],
+      [
+        124,
+        483,
+        818,
+        502
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "missing_background_material"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 6,
+    "source_page_start": 7,
+    "source_page_end": 7,
+    "source_text_span": "6. 2017年，新疆棉花总产量同比增速在以下哪个范围内：\nA. 不到一成\nB. 一成多\nC. 两成多\nD. 超过三成",
+    "source_bbox": [
+      35.63869094848633,
+      146.21339416503906,
+      389.300048828125,
+      550.8749389648438
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 7,
+          "kind": "stem",
+          "bbox": [
+            102,
+            824,
+            568,
+            844
+          ],
+          "text": "2017年，新疆棉花总产量同比增速在以下哪个范围内：",
+          "label": "6",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2017年，新疆棉花总产量同比增速在以下哪个范围内：",
+      "bbox": [
+        102,
+        824,
+        568,
+        844
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            123,
+            851,
+            228,
+            869
+          ],
+          "text": "不到一成",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            475,
+            852,
+            563,
+            870
+          ],
+          "text": "一成多",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            123,
+            876,
+            228,
+            894
+          ],
+          "text": "两成多",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 7,
+          "kind": "option",
+          "bbox": [
+            475,
+            877,
+            563,
+            895
+          ],
+          "text": "超过三成",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "不到一成\n一成多\n两成多\n超过三成",
+      "bbox": [
+        123,
+        851,
+        563,
+        895
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": true
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        102,
+        824,
+        568,
+        844
+      ],
+      [
+        123,
+        851,
+        228,
+        869
+      ],
+      [
+        475,
+        852,
+        563,
+        870
+      ],
+      [
+        123,
+        876,
+        228,
+        894
+      ],
+      [
+        475,
+        877,
+        563,
+        895
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [],
+    "uncertain": true
+  },
+  {
+    "question_no": 7,
+    "source_page_start": 8,
+    "source_page_end": 8,
+    "source_text_span": "7. 2017年，新疆棉花播种面积约是其他产棉区棉花播种面积之和的：\nA. 不到1.3倍\nB. 1.3～1.5倍之间\nC. 1.5～1.7倍之间\nD. 1.7倍以上",
+    "source_bbox": [
+      35.63869094848633,
+      60.213497161865234,
+      389.300048828125,
+      550.8749389648438
+    ],
+    "material_group_id": "sg_m1",
+    "material_group_question_indexes": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "material_group_confidence": 0.86,
+    "material_group_reason": "semantic_shared_material_binding",
+    "shared_material": true,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 8,
+          "kind": "stem",
+          "bbox": [
+            95,
+            116,
+            636,
+            139
+          ],
+          "text": "2017年，新疆棉花播种面积约是其他产棉区棉花播种面积之和的：",
+          "label": "7",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2017年，新疆棉花播种面积约是其他产棉区棉花播种面积之和的：",
+      "bbox": [
+        95,
+        116,
+        636,
+        139
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            122,
+            145,
+            248,
+            165
+          ],
+          "text": "不到1.3倍",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            481,
+            146,
+            635,
+            165
+          ],
+          "text": "1.3～1.5倍之间",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            121,
+            171,
+            278,
+            190
+          ],
+          "text": "1.5～1.7倍之间",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            480,
+            172,
+            595,
+            191
+          ],
+          "text": "1.7倍以上",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "不到1.3倍\n1.3～1.5倍之间\n1.5～1.7倍之间\n1.7倍以上",
+      "bbox": [
+        121,
+        145,
+        635,
+        191
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        95,
+        116,
+        636,
+        139
+      ],
+      [
+        122,
+        145,
+        248,
+        165
+      ],
+      [
+        481,
+        146,
+        635,
+        165
+      ],
+      [
+        121,
+        171,
+        278,
+        190
+      ],
+      [
+        480,
+        172,
+        595,
+        191
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "missing_original_material",
+      "缺失对应材料"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 8,
+    "source_page_start": 8,
+    "source_page_end": 8,
+    "source_text_span": "8. 2016年，黄河、长江流域棉区棉花播种面积之和约占全国棉花播种面积的：\nA. 四成多\nB. 三成多\nC. 两成多\nD. 不到两成",
+    "source_bbox": [
+      46.438682556152344,
+      58.25001525878906,
+      389.300048828125,
+      191.11241149902344
+    ],
+    "material_group_id": "sg_q008",
+    "material_group_question_indexes": [
+      8
+    ],
+    "material_group_confidence": null,
+    "material_group_reason": "semantic_group_by_qwen_vl",
+    "shared_material": false,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 8,
+          "kind": "stem",
+          "bbox": [
+            95,
+            200,
+            710,
+            220
+          ],
+          "text": "2016年，黄河、长江流域棉区棉花播种面积之和约占全国棉花播种面积的：",
+          "label": "8",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2016年，黄河、长江流域棉区棉花播种面积之和约占全国棉花播种面积的：",
+      "bbox": [
+        95,
+        200,
+        710,
+        220
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            122,
+            226,
+            212,
+            245
+          ],
+          "text": "四成多",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            481,
+            227,
+            565,
+            246
+          ],
+          "text": "三成多",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            121,
+            252,
+            212,
+            271
+          ],
+          "text": "两成多",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            480,
+            253,
+            578,
+            272
+          ],
+          "text": "不到两成",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "四成多\n三成多\n两成多\n不到两成",
+      "bbox": [
+        121,
+        226,
+        578,
+        272
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        95,
+        200,
+        710,
+        220
+      ],
+      [
+        122,
+        226,
+        212,
+        245
+      ],
+      [
+        481,
+        227,
+        565,
+        246
+      ],
+      [
+        121,
+        252,
+        212,
+        271
+      ],
+      [
+        480,
+        253,
+        578,
+        272
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "missing_original_material",
+      "缺失对应材料"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 9,
+    "source_page_start": 8,
+    "source_page_end": 8,
+    "source_text_span": "9. 2017年，长江流域棉区棉花总产量同比约下降：\nA. 4%\nB. 7%\nC. 15%\nD. 18%",
+    "source_bbox": [
+      46.438682556152344,
+      110.60958099365234,
+      389.300048828125,
+      243.4719696044922
+    ],
+    "material_group_id": "sg_q009",
+    "material_group_question_indexes": [
+      9
+    ],
+    "material_group_confidence": null,
+    "material_group_reason": "semantic_group_by_qwen_vl",
+    "shared_material": false,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 8,
+          "kind": "stem",
+          "bbox": [
+            95,
+            276,
+            505,
+            296
+          ],
+          "text": "2017年，长江流域棉区棉花总产量同比约下降：",
+          "label": "9",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "2017年，长江流域棉区棉花总产量同比约下降：",
+      "bbox": [
+        95,
+        276,
+        505,
+        296
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            122,
+            302,
+            165,
+            321
+          ],
+          "text": "4%",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            481,
+            303,
+            525,
+            322
+          ],
+          "text": "7%",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            121,
+            328,
+            182,
+            347
+          ],
+          "text": "15%",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            480,
+            329,
+            538,
+            348
+          ],
+          "text": "18%",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "4%\n7%\n15%\n18%",
+      "bbox": [
+        121,
+        302,
+        538,
+        348
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        95,
+        276,
+        505,
+        296
+      ],
+      [
+        122,
+        302,
+        165,
+        321
+      ],
+      [
+        481,
+        303,
+        525,
+        322
+      ],
+      [
+        121,
+        328,
+        182,
+        347
+      ],
+      [
+        480,
+        329,
+        538,
+        348
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "missing_original_material",
+      "缺失对应材料"
+    ],
+    "uncertain": true
+  },
+  {
+    "question_no": 10,
+    "source_page_start": 8,
+    "source_page_end": 8,
+    "source_text_span": "10. 以下信息中，能够从上述材料中推出的有几条：\n①2017年新疆每公顷棉花单位面积产量是全国的1.2倍以上\n②2017年全国棉花播种面积同比增长5%以上\n③除新疆、黄河流域、长江流域外，其余地区2017年棉花播种面积之和高于上年水平\n④2017年棉花产量同比增长3%以上\nA. 1\nB. 2\nC. 3\nD. 4",
+    "source_bbox": [
+      46.438682556152344,
+      182.60397338867188,
+      389.300048828125,
+      358.66302490234375
+    ],
+    "material_group_id": "sg_q010",
+    "material_group_question_indexes": [
+      10
+    ],
+    "material_group_confidence": null,
+    "material_group_reason": "semantic_group_by_qwen_vl",
+    "shared_material": false,
+    "stem_group": {
+      "blocks": [
+        {
+          "page_no": 8,
+          "kind": "stem",
+          "bbox": [
+            95,
+            358,
+            790,
+            460
+          ],
+          "text": "以下信息中，能够从上述材料中推出的有几条：\n①2017年新疆每公顷棉花单位面积产量是全国的1.2倍以上\n②2017年全国棉花播种面积同比增长5%以上\n③除新疆、黄河流域、长江流域外，其余地区2017年棉花播种面积之和高于上年水平\n④2017年棉花产量同比增长3%以上",
+          "label": "10",
+          "source": "semantic_question",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "以下信息中，能够从上述材料中推出的有几条：\n①2017年新疆每公顷棉花单位面积产量是全国的1.2倍以上\n②2017年全国棉花播种面积同比增长5%以上\n③除新疆、黄河流域、长江流域外，其余地区2017年棉花播种面积之和高于上年水平\n④2017年棉花产量同比增长3%以上",
+      "bbox": [
+        95,
+        358,
+        790,
+        460
+      ],
+      "complete": true
+    },
+    "options_group": {
+      "blocks": [
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            122,
+            470,
+            152,
+            489
+          ],
+          "text": "1",
+          "label": "A",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            481,
+            471,
+            512,
+            490
+          ],
+          "text": "2",
+          "label": "B",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            121,
+            501,
+            152,
+            520
+          ],
+          "text": "3",
+          "label": "C",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        },
+        {
+          "page_no": 8,
+          "kind": "option",
+          "bbox": [
+            480,
+            502,
+            515,
+            521
+          ],
+          "text": "4",
+          "label": "D",
+          "source": "semantic_question.options",
+          "uncertain": false,
+          "reason": null
+        }
+      ],
+      "text": "1\n2\n3\n4",
+      "bbox": [
+        121,
+        470,
+        515,
+        521
+      ],
+      "complete": true
+    },
+    "visual_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "title_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "table_header_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "legend_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "notes_group": {
+      "blocks": [],
+      "text": "",
+      "bbox": null,
+      "complete": false
+    },
+    "bbox_list": [
+      [
+        95,
+        358,
+        790,
+        460
+      ],
+      [
+        122,
+        470,
+        152,
+        489
+      ],
+      [
+        481,
+        471,
+        512,
+        490
+      ],
+      [
+        121,
+        501,
+        152,
+        520
+      ],
+      [
+        480,
+        502,
+        515,
+        521
+      ]
+    ],
+    "grouping_confidence": 0.6,
+    "grouping_reason": "semantic_question_from_page_understanding",
+    "risk_flags": [
+      "missing_original_material",
+      "缺失对应材料"
+    ],
+    "uncertain": true
+  }
+]

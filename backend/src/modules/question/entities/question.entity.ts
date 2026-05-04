@@ -116,11 +116,29 @@ export class Question {
   @Column({ name: 'source_bbox', type: 'json', nullable: true })
   source_bbox?: number[];
 
+  @Column({ name: 'source_text_span', type: 'text', nullable: true })
+  source_text_span?: string;
+
   @Column({ name: 'source_anchor_text', nullable: true })
   source_anchor_text?: string;
 
   @Column({ name: 'source_confidence', type: 'float', nullable: true })
   source_confidence?: number;
+
+  @Column({ name: 'material_group_id', nullable: true })
+  material_group_id?: string;
+
+  @Column({ name: 'material_group_question_indexes', type: 'json', nullable: true })
+  material_group_question_indexes?: number[];
+
+  @Column({ name: 'material_group_confidence', type: 'float', nullable: true })
+  material_group_confidence?: number;
+
+  @Column({ name: 'material_group_reason', type: 'text', nullable: true })
+  material_group_reason?: string;
+
+  @Column({ name: 'shared_material', default: false })
+  shared_material?: boolean;
 
   @Column({ name: 'image_refs', type: 'json', nullable: true })
   image_refs?: string[];
