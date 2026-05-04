@@ -1731,6 +1731,23 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                 backup_result: dict[str, Any] | None = None
                 backup_attempt: dict[str, Any] | None = None
                 while time.perf_counter() < page_deadline and not (primary_done and backup_done):
+                    if not backup_done:
+                        try:
+                            backup_result, backup_attempt = backup_queue.get_nowait()
+                            backup_done = True
+                            attempts.append(backup_attempt)
+                            if backup_result is not None and not _provider_failed(backup_result):
+                                return _annotate_vision_result(
+                                    backup_result,
+                                    provider=backup,
+                                    model=str(backup_attempt.get("model") or configs[backup]["model"]),
+                                    timeout_seconds=timeout_seconds,
+                                    elapsed_ms=backup_attempt["elapsed_ms"],
+                                    attempts=attempts,
+                                    fallback_from=primary,
+                                )
+                        except queue.Empty:
+                            pass
                     if not primary_done:
                         try:
                             primary_result, primary_attempt = primary_queue.get_nowait()
@@ -1746,23 +1763,6 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                                     elapsed_ms=primary_attempt["elapsed_ms"],
                                     attempts=attempts,
                                     fallback_from=last_fallback_from,
-                                )
-                        except queue.Empty:
-                            pass
-                    if not backup_done:
-                        try:
-                            backup_result, backup_attempt = backup_queue.get_nowait()
-                            backup_done = True
-                            attempts.append(backup_attempt)
-                            if backup_result is not None and not _provider_failed(backup_result):
-                                return _annotate_vision_result(
-                                    backup_result,
-                                    provider=backup,
-                                    model=str(backup_attempt.get("model") or configs[backup]["model"]),
-                                    timeout_seconds=timeout_seconds,
-                                    elapsed_ms=backup_attempt["elapsed_ms"],
-                                    attempts=attempts,
-                                    fallback_from=primary,
                                 )
                         except queue.Empty:
                             pass
