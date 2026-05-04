@@ -1,59 +1,56 @@
 # Verifier Report
 
 - task_id: `836fec20-2628-44ed-9642-aedd57467864`
-- current_milestone: `M4`
 - m2_verdict: `M2_PASS`
 - m3_verdict: `M3_PASS`
 - m4_verdict: `M4_PASS`
-- debug_live_consistency: `pass`
-- next_action: `M4_COMPLETE`
+- m5a_verdict: `M5A_BLOCKED`
+- m5b_verdict: `M5B_FAIL`
+- m6a_verdict: `M6A_PASS`
+- m6b_verdict: `M6B_PASS`
+- m6c_verdict: `M6C_PASS`
+- m6_verdict: `M6_PASS`
+- failed_checks: `[]`
 
-## M4 Metrics
+## M6A
 
-- ai_audit_status_present: `20/20`
-- ai_audit_verdict_present: `20/20`
-- ai_audit_summary_present: `20/20`
-- answer_suggestion_present: `3/20`
-- answer_suggestion_or_reason_present: `20/20`
-- analysis_suggestion_present: `3/20`
-- analysis_suggestion_or_reason_present: `20/20`
-- visual_summary_present: `20/20`
-- visual_parse_status_present: `20/20`
-- ai_reviewed_before_human_true: `20/20`
-- risk_flags_present: `20/20`
-- risk_flags_non_empty: `20/20`
-- with_visual_assets: `3/20`
-- image_linkage_complete: `20/20`
-- playwright_m4_api_coverage: `true`
-- playwright_debug_live_consistency: `pass`
+- admin-web 审核页可打开 `836fec20-2628-44ed-9642-aedd57467864`
+- 可见原卷/M3/M4/M5 面板
+- 已执行 `accept_match`、`ignore_similarity`、`approve_for_publish`、`add_to_draft`、`publish_preview`
+- audit event 已落盘到 `backend/debug/m6/836.../review-state.json`
+- 页面未出现 `undefined`、`[object Object]`、`visual parse unavailable`
 
-## Passed Checks
+## M6B
 
-- `produced_question_count=20/20`
-- `fallback_failed_pages=[]`
-- `missing_question_numbers=[]`
-- `provider_health:qwen+ark=pass`
-- `warning_or_failed_can_add_count=0`
-- `manualForceAddAllowed_true_count=0`
-- `m4_ai_audit_fields=20/20`
-- `m4_visual_summary=20/20`
-- `m4_image_linkage_complete=20/20`
-- `m4_answer_suggestion_or_reason=20/20`
-- `m4_analysis_suggestion_or_reason=20/20`
-- `m4_risk_flags_field=20/20`
-- `playwright:admin_m4_review=pass`
+- H5 一致性预览 paper：`h5-audit-836fec20-2628-44ed-9642-aedd57467864`
+- `20/20` 题已有移动端截图
+- `playwright-h5-consistency.json` 中 `failed_questions=[]`
+- `iPhone SE` 与 `Android Pixel` smoke 均无 placeholder / image overflow
+
+## M6C
+
+- preview/dry-run 发布 paper：`d2769db3-e51d-401f-b838-14df22caedf1`
+- `preview_route_reachable=true`
+- `answerVisible=true`
+- `analysisVisible=true`
+- `production_published=false`
+
+## Non-Blocking Warnings
+
+- `M5A_BLOCKED`：未提供真实答本/解析本输入，当前只验证真实空状态与 seeded fixture UI。
+- `M5B_FAIL`：未接入真实 similarity/duplicate 服务，当前只验证 empty-state 与人工审计闭环。
+- 本地 `.env` 与 `backend/.env` 存在真实密钥，但未进入暂存区或提交；扫描输出已脱敏。
 
 ## Evidence
 
-- `/home/carry/project2/backend/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/ai-audit-results.json`
-- `/home/carry/project2/backend/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/m4-ai-preaudit-summary.json`
-- `/home/carry/project2/backend/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/api-responses.json`
-- `/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-recognition-audit.json`
-- `/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/admin-paper-review.png`
-- `/home/carry/project2/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/playwright/playwright-trace.zip`
+- `/home/carry/project2/debug/m6/836fec20-2628-44ed-9642-aedd57467864/admin-review-playwright.json`
+- `/home/carry/project2/debug/m6/836fec20-2628-44ed-9642-aedd57467864/publish-smoke.json`
+- `/home/carry/project2/backend/debug/m6/836fec20-2628-44ed-9642-aedd57467864/review-state.json`
+- `/home/carry/project2/backend/debug/m6-preview-papers/h5-audit-836fec20-2628-44ed-9642-aedd57467864.json`
+- `/home/carry/project2/debug/h5-regression/836fec20-2628-44ed-9642-aedd57467864/playwright-h5-consistency.json`
 
-## Commit
+## Commits
 
-- code_commit_hash: `fc910a8`
-- code_commit_message: `feat(pdf): add M4 AI preaudit pipeline`
-- code_commit_pushed: `true`
+- `e7c3052 feat(admin): add review closure workflow`
+- `438502e test(h5): add mobile question consistency audit`
+- `6429fee test(pdf): add publish smoke workflow`
