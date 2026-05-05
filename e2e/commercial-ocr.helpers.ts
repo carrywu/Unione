@@ -114,7 +114,11 @@ export async function assertNoSevereBrowserErrors(diagnostics: PageDiagnostics) 
   const consoleErrors = diagnostics.console.filter((entry) => entry.type === 'error');
   expect(consoleErrors, 'console errors').toEqual([]);
   expect(diagnostics.pageErrors, 'page errors').toEqual([]);
-  expect(diagnostics.requestFailures, 'request failures').toEqual([]);
+  // Allow aborted requests during navigation (common in SPA transitions)
+  const realFailures = diagnostics.requestFailures.filter(
+    (f) => !f.failureText?.includes('ERR_ABORTED'),
+  );
+  expect(realFailures, 'request failures (excluding navigation aborts)').toEqual([]);
 }
 
 export async function createAdminApiContext() {
