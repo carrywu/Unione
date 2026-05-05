@@ -1662,12 +1662,16 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
         primary = available_providers[0]
         primary_config = configs[primary]
         backup = available_providers[1] if len(available_providers) > 1 else None
+        ark_hedge_backup = next(
+            (provider for provider in available_providers[1:] if provider == "volcengine_ark_vl"),
+            None,
+        )
         used_providers: set[str] = set()
 
         if primary == "qwen_vl":
             qwen_attempted = True
 
-        if primary == "qwen_vl" and backup == "volcengine_ark_vl":
+        if primary == "qwen_vl" and ark_hedge_backup == "volcengine_ark_vl":
             primary_budget = min(timeout_seconds, max(0.0, page_deadline - time.perf_counter()))
             if primary_budget <= 0:
                 return _page_timeout_result_with_attempts(
@@ -1719,13 +1723,13 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                         fallback_from=last_fallback_from,
                     )
                 backup_thread, backup_queue = _start_provider_call(
-                    provider=backup,
-                    provider_config=configs[backup],
+                    provider=ark_hedge_backup,
+                    provider_config=configs[ark_hedge_backup],
                     page_b64=page_b64,
                     timeout_seconds=backup_budget,
                     fallback_from=primary,
                 )
-                used_providers.add(backup)
+                used_providers.add(ark_hedge_backup)
                 primary_done = False
                 backup_done = False
                 late_primary_success: tuple[dict[str, Any], dict[str, Any]] | None = None
@@ -1740,8 +1744,8 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                             if backup_result is not None and not _provider_failed(backup_result):
                                 return _annotate_vision_result(
                                     backup_result,
-                                    provider=backup,
-                                    model=str(backup_attempt.get("model") or configs[backup]["model"]),
+                                    provider=ark_hedge_backup,
+                                    model=str(backup_attempt.get("model") or configs[ark_hedge_backup]["model"]),
                                     timeout_seconds=timeout_seconds,
                                     elapsed_ms=backup_attempt["elapsed_ms"],
                                     attempts=attempts,
@@ -1777,7 +1781,7 @@ def parse_page_visual(page_b64: str) -> dict[str, Any]:
                 if primary_done and primary_result is not None and primary_attempt is not None and _provider_failed(primary_result):
                     last_fallback_from = primary
                 if backup_done and backup_result is not None and backup_attempt is not None and _provider_failed(backup_result):
-                    last_fallback_from = backup
+                    last_fallback_from = ark_hedge_backup
             else:
                 attempts.append(primary_attempt)
                 if not _provider_failed(primary_result):

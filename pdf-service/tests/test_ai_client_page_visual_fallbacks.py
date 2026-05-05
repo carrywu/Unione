@@ -412,6 +412,84 @@ class AiClientPageVisualFallbacksTest(unittest.TestCase):
         {
             "DASHSCOPE_API_KEY": "test-key",
             "DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "MIMO_API_KEY": "test-mimo",
+            "MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
+            "ARK_API_KEY": "ark-test",
+            "ARK_BASE_URL": "https://ark.cn-beijing.volces.com/api/v3",
+            "ARK_ENDPOINT_ID": "ep-20260504082005-gvl4b",
+            "VISION_AI_PROVIDER_ORDER": "qwen_vl,mimo_vl,volcengine_ark_vl",
+            "AI_VISUAL_MODEL": "qwen3-vl-plus",
+            "VISION_AI_SOFT_TIMEOUT_SECONDS": "0.01",
+            "VISION_AI_PROVIDER_TIMEOUT_SECONDS": "0.2",
+        },
+        clear=False,
+    )
+    @patch("ai_client._call_ark_vision_provider")
+    @patch("ai_client._call_openai_vision_provider")
+    def test_parse_page_visual_prefers_ark_hedge_even_when_mimo_is_listed_before_it(
+        self,
+        mock_openai_provider,
+        mock_ark_provider,
+    ):
+        def delayed_qwen(*args, **kwargs):
+            self.assertEqual(kwargs["provider"], "qwen_vl")
+            time.sleep(0.05)
+            return (
+                {
+                    "page_type": "question",
+                    "warnings": [],
+                    "materials": [],
+                    "questions": [{"index": 99, "content": "Qwen 慢返回"}],
+                    "visuals": [],
+                },
+                {
+                    "provider": "qwen_vl",
+                    "model": "qwen3-vl-plus",
+                    "timeout_seconds": 0.2,
+                    "elapsed_ms": 50,
+                    "status": "ok",
+                    "error_type": None,
+                    "error_message": None,
+                    "fallback_from": None,
+                },
+            )
+
+        mock_openai_provider.side_effect = delayed_qwen
+        mock_ark_provider.return_value = (
+            {
+                "page_type": "question",
+                "warnings": [],
+                "materials": [],
+                "questions": [{"index": 17, "content": "Ark 备援成功"}],
+                "visuals": [],
+            },
+            {
+                "provider": "volcengine_ark_vl",
+                "model": "ep-20260504082005-gvl4b",
+                "timeout_seconds": 0.2,
+                "elapsed_ms": 5,
+                "status": "ok",
+                "error_type": None,
+                "error_message": None,
+                "fallback_from": "qwen_vl",
+                "api_mode": "responses",
+                "endpoint": "/responses",
+            },
+        )
+
+        result = ai_client.parse_page_visual("ZmFrZS1wYWdl")
+
+        self.assertEqual(mock_openai_provider.call_count, 1)
+        self.assertEqual(mock_ark_provider.call_count, 1)
+        self.assertEqual(result["_vision_provider"], "volcengine_ark_vl")
+        self.assertEqual(result["_vision_fallback_from"], "qwen_vl")
+        self.assertEqual(result["questions"][0]["index"], 17)
+
+    @patch.dict(
+        os.environ,
+        {
+            "DASHSCOPE_API_KEY": "test-key",
+            "DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "ARK_API_KEY": "ark-test",
             "ARK_BASE_URL": "https://ark.cn-beijing.volces.com/api/v3",
             "ARK_ENDPOINT_ID": "ep-20260504082005-gvl4b",
