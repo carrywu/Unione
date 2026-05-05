@@ -734,6 +734,35 @@
       </dl>
     </section>
 
+    <section v-if="h5PreviewUrl" class="checklist-band" data-testid="h5-preview-panel">
+      <div class="pane-head">
+        <div>
+          <strong>H5 真实预览</strong>
+          <span>iframe 嵌入真实 h5-web 渲染，390x844 移动端</span>
+        </div>
+        <div class="header-actions">
+          <el-button size="small" @click="h5PreviewKey++">刷新预览</el-button>
+          <el-button size="small" type="primary" @click="openH5InNewTab">打开 H5 页面</el-button>
+        </div>
+      </div>
+      <div class="h5-preview-container">
+        <div class="h5-device-frame">
+          <iframe
+            :key="h5PreviewKey"
+            :src="h5PreviewUrl"
+            class="h5-preview-iframe"
+            title="H5 真实预览"
+            data-testid="h5-preview-iframe"
+          />
+        </div>
+        <div class="h5-preview-info">
+          <p><strong>设备尺寸:</strong> 390 x 844</p>
+          <p><strong>Paper ID:</strong> {{ textOr(paperId, '未创建') }}</p>
+          <p><strong>Preview URL:</strong> {{ h5PreviewUrl }}</p>
+        </div>
+      </div>
+    </section>
+
     <el-drawer v-model="previewVisible" title="试卷预览" size="720px" data-testid="paper-preview">
       <div v-if="paperPreview" class="paper-preview">
         <h2>{{ textOr(paperPreview.title, paperTitle) }}</h2>
@@ -800,6 +829,21 @@ const actionReason = ref('');
 const answerOverrideDraft = ref('');
 const analysisOverrideDraft = ref('');
 const previewPublishMeta = ref<Record<string, any> | null>(null);
+const h5PreviewKey = ref(0);
+const h5BaseUrl = import.meta.env.VITE_H5_URL || 'http://127.0.0.1:5173';
+const h5PreviewUrl = computed(() => {
+  if (!paperId.value) return '';
+  const route = previewPublishMeta.value?.preview_route;
+  if (route && typeof route === 'string') {
+    // preview_route might be /quiz-preview/<paperId>
+    const match = route.match(/\/quiz-preview\/([a-f0-9-]+)/);
+    if (match) return `${h5BaseUrl}/quiz-preview/${match[1]}`;
+  }
+  return `${h5BaseUrl}/quiz-preview/${paperId.value}`;
+});
+function openH5InNewTab() {
+  if (h5PreviewUrl.value) window.open(h5PreviewUrl.value, '_blank');
+}
 const optionLabels = ['A', 'B', 'C', 'D'] as const;
 
 const filters = [
@@ -1556,5 +1600,37 @@ onMounted(loadCandidates);
     border-right: 0;
     border-bottom: 1px solid var(--admin-border);
   }
+}
+
+.h5-preview-container {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.h5-device-frame {
+  width: 390px;
+  height: 844px;
+  border: 2px solid var(--admin-border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.h5-preview-iframe {
+  width: 390px;
+  height: 844px;
+  border: none;
+}
+
+.h5-preview-info {
+  font-size: 13px;
+  color: var(--admin-text-faint);
+  line-height: 1.8;
+}
+
+.h5-preview-info strong {
+  color: var(--admin-text);
 }
 </style>
