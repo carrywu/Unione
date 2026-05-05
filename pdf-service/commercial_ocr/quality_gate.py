@@ -184,6 +184,6 @@ def _is_extraction_complete(questions: list[Any]) -> bool:
 
 
 def _is_visual_group(group: Any) -> bool:
-    if group.group_type in {"chart_group", "shared_material"}:
+    if group.group_type in {"chart_group", "shared_material", "data_analysis_material"}:
         return True
     return any(token in group.shared_stem for token in ("图", "表", "同比", "环比", "增长率"))

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from commercial_ocr.config import compact_dict
+from commercial_ocr.data_analysis import build_data_analysis_visual_context
 from commercial_ocr.types import ParseQualityGateResult, SemanticAssemblyResult
 
 
@@ -35,9 +36,11 @@ def build_visual_understanding_summary(
             "cross_page_suspicion": False,
             "answer_consistency_check": {"status": "skipped", "reason": "visual_understanding_not_triggered"},
             "confidence": 0.98,
+            "data_analysis_visual_context": None,
             "warnings": [],
         }
 
+    data_analysis_visual_context = build_data_analysis_visual_context(assembly)
     diagram_elements: list[dict[str, Any]] = []
     table_notes: list[str] = []
     ocr_suspicions: list[str] = []
@@ -109,6 +112,10 @@ def build_visual_understanding_summary(
         warnings.append("provider_fallback_visual_review_required")
     if quality_gate.blocking_reasons:
         warnings.extend(str(reason) for reason in quality_gate.blocking_reasons)
+    if data_analysis_visual_context is not None:
+        warnings.extend(data_analysis_visual_context.warnings)
+        warnings.extend(data_analysis_visual_context.suspected_crop_errors)
+        warnings.extend(data_analysis_visual_context.suspected_ocr_errors)
 
     return {
         "triggered": True,
@@ -135,6 +142,13 @@ def build_visual_understanding_summary(
             trigger_reasons=trigger_reasons,
             quality_gate=quality_gate,
         ),
+        "data_analysis_visual_context": data_analysis_visual_context.to_dict() if data_analysis_visual_context else None,
+        "chart_title_present": data_analysis_visual_context.chart_title_present if data_analysis_visual_context else None,
+        "table_header_present": data_analysis_visual_context.table_header_present if data_analysis_visual_context else None,
+        "unit_present": data_analysis_visual_context.unit_present if data_analysis_visual_context else None,
+        "legend_present": data_analysis_visual_context.legend_present if data_analysis_visual_context else None,
+        "critical_data_points_visible": data_analysis_visual_context.critical_data_points_visible if data_analysis_visual_context else [],
+        "visual_summary": data_analysis_visual_context.visual_summary if data_analysis_visual_context else "",
         "warnings": list(dict.fromkeys(warnings)),
     }
 
@@ -148,7 +162,7 @@ def _trigger_reasons(
     reasons: list[str] = []
     if fallback_used:
         reasons.append("provider_fallback")
-    if any(group.group_type == "shared_material" for group in assembly.material_groups):
+    if any(group.group_type in {"shared_material", "data_analysis_material"} for group in assembly.material_groups):
         reasons.append("shared_material_detected")
     if any(group.shared_assets for group in assembly.material_groups):
         reasons.append("shared_visual_assets_present")

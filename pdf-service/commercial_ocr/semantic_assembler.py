@@ -161,6 +161,7 @@ def _build_material_group_from_range(
     ]
     shared_stem = "\n".join(dict.fromkeys(block.text.strip() for block in shared_stem_blocks if block.text.strip())).strip()
     shared_assets = _shared_assets_between(blocks, block_positions, start_position=block_positions[anchor_block.block_id], end_position=last_position)
+    table_blocks, chart_blocks = _split_shared_assets(shared_assets)
     missing = [question_no for question_no in explicit_range if question_no not in buckets]
     warnings = []
     needs_human_review = False
@@ -173,12 +174,15 @@ def _build_material_group_from_range(
     source_blocks = [block.block_id for block in shared_stem_blocks] + [asset["asset_id"] for asset in shared_assets]
     source_blocks.extend(block.block_id for question_no in present_range for block in buckets[question_no]["blocks"])
     page_span = sorted({block.page_no for question_no in present_range for block in buckets[question_no]["blocks"]} | {anchor_block.page_no})
+    group_type = "data_analysis_material" if _contains_data_analysis_signal(shared_stem, *(asset.get("text", "") for asset in shared_assets)) else "shared_material"
     return MaterialGroup(
         material_id=f"material-{start_no}-{end_no}-p{anchor_block.page_no}",
-        group_type="shared_material",
+        group_type=group_type,
         question_range=explicit_range,
         shared_stem=shared_stem or anchor_block.text.strip(),
         shared_assets=shared_assets,
+        table_blocks=table_blocks,
+        chart_blocks=chart_blocks,
         source_page_span=[page_span[0], page_span[-1]] if page_span else [anchor_block.page_no, anchor_block.page_no],
         source_blocks=list(dict.fromkeys(source_blocks)),
         grouping_evidence=evidence + [f"anchor_block:{anchor_block.block_id}"],
@@ -212,15 +216,19 @@ def _build_ambiguous_material_group(
         return None
     last_position = max(_last_question_position(buckets[question_no]["blocks"], block_positions) for question_no in contiguous)
     shared_assets = _shared_assets_between(blocks, block_positions, start_position=anchor_position, end_position=last_position)
+    table_blocks, chart_blocks = _split_shared_assets(shared_assets)
     source_blocks = [anchor_block.block_id] + [asset["asset_id"] for asset in shared_assets]
     source_blocks.extend(block.block_id for question_no in contiguous for block in buckets[question_no]["blocks"])
     page_span = sorted({block.page_no for question_no in contiguous for block in buckets[question_no]["blocks"]} | {anchor_block.page_no})
+    group_type = "data_analysis_material" if _contains_data_analysis_signal(anchor_block.text, *(asset.get("text", "") for asset in shared_assets)) else "shared_material"
     return MaterialGroup(
         material_id=f"material-ambiguous-{contiguous[0]}-{contiguous[-1]}-p{anchor_block.page_no}",
-        group_type="shared_material",
+        group_type=group_type,
         question_range=list(contiguous),
         shared_stem=anchor_block.text.strip(),
         shared_assets=shared_assets,
+        table_blocks=table_blocks,
+        chart_blocks=chart_blocks,
         source_page_span=[page_span[0], page_span[-1]] if page_span else [anchor_block.page_no, anchor_block.page_no],
         source_blocks=list(dict.fromkeys(source_blocks)),
         grouping_evidence=["ambiguous_material_intro", f"anchor_block:{anchor_block.block_id}"],
@@ -279,12 +287,15 @@ def _build_normalized_questions(
         group_type = material_group.group_type if material_group else "standalone"
         question_role = "child_question" if material_group else "standalone_question"
         question_image_ref = visual_blocks[0].block_id if visual_blocks else None
+        crop_image_ref = question_image_ref
         if not question_image_ref and material_group and material_group.shared_assets:
-            question_image_ref = None
+            crop_image_ref = str(material_group.shared_assets[0].get("asset_id") or "")
+            question_image_ref = crop_image_ref or None
         needs_human_review = bool(material_group and material_group.needs_human_review)
         if "bbox" in missing_fields or "options" in missing_fields or "analysis" in missing_fields:
             needs_human_review = True
-        if any(block.block_type == "bbox_only" for block in question_blocks):
+        layout_only = any(block.block_type == "bbox_only" for block in question_blocks)
+        if layout_only:
             needs_human_review = True
             validation_warnings.append("layout_only_requires_followup")
         normalized_questions.append(
@@ -310,6 +321,13 @@ def _build_normalized_questions(
                 provider=provider_name,
                 provider_trace_ref=provider_trace_ref,
                 confidence=confidence,
+                ocr_answer_candidate=answer,
+                ocr_analysis_candidate=analysis,
+                provider_confidence=confidence,
+                provider_bbox=list(bbox),
+                provider_raw_ref=provider_trace_ref,
+                crop_image_ref=crop_image_ref,
+                layout_only=layout_only,
                 needs_human_review=needs_human_review,
                 missing_fields=list(dict.fromkeys(missing_fields)),
                 validation_warnings=list(dict.fromkeys(validation_warnings + (material_group.warnings if material_group else []))),
@@ -389,9 +407,20 @@ def _shared_assets_between(
                 "page_no": block.page_no,
                 "bbox": list(block.bbox),
                 "text": block.text,
+                "provider_bbox": list(block.bbox),
+                "provider_confidence": block.confidence,
+                "provider_raw_ref": block.provider_ref,
+                "crop_image_ref": block.block_id,
+                "layout_only": "layout_only_block" in block.warnings,
             }
         )
     return assets
+
+
+def _split_shared_assets(shared_assets: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    table_blocks = [asset for asset in shared_assets if asset.get("block_type") == "table"]
+    chart_blocks = [asset for asset in shared_assets if asset.get("block_type") in {"chart", "figure"}]
+    return table_blocks, chart_blocks
 
 
 def _first_non_empty(blocks: list[NormalizedOCRBlock]) -> str | None:

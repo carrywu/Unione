@@ -52,7 +52,7 @@
       "block_id": "fixture-chart-1",
       "provider_ref": "fixture:material:17-20",
       "page_no": 1,
-      "text": "2024年主要城市数字经济规模",
+      "text": "2024年主要城市数字经济规模（单位：亿元） 图例：2024规模",
       "bbox": [
         80,
         150,
@@ -67,7 +67,7 @@
       "block_id": "fixture-table-1",
       "provider_ref": "fixture:material:17-20",
       "page_no": 1,
-      "text": "城市 规模 同比",
+      "text": "城市 2023规模（亿元） 2024规模（亿元） 同比（%）\n甲市 200 220 10\n乙市 150 180 20\n丙市 140 160 14.3\n丁市 120 150 25",
       "bbox": [
         740,
         150,
@@ -176,7 +176,7 @@
       "block_id": "fixture-q17-answer",
       "provider_ref": "fixture:question:17",
       "page_no": 1,
-      "text": "B",
+      "text": "D",
       "bbox": [
         60,
         380,
@@ -302,7 +302,7 @@
       "block_id": "fixture-q18-answer",
       "provider_ref": "fixture:question:18",
       "page_no": 1,
-      "text": "A",
+      "text": "D",
       "bbox": [
         110,
         560,
@@ -318,7 +318,7 @@
       "block_id": "fixture-q18-analysis",
       "provider_ref": "fixture:question:18",
       "page_no": 1,
-      "text": "甲市占比约为18%。",
+      "text": "四市总规模约为710亿元，甲市占比约为31%。",
       "bbox": [
         130,
         665,

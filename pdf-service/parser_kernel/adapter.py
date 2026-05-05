@@ -15,7 +15,12 @@ from typing import Any
 
 import ai_client
 from ai_client import PAGE_PARSE_PROMPT
-from commercial_ocr.service import execution_summary, provider_result_to_page_contents, run_commercial_ocr_pipeline
+from commercial_ocr.service import (
+    build_question_enrichment_payloads,
+    execution_summary,
+    provider_result_to_page_contents,
+    run_commercial_ocr_pipeline,
+)
 import fitz
 from dotenv import load_dotenv
 from debug_writer import write_debug_bundle
@@ -160,6 +165,10 @@ def parse_extractor_with_kernel(
             element_pages=pages,
         )
 
+    if commercial_ocr_execution is not None:
+        commercial_enrichments = build_question_enrichment_payloads(commercial_ocr_execution)
+        _merge_commercial_ocr_enrichments(questions, commercial_enrichments)
+
     link_warnings = visual_links.get("question_link_warnings", {})
     material_group_ids_by_question = visual_links.get("question_material_group_ids", {})
     material_groups_by_id = visual_links.get("material_groups", {})
@@ -302,6 +311,42 @@ def _dict_items(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
+
+
+def _merge_commercial_ocr_enrichments(
+    questions: list[dict[str, Any]],
+    enrichments: dict[int, dict[str, Any]],
+) -> None:
+    for question in questions:
+        question_no = _coerce_int(question.get("index"))
+        if question_no is None:
+            continue
+        enrichment = enrichments.get(question_no)
+        if not enrichment:
+            continue
+        for key, value in enrichment.items():
+            if key == "parse_warnings":
+                question["parse_warnings"] = list(
+                    dict.fromkeys(
+                        [
+                            *[str(item) for item in question.get("parse_warnings") or []],
+                            *[str(item) for item in value or []],
+                        ]
+                    )
+                )
+                continue
+            if key == "question_quality":
+                question["question_quality"] = _merge_dict(
+                    question.get("question_quality") or {},
+                    value or {},
+                )
+                continue
+            if key == "needs_review":
+                question["needs_review"] = bool(question.get("needs_review") or value)
+                continue
+            if value is None:
+                continue
+            question[key] = value
 
 
 def _debug_bbox(value: Any) -> list[float] | None:

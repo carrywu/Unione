@@ -85,6 +85,8 @@ class MaterialGroup:
     question_range: list[int] = field(default_factory=list)
     shared_stem: str = ""
     shared_assets: list[dict[str, Any]] = field(default_factory=list)
+    table_blocks: list[dict[str, Any]] = field(default_factory=list)
+    chart_blocks: list[dict[str, Any]] = field(default_factory=list)
     source_page_span: list[int] = field(default_factory=list)
     source_blocks: list[str] = field(default_factory=list)
     grouping_evidence: list[str] = field(default_factory=list)
@@ -119,6 +121,13 @@ class NormalizedQuestion:
     provider: str | None = None
     provider_trace_ref: str | None = None
     confidence: float | None = None
+    ocr_answer_candidate: str | None = None
+    ocr_analysis_candidate: str | None = None
+    provider_confidence: float | None = None
+    provider_bbox: list[float] = field(default_factory=list)
+    provider_raw_ref: str | None = None
+    crop_image_ref: str | None = None
+    layout_only: bool = False
     needs_human_review: bool = False
     missing_fields: list[str] = field(default_factory=list)
     validation_warnings: list[str] = field(default_factory=list)
@@ -164,6 +173,73 @@ class ParseQualityGateResult:
 
 
 @dataclass
+class DataAnalysisVisualContext:
+    model_provider: str
+    model_name: str
+    source_material_complete: bool
+    chart_title_present: bool
+    table_header_present: bool
+    unit_present: bool
+    legend_present: bool
+    table_or_chart_readable: bool
+    material_group_visual_consistent: bool
+    suspected_crop_errors: list[str] = field(default_factory=list)
+    suspected_ocr_errors: list[str] = field(default_factory=list)
+    critical_data_points_visible: list[str] = field(default_factory=list)
+    visual_summary: str = ""
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class DataAnalysisUnderstandingResult:
+    model_provider: str
+    model_name: str
+    question_no: int
+    can_understand_material: bool
+    can_solve_question: bool
+    answer_suggestion: str | None = None
+    calculation_reasoning: str = ""
+    formula_used: str = ""
+    data_points_used: list[str] = field(default_factory=list)
+    missing_information: list[str] = field(default_factory=list)
+    ocr_answer_agreement: str = "no_ocr_answer"
+    conflict_with_ocr_answer: bool = False
+    comprehension_confidence: float = 0.0
+    needs_human_review: bool = False
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class DataAnalysisQualityGate:
+    has_shared_material: bool
+    has_valid_question_range: bool
+    children_share_same_material_id: bool
+    shared_assets_preserved: bool
+    table_header_complete: bool
+    unit_complete: bool
+    chart_title_complete: bool
+    local_stem_not_polluted: bool
+    llm_can_understand_material: bool
+    llm_can_solve_question: bool
+    calculation_reasoning_present: bool
+    answer_conflict: bool
+    comprehension_confidence: float
+    review_ready: bool
+    needs_human_review: bool
+    blocking_reasons: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class ProviderOCRRequest:
     extractor: Any
     pdf_path: str
@@ -185,6 +261,9 @@ class CommercialOCRExecution:
     semantic_assembly: SemanticAssemblyResult | None = None
     quality_gate: ParseQualityGateResult | None = None
     visual_understanding: dict[str, Any] | None = None
+    data_analysis_visual_context: DataAnalysisVisualContext | None = None
+    data_analysis_understanding_results: list[DataAnalysisUnderstandingResult] = field(default_factory=list)
+    data_analysis_quality_gate: DataAnalysisQualityGate | None = None
     mimo_text_review: dict[str, Any] | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -199,6 +278,9 @@ class CommercialOCRExecution:
             "semantic_assembly": self.semantic_assembly.to_dict() if self.semantic_assembly else None,
             "quality_gate": self.quality_gate.to_dict() if self.quality_gate else None,
             "visual_understanding": self.visual_understanding,
+            "data_analysis_visual_context": self.data_analysis_visual_context.to_dict() if self.data_analysis_visual_context else None,
+            "data_analysis_understanding_results": [item.to_dict() for item in self.data_analysis_understanding_results],
+            "data_analysis_quality_gate": self.data_analysis_quality_gate.to_dict() if self.data_analysis_quality_gate else None,
             "mimo_text_review": self.mimo_text_review,
             "warnings": list(self.warnings),
         }
