@@ -20,6 +20,8 @@
 | M10 | `COCR-M10-full-chain-playwright-e2e.md` | 已完成 | `GO_WITH_RISK` |
 | M11b | `COCR-M11b-known-regression-cleanup.md` | 已完成 | `GO` |
 | M12 | `COCR-M12-overnight-final-report.md` | 已完成 | `GO_WITH_RISK` |
+| M20A | `COCR-M20A-data-analysis-first.md` | 已完成 | `GO_WITH_RISK` |
+| M20C | `COCR-M20C-real-data-multipage-data-analysis.md` | 已完成 | `GO_WITH_RISK` |
 
 ## 证据与归档
 
@@ -43,3 +45,4 @@
 1. 用真实 VLM 替换 selected-case mock visual understanding，并补跨页 / 图例 / 表头核验。
 2. 做 M8 真实 adapter hardening：补 Tencent/Baidu single-page smoke、429/backoff、provider conflict 证据。
 3. 收敛 warning case 的人工放行策略，并决定是否允许正式 publish。
+4. 在拿到真实百度或腾讯 OCR key 后，把当前 `tesseract_local_ocr` 多页发现/导入替换成真实 OCR provider 的同口径批量验证。

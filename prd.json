@@ -200,6 +200,23 @@
       "priority": 13,
       "passes": true,
       "notes": "COCR-M20A completed on branch mimo with baseline tag pre-data-analysis-ocr-api-first-20260505-221735. Detailed report: docs/commercial-ocr-phase-reports/COCR-M20A-data-analysis-first.md. E2E evidence: debug/e2e-commercial-ocr/2026-05-05T15-03-11-354Z/ and test-results/. Post-closure real smoke evidence: debug/real-provider-smoke/20260505-real-smoke/ and .agent/reports/data-analysis-q17-qwen-text-smoke.md. Follow-up fix: pdf-service/ai_client.py now prefers Ark as the qwen soft-timeout hedge even when current env order is qwen_vl,mimo_vl,volcengine_ark_vl. Remaining risks: product default still uses mock for data-analysis understanding, Ark endpoint ep-20260504082005-gvl4b still returns 403 on responses API and currently succeeds via model-name fallback, mimo_vl is quota exhausted, and legacy page_understanding/semantic_groups/recrop_plan remain for compatibility."
+    },
+    {
+      "id": "US-014",
+      "title": "Harden real multi-page data-analysis smoke and workbench import",
+      "description": "As the COCR delivery owner, I need real multi-page data-analysis validation that covers candidate discovery, multi-page OCR fallback evidence, VLM hedge behavior, LLM understanding/refusal behavior, quality matrix evaluation, and workbench/H5 import acceptance without pretending mock or local parser output is a commercial OCR success.",
+      "acceptanceCriteria": [
+        "Discover 2-3 real data-analysis material groups from a real PDF and record candidate evidence",
+        "Run limited real multi-page batch smoke and record unavailable commercial OCR providers truthfully",
+        "Show qwen_vl short-timeout behavior and Ark hedge/fallback behavior on real visual batches",
+        "Run real qwen-plus understanding on 2-4 questions and preserve refusal/low-confidence behavior",
+        "Generate a quality matrix that blocks incomplete or low-confidence material groups from review_ready",
+        "Validate workbench/H5 import using generated real-batch fixtures with bbox_source preserved and approve blocked when review is required",
+        "Document legacy chain contraction, provider strategy, evidence paths, progress, and handoff truthfully"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "COCR-M20C completed on branch mimo using real PDF path 题本/题本篇.pdf with redacted local key checks. Candidate discovery scanned 20 pages and matched 12 candidate pages, then selected pages 1/6/16 for limited batch smoke. Real commercial OCR keys for Baidu/Tencent were unavailable, so the batch recorded skipped_unavailable for those providers and used tesseract_local_ocr only as local grouping/import fallback, not as fake commercial OCR success. Real visual batch result: qwen_vl timed out 3/3 at 12s and volcengine_ark_vl rescued 3/3 groups; mimo_vl remains quota exhausted and deprioritized. Real qwen-plus understanding ran on 17-20 with one low-confidence solve attempt and three blocked/refusal outcomes; quality matrix ended with review_ready=0/4 and needs_human_review=4/4. Workbench real-batch E2E passed using page016-local-group1-import.json with bbox_source=tesseract_local_ocr and approve correctly blocked. Detailed reports: docs/commercial-ocr-phase-reports/COCR-M20C-real-data-multipage-data-analysis.md, COCR-M20C-legacy-pdfserver-chain-contraction.md, COCR-M20C-provider-strategy.md, COCR-M20C-real-quality-matrix.md, COCR-M20C-workbench-real-batch-e2e.md. Aggregate report: .agent/reports/data-analysis-real-multipage-hardening-report.md."
     }
   ]
 }

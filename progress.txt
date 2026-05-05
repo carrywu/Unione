@@ -218,6 +218,17 @@ History
 - 发现的可复用模式: API 端点可通过 curl 或 fetch 脚本自动化；browser 测试需 Playwright 或手动截图；cancel/retry 端点已存在可直接测试
 - 仍需后续 story 处理的问题: US-008 服务启动与健康检查自动化
 
+[2026-05-06 02:50:42 CST (+0800)] US-014
+- 实现/测试了什么: 完成 COCR-M20C 真实数据多页资料分析硬化。新增真实题本候选发现、本地 OCR 多页分组兜底、真实 visual hedge smoke、真实 understanding smoke、quality matrix、workbench real-batch import/E2E 报告，并把 provider 策略、旧链路收缩结论、handoff、Ralph 跟踪文件补齐。
+- 修改文件: `pdf-service/scripts/data_analysis_local_ocr.py`, `pdf-service/scripts/discover_data_analysis_pages.py`, `pdf-service/scripts/run_real_data_analysis_batch_smoke.py`, `pdf-service/scripts/run_real_visual_context_batch_smoke.py`, `pdf-service/scripts/run_real_data_analysis_understanding_batch_smoke.py`, `pdf-service/scripts/eval_data_analysis_real_quality_matrix.py`, `pdf-service/main.py`, `pdf-service/monitor.py`, `pdf-service/tests/test_data_analysis_real_smoke_scripts.py`, `e2e/commercial-ocr.helpers.ts`, `admin-web/e2e/data-analysis-real-batch-workbench.spec.ts`, `e2e/data-analysis-real-batch-workbench.spec.ts`, `docs/commercial-ocr-phase-reports/COCR-M20C-*.md`, `.agent/reports/data-analysis-real-multipage-hardening-report.md`, `.agent/handoff/data-analysis-real-multipage-hardening-20260506-025042.md`, `pdf-service/.env.example`, `prd.json`, `progress.txt`
+- 清理了什么: 无；显式保留 debug 证据和真实 smoke summary，不提交真实题本、raw provider response、trace、截图
+- 保留了什么: `tesseract_local_ocr` 仅作为真实题本发现/分组/导入兜底，`local_parser` 仍是最终 parser fallback，`page_understanding` / `semantic_groups` / `recrop_plan` 作为 compat/debug 保留
+- 运行了哪些命令: `env | grep -E 'BAIDU|TENCENT|QWEN|DOUBAO|DEEPSEEK|MIMO|ARK|OCR|VOLC' | sed 's/=.*/=<redacted>/'`, `find /home/carry -maxdepth 5 -type f \\( -name '*.pdf' -o -name '*.PDF' \\)`, `jq debug/real-data-data-analysis/.../*.json`, `cd pdf-service && ./.venv/bin/python -m pytest tests/test_commercial_ocr_pipeline.py tests/test_data_analysis_real_smoke_scripts.py -q`, `cd pdf-service && ./.venv/bin/python -m pytest tests/ -q`, `cd backend && pnpm exec tsc -p tsconfig.build.json --noEmit`, `cd backend && pnpm build`, `cd admin-web && pnpm exec vue-tsc --noEmit`, `cd admin-web && pnpm build`, `cd h5-web && pnpm build`, `pnpm exec playwright test e2e/data-analysis-workbench.spec.ts e2e/data-analysis-real-batch-workbench.spec.ts --trace=on`
+- 结果是否通过: 是。`qwen_vl` 真实资料分析页 `3/3 timeout`，Ark `3/3 hedge success`，`mimo_vl` 继续 `429` deprioritize；`17-20` 真实 import 在 workbench/H5 正常展示且 `审核通过` 被正确阻止；`backend pnpm test` 仍因无 script skipped
+- 截图/trace/debug 路径: `debug/real-data-data-analysis/discover-tiben-local-1-20/`, `debug/real-data-data-analysis/batch-tiben-selected/`, `debug/e2e-commercial-ocr/<timestamp>/`, `test-results/`
+- 发现的可复用模式: provider health 的 toy smoke 不能替代真实资料分析批量验证；workbench real-batch E2E 必须显式下发 `COMMERCIAL_OCR_FIXTURE_ROOT`；`h5-consistency-preview` 比 draft/publish-preview 更适合作为 quality gate 阻断场景的验收入口
+- 仍需后续 story 处理的问题: 需要一个真实百度或腾讯 OCR key 才能把 `bbox_source` 从 `tesseract_local_ocr` 切到真实 OCR provider，并输出 OCR provider 排序结论
+
 [2026-05-04 18:48:00 CST (+0800)] US-008
 - 实现/测试了什么: 服务启动与健康检查自动化。创建 scripts/health-check.sh，检查 .env、node_modules、端口占用、backend/pdf-service 健康、provider order。
 - 修改文件: `scripts/health-check.sh` (new), `prd.json`, `progress.txt`
