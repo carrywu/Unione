@@ -8,6 +8,13 @@ export const PDF_SERVICE_URL = process.env.E2E_PDF_SERVICE_URL || 'http://127.0.
 export const ADMIN_URL = process.env.E2E_ADMIN_URL || 'http://127.0.0.1:5174';
 export const H5_URL = process.env.E2E_H5_URL || 'http://127.0.0.1:5173';
 export const SAMPLE_PDF_PATH = path.resolve(process.cwd(), 'backend', 'sample-题本篇-3-7.pdf');
+export const DEFAULT_COMMERCIAL_FIXTURE_ROOT = path.resolve(
+  process.cwd(),
+  'pdf-service',
+  'tests',
+  'fixtures',
+  'commercial_ocr',
+);
 export const E2E_ARTIFACT_ROOT =
   process.env.E2E_ARTIFACT_DIR ||
   path.resolve(
@@ -149,7 +156,11 @@ export async function createAdminApiContext() {
   };
 }
 
-export async function configureCommercialFixture(api: APIRequestContext, fixtureName: string) {
+export async function configureCommercialFixture(
+  api: APIRequestContext,
+  fixtureName: string,
+  fixtureRoot = DEFAULT_COMMERCIAL_FIXTURE_ROOT,
+) {
   const response = await api.put('/admin/pdf-service/config', {
     data: {
       commercial_ocr_enabled: true,
@@ -157,6 +168,7 @@ export async function configureCommercialFixture(api: APIRequestContext, fixture
       pdf_parse_primary_provider: 'mock_commercial_ocr',
       pdf_parse_fallback_providers: 'local_parser,mock_commercial_ocr',
       ocr_provider_trace_enabled: true,
+      commercial_ocr_fixture_root: fixtureRoot,
       mock_commercial_ocr_fixture_name: fixtureName,
     },
   });

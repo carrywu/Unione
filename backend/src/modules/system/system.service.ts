@@ -180,6 +180,10 @@ export class SystemService {
         (serviceConfig as Record<string, unknown>)?.mock_commercial_ocr_fixture_name ||
         aiConfig.mock_commercial_ocr_fixture_name ||
         '',
+      commercial_ocr_fixture_root:
+        (serviceConfig as Record<string, unknown>)?.commercial_ocr_fixture_root ||
+        aiConfig.commercial_ocr_fixture_root ||
+        '',
       mock_tencent_question_split_fixture_name:
         (serviceConfig as Record<string, unknown>)?.mock_tencent_question_split_fixture_name ||
         aiConfig.mock_tencent_question_split_fixture_name ||
@@ -351,6 +355,7 @@ export class SystemService {
       [body.pdf_parse_primary_provider, 'PDF_PARSE_PRIMARY_PROVIDER', 'PDF 解析主 provider'],
       [body.pdf_parse_fallback_providers, 'PDF_PARSE_FALLBACK_PROVIDERS', 'PDF 解析 fallback provider 顺序'],
       [body.mock_commercial_ocr_fixture_name, 'MOCK_COMMERCIAL_OCR_FIXTURE_NAME', 'mock commercial OCR fixture'],
+      [body.commercial_ocr_fixture_root, 'COMMERCIAL_OCR_FIXTURE_ROOT', 'mock commercial OCR fixture root'],
       [body.mock_tencent_question_split_fixture_name, 'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME', 'mock tencent QuestionSplit fixture'],
       [body.mock_tencent_question_split_layout_fixture_name, 'MOCK_TENCENT_QUESTION_SPLIT_LAYOUT_FIXTURE_NAME', 'mock tencent QuestionSplitLayout fixture'],
       [body.ocr_provider_trace_enabled, 'OCR_PROVIDER_TRACE_ENABLED', 'provider trace 开关'],
@@ -536,6 +541,7 @@ export class SystemService {
           'local_parser,mock_commercial_ocr',
         ),
         mock_commercial_ocr_fixture_name: read('MOCK_COMMERCIAL_OCR_FIXTURE_NAME'),
+        commercial_ocr_fixture_root: read('COMMERCIAL_OCR_FIXTURE_ROOT'),
         mock_tencent_question_split_fixture_name: read(
           'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME',
         ),

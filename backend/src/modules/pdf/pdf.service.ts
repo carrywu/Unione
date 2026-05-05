@@ -3736,6 +3736,13 @@ export class PdfService {
           question.provider_trace_ref,
           providerResult.raw_response_ref,
         ) || null,
+        bbox_source:
+          this.firstMeaningfulText(
+            question.bbox_source,
+            commercial.bbox_source,
+            providerResult.provider_name,
+            commercial.effective_provider,
+          ) || null,
         provider_result: providerResult,
         fallback_used: Boolean(commercial.fallback_used ?? providerResult.fallback_used),
         grouping_evidence: this.toStringArray(question.grouping_evidence),
@@ -3757,6 +3764,13 @@ export class PdfService {
               || dataAnalysisQualityGate?.needs_human_review,
           ),
           commercial_ocr: {
+            bbox_source:
+              this.firstMeaningfulText(
+                question.bbox_source,
+                commercial.bbox_source,
+                providerResult.provider_name,
+                commercial.effective_provider,
+              ) || null,
             quality_gate: qualityGate,
             quality_gate_question_status: questionStatus,
             visual_understanding: visualUnderstanding,
@@ -5042,14 +5056,15 @@ export class PdfService {
       commercial_ocr_enabled: read('COMMERCIAL_OCR_ENABLED', 'false'),
       commercial_ocr_real_smoke: read('COMMERCIAL_OCR_REAL_SMOKE', 'false'),
       pdf_parse_primary_provider: read('PDF_PARSE_PRIMARY_PROVIDER', 'mock_commercial_ocr'),
-      pdf_parse_fallback_providers: read(
-        'PDF_PARSE_FALLBACK_PROVIDERS',
-        'local_parser,mock_commercial_ocr',
-      ),
-      mock_commercial_ocr_fixture_name: read('MOCK_COMMERCIAL_OCR_FIXTURE_NAME'),
-      mock_tencent_question_split_fixture_name: read(
-        'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME',
-      ),
+        pdf_parse_fallback_providers: read(
+          'PDF_PARSE_FALLBACK_PROVIDERS',
+          'local_parser,mock_commercial_ocr',
+        ),
+        mock_commercial_ocr_fixture_name: read('MOCK_COMMERCIAL_OCR_FIXTURE_NAME'),
+        commercial_ocr_fixture_root: read('COMMERCIAL_OCR_FIXTURE_ROOT'),
+        mock_tencent_question_split_fixture_name: read(
+          'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME',
+        ),
       mock_tencent_question_split_layout_fixture_name: read(
         'MOCK_TENCENT_QUESTION_SPLIT_LAYOUT_FIXTURE_NAME',
       ),

@@ -264,6 +264,7 @@ class CommercialOCRExecution:
     data_analysis_visual_context: DataAnalysisVisualContext | None = None
     data_analysis_understanding_results: list[DataAnalysisUnderstandingResult] = field(default_factory=list)
     data_analysis_quality_gate: DataAnalysisQualityGate | None = None
+    import_metadata: dict[str, Any] | None = None
     mimo_text_review: dict[str, Any] | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -281,6 +282,7 @@ class CommercialOCRExecution:
             "data_analysis_visual_context": self.data_analysis_visual_context.to_dict() if self.data_analysis_visual_context else None,
             "data_analysis_understanding_results": [item.to_dict() for item in self.data_analysis_understanding_results],
             "data_analysis_quality_gate": self.data_analysis_quality_gate.to_dict() if self.data_analysis_quality_gate else None,
+            "import_metadata": self.import_metadata,
             "mimo_text_review": self.mimo_text_review,
             "warnings": list(self.warnings),
         }

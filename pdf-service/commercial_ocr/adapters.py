@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 
 from commercial_ocr.config import get_config_value, get_positive_int
-from commercial_ocr.fixtures import provider_result_from_fixture
+from commercial_ocr.fixtures import fixture_path, provider_result_from_fixture
 from commercial_ocr.normalizer import normalize_baidu_page_result
 from commercial_ocr.types import NormalizedOCRBlock, ProviderOCRRequest, ProviderOCRResult, ProviderPageResult
 
@@ -113,9 +113,7 @@ class FixtureBackedMockProvider(CommercialOCRProvider):
                     "message": f"mock provider {self.provider_name} forced into {status}",
                 }
         result.provider_latency_ms = latency_ms or int((time.perf_counter() - started) * 1000)
-        result.raw_response_ref = str(
-            Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "commercial_ocr" / effective_fixture_name
-        )
+        result.raw_response_ref = str(fixture_path(effective_fixture_name))
         return result
 
 

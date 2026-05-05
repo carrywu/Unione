@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,15 @@ from commercial_ocr.data_analysis import (
 )
 from commercial_ocr.quality_gate import evaluate_parse_quality
 from commercial_ocr.semantic_assembler import assemble_semantic_result
-from commercial_ocr.types import CommercialOCRExecution, MaterialGroup, ProviderOCRRequest, ProviderOCRResult
+from commercial_ocr.types import (
+    CommercialOCRExecution,
+    DataAnalysisQualityGate,
+    DataAnalysisUnderstandingResult,
+    DataAnalysisVisualContext,
+    MaterialGroup,
+    ProviderOCRRequest,
+    ProviderOCRResult,
+)
 from commercial_ocr.visual_understanding import build_visual_understanding_summary
 from commercial_ocr.mimo_reviewer import review_text_payload, mimo_review_status
 from models import PageContent, Region, TextBlock
@@ -122,6 +131,7 @@ def run_commercial_ocr_pipeline(
         data_analysis_visual_context = None
         data_analysis_understanding_results = []
         data_analysis_quality_gate = None
+        precomputed_import = _load_precomputed_data_analysis(result.raw_response_ref)
         if result.provider_status == "ok" and result.page_results:
             assembly = assemble_semantic_result(
                 result.page_results,
@@ -149,6 +159,23 @@ def run_commercial_ocr_pipeline(
                 quality_gate,
                 data_analysis_quality_gate,
             )
+            if precomputed_import is not None:
+                data_analysis_visual_context = _coerce_data_analysis_visual_context(
+                    precomputed_import.get("data_analysis_visual_context"),
+                    fallback=data_analysis_visual_context,
+                )
+                data_analysis_understanding_results = _coerce_data_analysis_understanding_results(
+                    precomputed_import.get("data_analysis_understanding_results"),
+                    fallback=data_analysis_understanding_results,
+                )
+                data_analysis_quality_gate = _coerce_data_analysis_quality_gate(
+                    precomputed_import.get("data_analysis_quality_gate"),
+                    fallback=data_analysis_quality_gate,
+                )
+                quality_gate = apply_data_analysis_gate_to_parse_quality(
+                    quality_gate,
+                    data_analysis_quality_gate,
+                )
         visual_understanding = None
         if assembly is not None and quality_gate is not None:
             visual_understanding = build_visual_understanding_summary(
@@ -187,6 +214,7 @@ def run_commercial_ocr_pipeline(
             "data_analysis_visual_context": data_analysis_visual_context.to_dict() if data_analysis_visual_context else None,
             "data_analysis_understanding_results": [item.to_dict() for item in data_analysis_understanding_results],
             "data_analysis_quality_gate": data_analysis_quality_gate.to_dict() if data_analysis_quality_gate else None,
+            "import_metadata": precomputed_import.get("import_metadata") if isinstance(precomputed_import, dict) else None,
             "mimo_text_review": mimo_text_review,
         }
         execution.attempted_providers.append(attempt_payload)
@@ -199,6 +227,11 @@ def run_commercial_ocr_pipeline(
             execution.data_analysis_visual_context = data_analysis_visual_context
             execution.data_analysis_understanding_results = data_analysis_understanding_results
             execution.data_analysis_quality_gate = data_analysis_quality_gate
+            execution.import_metadata = (
+                precomputed_import.get("import_metadata")
+                if isinstance(precomputed_import, dict)
+                else None
+            )
             execution.mimo_text_review = mimo_text_review
             execution.effective_provider = provider_name
             execution.fallback_used = provider_name != primary
@@ -271,6 +304,7 @@ def execution_summary(execution: CommercialOCRExecution | None) -> dict[str, Any
         "data_analysis_visual_context": execution.data_analysis_visual_context.to_dict() if execution.data_analysis_visual_context else None,
         "data_analysis_understanding_results": [item.to_dict() for item in execution.data_analysis_understanding_results],
         "data_analysis_quality_gate": execution.data_analysis_quality_gate.to_dict() if execution.data_analysis_quality_gate else None,
+        "import_metadata": execution.import_metadata,
         "mimo_text_review": execution.mimo_text_review,
         "mimo_reviewer_status": mimo_review_status(),
     }
@@ -298,6 +332,10 @@ def build_question_enrichment_payloads(
             continue
         material_group = material_by_id.get(question.material_id or "")
         understanding = understanding_by_no.get(question.question_no)
+        bbox_source = _bbox_source_for_question(
+            execution=execution,
+            question=question,
+        )
         parse_warnings = list(
             dict.fromkeys(
                 [
@@ -340,6 +378,7 @@ def build_question_enrichment_payloads(
             "source_page_start": question.source_page_span[0] if question.source_page_span else None,
             "source_page_end": question.source_page_span[-1] if question.source_page_span else None,
             "source_confidence": question.provider_confidence or question.confidence,
+            "bbox_source": bbox_source,
             "material_group_id": material_group.material_id if material_group else question.material_id,
             "material_group_question_indexes": list(material_group.question_range) if material_group else list(question.question_range),
             "material_group_confidence": material_group.grouping_confidence if material_group else question.grouping_confidence,
@@ -381,6 +420,7 @@ def build_question_enrichment_payloads(
                 "commercial_ocr": {
                     "effective_provider": execution.effective_provider,
                     "fallback_used": execution.fallback_used,
+                    "bbox_source": bbox_source,
                     "provider_result": {
                         "provider_name": execution.provider_result.provider_name,
                         "provider_version": execution.provider_result.provider_version,
@@ -394,6 +434,7 @@ def build_question_enrichment_payloads(
                     "data_analysis_understanding_result": understanding.to_dict() if understanding else None,
                     "data_analysis_quality_gate": execution.data_analysis_quality_gate.to_dict() if execution.data_analysis_quality_gate else None,
                     "material_group": material_group.to_dict() if material_group else None,
+                    "import_metadata": execution.import_metadata,
                     "bbox_overlay": _bbox_overlay_payload(
                         execution=execution,
                         material_group=material_group,
@@ -443,6 +484,119 @@ def _dedupe_order(items: list[str]) -> list[str]:
             seen.add(item)
             ordered.append(item)
     return ordered
+
+
+def _load_precomputed_data_analysis(raw_response_ref: str | None) -> dict[str, Any] | None:
+    ref = str(raw_response_ref or "").strip()
+    if not ref.endswith(".json"):
+        return None
+    path = Path(ref)
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # pragma: no cover - defensive only
+        logger.warning("Failed to read precomputed data-analysis summary from %s: %s", path, exc)
+        return None
+    data = payload.get("precomputed_data_analysis")
+    return data if isinstance(data, dict) else None
+
+
+def _coerce_data_analysis_visual_context(
+    payload: Any,
+    *,
+    fallback: Any,
+):
+    if not isinstance(payload, dict):
+        return fallback
+    try:
+        return DataAnalysisVisualContext(
+            model_provider=str(payload.get("model_provider") or getattr(fallback, "model_provider", "real_smoke_import")),
+            model_name=str(payload.get("model_name") or getattr(fallback, "model_name", "real-smoke-vlm")),
+            source_material_complete=bool(payload.get("source_material_complete")),
+            chart_title_present=bool(payload.get("chart_title_present")),
+            table_header_present=bool(payload.get("table_header_present")),
+            unit_present=bool(payload.get("unit_present")),
+            legend_present=bool(payload.get("legend_present")),
+            table_or_chart_readable=bool(payload.get("table_or_chart_readable")),
+            material_group_visual_consistent=bool(payload.get("material_group_visual_consistent")),
+            suspected_crop_errors=[str(item) for item in payload.get("suspected_crop_errors") or [] if str(item).strip()],
+            suspected_ocr_errors=[str(item) for item in payload.get("suspected_ocr_errors") or [] if str(item).strip()],
+            critical_data_points_visible=[str(item) for item in payload.get("critical_data_points_visible") or [] if str(item).strip()],
+            visual_summary=str(payload.get("visual_summary") or ""),
+            warnings=[str(item) for item in payload.get("warnings") or [] if str(item).strip()],
+        )
+    except Exception as exc:  # pragma: no cover - defensive only
+        logger.warning("Failed to coerce precomputed visual context: %s", exc)
+        return fallback
+
+
+def _coerce_data_analysis_understanding_results(
+    payload: Any,
+    *,
+    fallback: list[Any],
+) -> list[Any]:
+    if not isinstance(payload, list):
+        return fallback
+    results: list[DataAnalysisUnderstandingResult] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        try:
+            results.append(
+                DataAnalysisUnderstandingResult(
+                    model_provider=str(item.get("model_provider") or "real_smoke_import"),
+                    model_name=str(item.get("model_name") or "real-smoke-llm"),
+                    question_no=int(item.get("question_no") or 0),
+                    can_understand_material=bool(item.get("can_understand_material")),
+                    can_solve_question=bool(item.get("can_solve_question")),
+                    answer_suggestion=str(item.get("answer_suggestion")).strip() if item.get("answer_suggestion") is not None else None,
+                    calculation_reasoning=str(item.get("calculation_reasoning") or ""),
+                    formula_used=str(item.get("formula_used") or ""),
+                    data_points_used=[str(value) for value in item.get("data_points_used") or [] if str(value).strip()],
+                    missing_information=[str(value) for value in item.get("missing_information") or [] if str(value).strip()],
+                    ocr_answer_agreement=str(item.get("ocr_answer_agreement") or "no_ocr_answer"),
+                    conflict_with_ocr_answer=bool(item.get("conflict_with_ocr_answer")),
+                    comprehension_confidence=float(item.get("comprehension_confidence") or 0.0),
+                    needs_human_review=bool(item.get("needs_human_review")),
+                    warnings=[str(value) for value in item.get("warnings") or [] if str(value).strip()],
+                )
+            )
+        except Exception as exc:  # pragma: no cover - defensive only
+            logger.warning("Failed to coerce precomputed understanding result: %s", exc)
+    return results or fallback
+
+
+def _coerce_data_analysis_quality_gate(
+    payload: Any,
+    *,
+    fallback: Any,
+):
+    if not isinstance(payload, dict):
+        return fallback
+    try:
+        return DataAnalysisQualityGate(
+            has_shared_material=bool(payload.get("has_shared_material")),
+            has_valid_question_range=bool(payload.get("has_valid_question_range")),
+            children_share_same_material_id=bool(payload.get("children_share_same_material_id")),
+            shared_assets_preserved=bool(payload.get("shared_assets_preserved")),
+            table_header_complete=bool(payload.get("table_header_complete")),
+            unit_complete=bool(payload.get("unit_complete")),
+            chart_title_complete=bool(payload.get("chart_title_complete")),
+            local_stem_not_polluted=bool(payload.get("local_stem_not_polluted")),
+            llm_can_understand_material=bool(payload.get("llm_can_understand_material")),
+            llm_can_solve_question=bool(payload.get("llm_can_solve_question")),
+            calculation_reasoning_present=bool(payload.get("calculation_reasoning_present")),
+            answer_conflict=bool(payload.get("answer_conflict")),
+            comprehension_confidence=float(payload.get("comprehension_confidence") or 0.0),
+            review_ready=bool(payload.get("review_ready")),
+            needs_human_review=bool(payload.get("needs_human_review")),
+            blocking_reasons=[str(item) for item in payload.get("blocking_reasons") or [] if str(item).strip()],
+            warnings=[str(item) for item in payload.get("warnings") or [] if str(item).strip()],
+        )
+    except Exception as exc:  # pragma: no cover - defensive only
+        logger.warning("Failed to coerce precomputed quality gate: %s", exc)
+        return fallback
 
 
 def _to_page_text(text: str, block_type: str) -> str:
@@ -581,6 +735,28 @@ def _ai_risk_flags(
         flags.extend(understanding.missing_information)
         flags.extend(understanding.warnings)
     return list(dict.fromkeys(flag for flag in flags if flag))
+
+
+def _bbox_source_for_question(
+    *,
+    execution: CommercialOCRExecution,
+    question: Any,
+) -> str:
+    import_metadata = execution.import_metadata if isinstance(execution.import_metadata, dict) else {}
+    per_question = import_metadata.get("per_question") if isinstance(import_metadata.get("per_question"), dict) else {}
+    question_import = per_question.get(str(question.question_no)) if isinstance(per_question, dict) else None
+    if isinstance(question_import, dict):
+        value = str(question_import.get("bbox_source") or "").strip()
+        if value:
+            return value
+    shared_value = str(import_metadata.get("bbox_source") or "").strip()
+    if shared_value:
+        return shared_value
+    question_provider = str(question.provider or "").strip()
+    if question_provider:
+        return question_provider
+    provider_name = str(execution.provider_result.provider_name if execution.provider_result else execution.effective_provider or "").strip()
+    return provider_name or LOCAL_PARSER_PROVIDER
 
 
 def _union_bbox(items: list[Any]) -> list[float]:

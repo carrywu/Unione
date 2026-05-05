@@ -105,6 +105,8 @@ class RuntimeConfigUpdate(BaseModel):
     commercial_ocr_real_smoke: bool | None = None
     pdf_parse_primary_provider: str | None = None
     pdf_parse_fallback_providers: str | None = None
+    mock_commercial_ocr_fixture_name: str | None = None
+    commercial_ocr_fixture_root: str | None = None
     ocr_provider_trace_enabled: bool | None = None
     baidu_api_key: str | None = None
     baidu_secret_key: str | None = None

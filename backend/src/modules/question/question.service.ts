@@ -938,6 +938,7 @@ export class QuestionService {
         'local_parser,mock_commercial_ocr',
       ),
       mock_commercial_ocr_fixture_name: read('MOCK_COMMERCIAL_OCR_FIXTURE_NAME'),
+      commercial_ocr_fixture_root: read('COMMERCIAL_OCR_FIXTURE_ROOT'),
       mock_tencent_question_split_fixture_name: read(
         'MOCK_TENCENT_QUESTION_SPLIT_FIXTURE_NAME',
       ),

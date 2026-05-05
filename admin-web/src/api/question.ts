@@ -66,6 +66,7 @@ export interface DataAnalysisQualityGate {
 export interface CommercialOcrQuestionQuality {
   effective_provider?: string | null;
   fallback_used?: boolean;
+  bbox_source?: string | null;
   provider_result?: Record<string, unknown> | null;
   quality_gate?: Record<string, unknown> | null;
   visual_understanding?: Record<string, unknown> | null;

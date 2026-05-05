@@ -91,7 +91,15 @@
         <el-button :disabled="currentQuestionIndex >= questions.length - 1 || workbenchLoading" @click="selectQuestionByOffset(1)">下一题</el-button>
         <el-button :disabled="!lastSnapshot" :icon="RefreshLeft" @click="handleUndo">撤销最近修复</el-button>
         <el-button type="info" :loading="saving" :disabled="!selectedQuestion" @click="markPendingReview">待审核</el-button>
-        <el-button type="success" :icon="DocumentChecked" :loading="saving" :disabled="!selectedQuestion || !questionData.stem.trim()" @click="markStemReviewed">审核通过</el-button>
+        <el-button
+          type="success"
+          :icon="DocumentChecked"
+          :loading="saving"
+          :disabled="!selectedQuestion || !questionData.stem.trim() || Boolean(reviewApproveBlockedReason)"
+          @click="markStemReviewed"
+        >
+          审核通过
+        </el-button>
         <el-button type="warning" :loading="saving" :disabled="!selectedQuestion" @click="markNeedsReview">需复核</el-button>
         <el-button :disabled="!selectedBankId" @click="openH5Preview">打开 H5 预览</el-button>
         <el-button type="primary" :disabled="!selectedBankId" @click="publishCurrentBank">发布到题库</el-button>
@@ -222,6 +230,8 @@
               </div>
             </div>
             <div class="data-analysis-grid compact">
+              <span>bbox_source</span>
+              <p>{{ cleanDisplayText(commercialOcr?.bbox_source || '未提供') }}</p>
               <span>chart_title_present</span>
               <p>{{ booleanText(dataAnalysisVisualContext.chart_title_present) }}</p>
               <span>table_header_present</span>
@@ -672,6 +682,19 @@ const dataAnalysisQualityGate = computed<DataAnalysisQualityGate | null>(
 );
 const h5BaseUrl = import.meta.env.VITE_H5_URL || 'http://127.0.0.1:5173';
 const h5QuizUrl = computed(() => (selectedBankId.value ? `${h5BaseUrl}/quiz/${selectedBankId.value}` : ''));
+const reviewApproveBlockedReason = computed(() => {
+  if (!selectedQuestion.value) return '';
+  if (commercialOcr.value?.bbox_source === 'local_parser') {
+    return '当前 bbox 来源为 local_parser，不能审核通过。';
+  }
+  if (dataAnalysisVisualContext.value && !dataAnalysisVisualContext.value.source_material_complete) {
+    return '共享材料不完整，不能审核通过。';
+  }
+  if (dataAnalysisQualityGate.value?.needs_human_review) {
+    return '资料分析 quality gate 要求人工复核，不能直接审核通过。';
+  }
+  return '';
+});
 
 const questionData = reactive<QuestionData>({
   title: '',
@@ -1236,6 +1259,10 @@ async function markNeedsReview() {
 
 async function markStemReviewed() {
   if (!selectedQuestion.value) return;
+  if (reviewApproveBlockedReason.value) {
+    ElMessage.warning(reviewApproveBlockedReason.value);
+    return;
+  }
   const shouldContinue = await confirmUnresolvedAiRisks('题干审核通过');
   if (!shouldContinue) return;
   saving.value = true;
