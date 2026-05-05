@@ -199,7 +199,7 @@
       ],
       "priority": 13,
       "passes": true,
-      "notes": "COCR-M20A completed on branch mimo with baseline tag pre-data-analysis-ocr-api-first-20260505-221735. Detailed report: docs/commercial-ocr-phase-reports/COCR-M20A-data-analysis-first.md. Evidence: debug/e2e-commercial-ocr/2026-05-05T15-03-11-354Z/ and test-results/. Risks: real qwen/doubao/deepseek/mimo providers are still skipped by env; legacy page_understanding/semantic_groups/recrop_plan remain for compatibility."
+      "notes": "COCR-M20A completed on branch mimo with baseline tag pre-data-analysis-ocr-api-first-20260505-221735. Detailed report: docs/commercial-ocr-phase-reports/COCR-M20A-data-analysis-first.md. E2E evidence: debug/e2e-commercial-ocr/2026-05-05T15-03-11-354Z/ and test-results/. Post-closure real smoke evidence: debug/real-provider-smoke/20260505-real-smoke/ and .agent/reports/data-analysis-q17-qwen-text-smoke.md. Follow-up fix: pdf-service/ai_client.py now prefers Ark as the qwen soft-timeout hedge even when current env order is qwen_vl,mimo_vl,volcengine_ark_vl. Remaining risks: product default still uses mock for data-analysis understanding, Ark endpoint ep-20260504082005-gvl4b still returns 403 on responses API and currently succeeds via model-name fallback, mimo_vl is quota exhausted, and legacy page_understanding/semantic_groups/recrop_plan remain for compatibility."
     }
   ]
 }

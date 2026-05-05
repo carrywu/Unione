@@ -663,3 +663,40 @@ History
   - 真实 Tencent/Baidu single-page smoke 与 429/backoff
   - backend 独立 `/api/health` 探针
   - Baidu Key 曾在对话中明文暴露，必须尽快轮换；Tencent SecretId/SecretKey 仍禁止进入仓库或 debug
+
+[2026-05-06 00:22:18 CST (+0800)] COCR-M20A-post-smoke
+- 实现/测试了什么: 补跑资料分析真实 provider smoke，并把 smoke 暴露出来的 `qwen_vl,mimo_vl,volcengine_ark_vl` 备援顺序风险修到代码里。验证了真实第 5 页 shared material 资料分析页：`qwen_vl` 单 provider 180s 超时失败，`Ark` 单 provider 成功解析 shared material + 16-20，`qwen->Ark` 联合顺序成功 hedge；随后用真实 `.env` 顺序验证 hedge 修复后也能成功。再用 `qwen-plus` 对真实第 17 题做最小 text smoke，模型低置信拒答，原因与质量门禁预期一致。
+- 修改文件: `pdf-service/ai_client.py`, `pdf-service/tests/test_ai_client_page_visual_fallbacks.py`, `docs/commercial-ocr-phase-reports/COCR-M20A-data-analysis-first.md`, `.agent/reports/data-analysis-first-ocr-api-understanding-report.md`, `.agent/reports/data-analysis-q17-qwen-text-smoke.{json,md}`, `.agent/handoff/data-analysis-first-ocr-api-understanding-20260506-002218.md`, `prd.json`, `progress.txt`
+- 清理了什么: 不把 provider health 原始预览提交进仓；仅保留结论到报告，原始产物留在本地 debug
+- 保留了什么: 默认产品链路仍保持 mock；旧 `page_understanding` / `semantic_groups` / `recrop_plan` 保留兼容；`docs/COCR_M15_M19_step6托管目标.md` 仍保持未提交
+- 运行了哪些命令:
+  - `cd pdf-service && ./.venv/bin/python tools/provider_health_report.py`
+  - `cd pdf-service && ./.venv/bin/python tools/visual_api_smoke.py /home/carry/project2/pdf-service/题本篇.pdf --pages 4-5 --output-dir /home/carry/project2/debug/real-provider-smoke/20260505-real-smoke/qwen-page5 --clean-output --refresh-cache`
+  - `cd pdf-service && ./.venv/bin/python tools/visual_api_smoke.py /home/carry/project2/pdf-service/题本篇.pdf --pages 4-5 --output-dir /home/carry/project2/debug/real-provider-smoke/20260505-real-smoke/ark-page5 --clean-output --refresh-cache`
+  - `cd pdf-service && ./.venv/bin/python tools/visual_api_smoke.py /home/carry/project2/pdf-service/题本篇.pdf --pages 4-5 --output-dir /home/carry/project2/debug/real-provider-smoke/20260505-real-smoke/qwen-ark-page5 --clean-output --refresh-cache`
+  - `cd pdf-service && ./.venv/bin/python tools/visual_api_smoke.py /home/carry/project2/pdf-service/题本篇.pdf --pages 4-5 --output-dir /home/carry/project2/debug/real-provider-smoke/20260505-real-smoke/env-order-page5 --clean-output --refresh-cache`
+  - `cd pdf-service && ./.venv/bin/python -m pytest tests/test_ai_client_page_visual_fallbacks.py -q`
+  - `cd pdf-service && ./.venv/bin/python -m pytest tests/test_commercial_ocr_pipeline.py tests/test_ai_client_page_visual_fallbacks.py -q`
+  - `cd pdf-service && ./.venv/bin/python - <<'PY' ... qwen-plus q17 text smoke ... PY`
+- 结果是否通过:
+  - `provider_health_report`: PASS
+  - `qwen-only visual smoke`: FAIL (`vision_page_timeout`)
+  - `ark-only visual smoke`: PASS
+  - `qwen->ark visual smoke`: PASS
+  - `current env order visual smoke`: PASS after hedge fix
+  - `test_ai_client_page_visual_fallbacks.py`: `19 passed`
+  - `test_commercial_ocr_pipeline.py + test_ai_client_page_visual_fallbacks.py`: `27 passed`
+  - `qwen-plus q17 text smoke`: PASS（结果为低置信拒答，不是求出答案）
+- 截图/trace/debug 路径:
+  - `debug/real-provider-smoke/20260505-real-smoke/`
+  - `.agent/reports/data-analysis-q17-qwen-text-smoke.md`
+  - `docs/commercial-ocr-phase-reports/COCR-M20A-data-analysis-first.md`
+- 发现的可复用模式:
+  - `visual_api_smoke.py --pages 4` 是“前 4 页”，单页必须写零基区间 `4-5`
+  - 真实资料分析整页上，`qwen_vl` 快速 health pass 不代表复杂表格页稳定；页级 smoke 才能暴露超时问题
+  - `qwen` soft-timeout hedge 不应被 `mimo` 的 quota 状态卡住，Ark 应作为专用结构化备援
+- 仍需后续 story 处理的问题:
+  - 扩大真实资料分析页样本，不要只看第 5 页
+  - 判断是否需要对 `qwen_vl` 做更小图重试或 prompt 收缩
+  - 真实 text smoke 仍需扩大样本后再决定是否切进默认链路
+  - Ark endpoint `ep-20260504082005-gvl4b` 的 responses API 权限问题仍需单独清理

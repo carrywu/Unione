@@ -1,0 +1,38 @@
+# Data Analysis Q17 Qwen Text Smoke
+
+- model: `qwen-plus`
+- elapsed_ms: `10564`
+- question_no: `17`
+- page_no: `5`
+- source_material_complete: `False`
+- table_header_present: `False`
+- unit_present: `False`
+
+## Result
+
+```json
+{
+  "can_understand_material": false,
+  "can_solve_question": false,
+  "question_no": 17,
+  "answer_suggestion": null,
+  "calculation_reasoning": "题目要求判断2020年技术交易额占合同成交额比重‘有所提高’的地市数量，需比较2019与2020年两个年份的比重（即技术交易额/合同成交额）。但OCR材料中仅提供单行数值，无年份标注、无表头、无单位、无列名；视觉上下文确认表头缺失、表格被截断（仅显示云浮至潮州共16行，且前半部分地市如广州、深圳等珠三角核心城市完全缺失），无法识别哪列为技术交易额、哪列为合同成交额，更无法获取2019年数据用于同比变化判断。",
+  "formula_used": "比重变化 = (2020年技术交易额 / 2020年合同成交额) - (2019年技术交易额 / 2019年合同成交额) > 0",
+  "data_points_used": [],
+  "missing_information": [
+    "表头（列名）",
+    "各列对应指标含义（如哪列是技术交易额、哪列是合同成交额）",
+    "2019年对应数据",
+    "年份标识",
+    "单位",
+    "完整地市列表（缺少广州、深圳、佛山、东莞、惠州、珠海等关键珠三角城市）"
+  ],
+  "ocr_answer_agreement": "no_ocr_answer",
+  "conflict_with_ocr_answer": false,
+  "comprehension_confidence": 0.25,
+  "needs_human_review": true,
+  "warnings": [
+    "表格严重不完整，仅含后半段16个地市，缺失前半段至少9个珠三角核心地市；无表头导致指标不可解析；无2019年数据无法判断‘比重提高’；视觉与OCR双重确认顶部被裁切"
+  ]
+}
+```

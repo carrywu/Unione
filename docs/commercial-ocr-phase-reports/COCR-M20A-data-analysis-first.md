@@ -78,7 +78,7 @@
   - 将资料分析 visual context 并入既有 visual summary
   - 明确 VLM 只做视觉上下文，不替代 OCR
 
-当前阶段真实 `qwen-vl` / `doubao-vl` 默认不调用；无 key 环境下按设计走 mock，并在报告中记为 `skipped by env`。
+产品默认链路仍按设计走 mock；真实 provider 不作为 M20A 发布前置条件。2026 年 5 月 6 日补跑了 post-closure real smoke，结果见本报告第 13 节。
 
 ## 6. LLM Calculation Reasoning 结果
 
@@ -106,7 +106,7 @@
   - `calculation_reasoning` 裸显为空时显示 `未提供`
   - OCR/LLM 冲突时展示 `答案冲突`
 
-本轮目标不是引入真实 DeepSeek / Qwen text / MiMo text 调用，而是先把数据结构、质量门禁和 UI 闭环跑通。
+本轮主目标不是把真实 text provider 直接切进默认发布链路，而是先把数据结构、质量门禁和 UI 闭环跑通。2026 年 5 月 6 日补跑了 `qwen-plus` 最小真实理解 smoke，结果见本报告第 13 节。
 
 ## 7. Quality Gate 置信度规则
 
@@ -184,9 +184,9 @@
 - `cd backend && pnpm test`
   - skipped
   - 原因：`backend/package.json` 没有 `test` script
-- 真实 `qwen-vl` / `doubao-vl` / `deepseek` / `mimo`
-  - skipped by env
-  - 原因：本轮按要求默认 mock，不依赖真实 key
+- 默认产品链路中的真实 `qwen-vl` / `doubao-vl` / `deepseek` / `mimo`
+  - 未作为 M20A 发布前置条件
+  - 原因：本轮验收以 mock 闭环为主，真实 provider 改为 post-closure smoke 单独验证
 
 Playwright 覆盖到的资料分析主链路：
 
@@ -257,7 +257,107 @@ Playwright 覆盖到的资料分析主链路：
 - Playwright 证据目录: `debug/e2e-commercial-ocr/2026-05-05T15-03-11-354Z/`
 - Playwright trace: `test-results/`
 - agent 汇总报告: `.agent/reports/data-analysis-first-ocr-api-understanding-report.md`
-- handoff: `.agent/handoff/data-analysis-first-ocr-api-understanding-20260505-230923.md`
+- q17 真实文本 smoke: `.agent/reports/data-analysis-q17-qwen-text-smoke.md`
+- 真实视觉 smoke: `debug/real-provider-smoke/20260505-real-smoke/`
+- handoff: `.agent/handoff/data-analysis-first-ocr-api-understanding-20260506-002218.md`
+
+## 13. Post-Closure Real Provider Smoke
+
+补充验证日期：2026 年 5 月 6 日 CST。
+
+这轮 smoke 不改变产品职责边界：
+
+- OCR API 仍是主识别和 bbox 层
+- VLM 仍只负责视觉上下文
+- LLM 仍只负责题目理解和可解性判断
+- 默认产品链路仍保持 mock 可回归
+
+### 13.1 Provider health
+
+执行命令：
+
+- `cd pdf-service && ./.venv/bin/python tools/provider_health_report.py`
+
+结论：
+
+- `qwen_vl`: health pass，约 `1457 ms`
+- `volcengine_ark_vl`: health pass，约 `20959 ms`
+- `mimo_vl`: health fail，`429 quota exhausted`
+
+其中 Ark 的配置 endpoint `ep-20260504082005-gvl4b` 在 responses API 下返回 `403 AccessDenied`，但同一 provider 会自动回退到可用模型名 `doubao-seed-2-0-lite-260215` 并通过 smoke。因此 Ark 当前可用，但 endpoint 配置本身不可直接作为成功证据。
+
+### 13.2 Real visual smoke on actual page 5
+
+目标页：
+
+- 真实题本 `pdf-service/题本篇.pdf`
+- 零基页区间 `4-5`
+- 对应原始第 `5` 页
+- 该页包含资料分析共用材料和 `17-20` 题
+
+执行与结果：
+
+1. `VISION_AI_PROVIDER_ORDER=qwen_vl`
+   - 结果：失败
+   - 现象：第 `5` 页在 `180s` 页级超时后返回 `vision_page_timeout`
+   - 结论：`qwen3-vl-plus` 对这张真实资料分析表格页不够稳定，不能单独作为此页主视觉 provider
+2. `VISION_AI_PROVIDER_ORDER=volcengine_ark_vl`
+   - 结果：成功
+   - 现象：解析出 `m1` shared material 和第 `16-20` 题
+   - 视觉结论：材料属于同一表格，但表格只展示后半部分，缺少上半部分地市、表头、单位，因此应进入复核
+3. `VISION_AI_PROVIDER_ORDER=qwen_vl,volcengine_ark_vl`
+   - 结果：成功
+   - 现象：`qwen_vl` 在约 `10.8s` 软超时后触发 hedge，Ark 作为 fallback 成功完成解析
+4. 仓库当前 `.env` 顺序 `qwen_vl,mimo_vl,volcengine_ark_vl`
+   - 风险：MiMo 当前 `429 quota exhausted`，而旧代码只会在 `backup == volcengine_ark_vl` 时启用 qwen soft-timeout hedge
+   - 处理：本轮补了 `ai_client.parse_page_visual(...)` 的 hedge 选择逻辑，只要 `qwen_vl` 为主 provider 且 `volcengine_ark_vl` 在可用列表中，就优先以 Ark 作为软超时备援
+   - 真实验证：修复后直接吃当前 `.env` 顺序再次 smoke 成功，`qwen_vl` 在约 `10.8s` 后软超时，Ark 接管成功，`mimo_vl` 没有再卡住这条链路
+
+相关代码与测试：
+
+- 调度修复: `pdf-service/ai_client.py`
+- 回归测试: `pdf-service/tests/test_ai_client_page_visual_fallbacks.py`
+- 验证结果: `cd pdf-service && ./.venv/bin/python -m pytest tests/test_ai_client_page_visual_fallbacks.py -q` -> `19 passed`
+
+### 13.3 Real text understanding smoke on question 17
+
+执行对象：
+
+- 真实 OCR payload：`backend/debug/pdf-semantic/836fec20-2628-44ed-9642-aedd57467864/api-responses.json`
+- 真实题目：第 `17` 题
+- 真实视觉上下文：基于 Ark 对第 `5` 页的解析结果整理
+- 真实文本模型：`qwen-plus`
+
+结果摘要：
+
+- `can_understand_material=false`
+- `can_solve_question=false`
+- `answer_suggestion=null`
+- `comprehension_confidence=0.25`
+- `needs_human_review=true`
+
+模型拒答原因与我们预期一致：
+
+- 缺表头
+- 缺单位
+- 缺年份标识
+- 缺 2019 对应数据
+- 缺完整地市列表
+- 当前页只显示表格后半部分，无法判断“比重有所提高”的数量
+
+这说明真实文本模型在 OCR 文本不完整且视觉上下文明确提示裁切风险时，能够给出低置信拒答，而不是强行猜答案，符合 M20A 质量门禁目标。
+
+产物路径：
+
+- `.agent/reports/data-analysis-q17-qwen-text-smoke.json`
+- `.agent/reports/data-analysis-q17-qwen-text-smoke.md`
+
+### 13.4 当前建议
+
+- 保持产品默认链路仍以 mock 为主，避免在未做更大样本回归前把真实 provider 直接切进发布
+- 真实视觉 smoke 的推荐顺序已经变成“`qwen` 可做快路径，但必须允许 `Ark` 做软超时备援”
+- `mimo_vl` 当前因 quota 问题不适合作为 qwen 的第一备援
+- 下一轮应优先扩大到更多资料分析页样本，而不是立刻扩题型
 
 ## 风险与后续
 
