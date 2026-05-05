@@ -217,6 +217,23 @@
       "priority": 14,
       "passes": true,
       "notes": "COCR-M20C completed on branch mimo using real PDF path 题本/题本篇.pdf with redacted local key checks. Candidate discovery scanned 20 pages and matched 12 candidate pages, then selected pages 1/6/16 for limited batch smoke. Real commercial OCR keys for Baidu/Tencent were unavailable, so the batch recorded skipped_unavailable for those providers and used tesseract_local_ocr only as local grouping/import fallback, not as fake commercial OCR success. Real visual batch result: qwen_vl timed out 3/3 at 12s and volcengine_ark_vl rescued 3/3 groups; mimo_vl remains quota exhausted and deprioritized. Real qwen-plus understanding ran on 17-20 with one low-confidence solve attempt and three blocked/refusal outcomes; quality matrix ended with review_ready=0/4 and needs_human_review=4/4. Workbench real-batch E2E passed using page016-local-group1-import.json with bbox_source=tesseract_local_ocr and approve correctly blocked. Detailed reports: docs/commercial-ocr-phase-reports/COCR-M20C-real-data-multipage-data-analysis.md, COCR-M20C-legacy-pdfserver-chain-contraction.md, COCR-M20C-provider-strategy.md, COCR-M20C-real-quality-matrix.md, COCR-M20C-workbench-real-batch-e2e.md. Aggregate report: .agent/reports/data-analysis-real-multipage-hardening-report.md."
+    },
+    {
+      "id": "US-015",
+      "title": "Switch data-analysis bbox_source from local fallback to a real commercial OCR provider",
+      "description": "As the COCR delivery owner, I need pages 1/6/16 to rerun through a real Baidu or Tencent commercial OCR provider so workbench bbox_source can move off tesseract_local_ocr and the comparison/E2E toolchain can validate the commercial path truthfully.",
+      "acceptanceCriteria": [
+        "Add a single-page real commercial OCR smoke CLI with redacted provider diagnostics",
+        "Add a batch commercial OCR CLI for pages 1,6,16 with explicit blocked/skipped reasons",
+        "Add a commercial-vs-local bbox comparison CLI",
+        "Do not collapse skipped_unavailable into a vague unavailable reason; classify missing key, smoke flag, auth, quota, permission, timeout, or request failure explicitly",
+        "Ensure the E2E launcher can honor real provider env instead of forcing mock forever",
+        "Expose a Playwright path that can validate commercial bbox_source once a real fixture exists",
+        "Record blocked status truthfully when the current environment still lacks usable provider credentials"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Started on 2026-05-06. Implemented pdf-service/scripts/run_real_commercial_ocr_smoke.py, run_real_commercial_ocr_batch.py, compare_commercial_vs_local_bbox.py, provider_health_report.py wrapper, enriched run_real_data_analysis_batch_smoke.py summaries, fixed scripts/e2e/start-commercial-ocr-stack.sh to respect external real-provider env, and added admin-web/e2e plus root e2e commercial workbench specs. Validation passed for pytest (16 passed), admin-web type/build, bash syntax, provider health wrapper, and Playwright test discovery. Current real-provider status remains BLOCKED because the workspace has no Baidu/Tencent keys in shell or .env, and the backend MySQL config source was unreachable (`ECONNREFUSED 127.0.0.1:3306`). Evidence: docs/commercial-ocr-phase-reports/COCR-M20D-real-commercial-ocr-provider-integration.md, COCR-M20D-commercial-vs-local-bbox-comparison.md, COCR-M20D-workbench-commercial-ocr-e2e.md, .agent/reports/real-commercial-ocr-provider-integration-report.md."
     }
   ]
 }
