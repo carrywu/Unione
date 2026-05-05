@@ -50,7 +50,7 @@ test('h5 preview paper preserves shared material across 17-20', async ({ page, c
 
     const answers: Array<[number, string]> = [
       [17, 'B'],
-      [18, 'A'],
+      [18, 'D'],
       [19, 'D'],
       [20, 'B'],
     ];
