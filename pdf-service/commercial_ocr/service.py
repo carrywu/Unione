@@ -13,6 +13,7 @@ from commercial_ocr.quality_gate import evaluate_parse_quality
 from commercial_ocr.semantic_assembler import assemble_semantic_result
 from commercial_ocr.types import CommercialOCRExecution, ProviderOCRRequest, ProviderOCRResult
 from commercial_ocr.visual_understanding import build_visual_understanding_summary
+from commercial_ocr.mimo_reviewer import review_text_payload, mimo_review_status
 from models import PageContent, Region, TextBlock
 
 
@@ -133,6 +134,23 @@ def run_commercial_ocr_pipeline(
                 fallback_used=provider_name != primary,
             )
 
+        # MiMo text review (optional, degrades to mock/skipped)
+        mimo_text_review = None
+        if assembly is not None and quality_gate is not None:
+            try:
+                mimo_text_review = review_text_payload(
+                    payload={
+                        "material_groups": [g.to_dict() for g in assembly.material_groups],
+                        "normalized_questions": [q.to_dict() for q in assembly.normalized_questions],
+                        "quality_gate": quality_gate.to_dict(),
+                        "provider_name": result.provider_name,
+                        "fallback_used": provider_name != primary,
+                    },
+                    context=f"provider={result.provider_name}, primary={primary}",
+                )
+            except Exception as e:
+                logger.warning("MiMo text review failed: %s", e)
+
         attempt_payload = {
             "provider": provider_name,
             "status": result.provider_status,
@@ -141,6 +159,7 @@ def run_commercial_ocr_pipeline(
             "warnings": result.warnings,
             "quality_gate": quality_gate.to_dict() if quality_gate else None,
             "visual_understanding": visual_understanding,
+            "mimo_text_review": mimo_text_review,
         }
         execution.attempted_providers.append(attempt_payload)
 
@@ -149,6 +168,7 @@ def run_commercial_ocr_pipeline(
             execution.semantic_assembly = assembly
             execution.quality_gate = quality_gate
             execution.visual_understanding = visual_understanding
+            execution.mimo_text_review = mimo_text_review
             execution.effective_provider = provider_name
             execution.fallback_used = provider_name != primary
             result.fallback_used = execution.fallback_used
@@ -217,6 +237,8 @@ def execution_summary(execution: CommercialOCRExecution | None) -> dict[str, Any
         "semantic_assembly": execution.semantic_assembly.to_dict() if execution.semantic_assembly else None,
         "quality_gate": execution.quality_gate.to_dict() if execution.quality_gate else None,
         "visual_understanding": execution.visual_understanding,
+        "mimo_text_review": execution.mimo_text_review,
+        "mimo_reviewer_status": mimo_review_status(),
     }
 
 

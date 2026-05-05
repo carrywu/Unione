@@ -185,6 +185,7 @@ class CommercialOCRExecution:
     semantic_assembly: SemanticAssemblyResult | None = None
     quality_gate: ParseQualityGateResult | None = None
     visual_understanding: dict[str, Any] | None = None
+    mimo_text_review: dict[str, Any] | None = None
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -198,5 +199,6 @@ class CommercialOCRExecution:
             "semantic_assembly": self.semantic_assembly.to_dict() if self.semantic_assembly else None,
             "quality_gate": self.quality_gate.to_dict() if self.quality_gate else None,
             "visual_understanding": self.visual_understanding,
+            "mimo_text_review": self.mimo_text_review,
             "warnings": list(self.warnings),
         }
