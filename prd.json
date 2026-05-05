@@ -1,6 +1,6 @@
 {
   "project": "Commercial OCR First + VLM/LLM Semantic Assembler",
-  "branchName": "main",
+  "branchName": "mimo",
   "description": "Keep development on main while migrating the scanned PDF parsing path to commercial OCR first, then OCR normalization, semantic assembly, quality gating, M5A answer-book alignment, M5B similarity detection, admin review, and publish. Preserve the existing local parser as a fallback and A/B baseline until the commercial OCR path proves stable on real papers, especially shared-material question ranges such as 17-20.",
   "userStories": [
     {
@@ -184,6 +184,22 @@
       "priority": 12,
       "passes": true,
       "notes": "Git hygiene continues to ignore secrets, uploads, provider traces, eval output, local PDFs, and the original Baidu sample JS while keeping source/tests/docs/fixtures trackable. Evidence: .gitignore, COCR-M0/COCR-M1 reports, and this round's clean fixture set."
+    },
+    {
+      "id": "US-013",
+      "title": "Close data-analysis-first OCR API + VLM/LLM understanding loop",
+      "description": "As the commercial OCR delivery owner, I need a data-analysis-first closure for shared-material questions 17-20 so OCR API bbox, visual context, LLM reasoning, quality gating, workbench review, and H5 preview can be validated before other question types expand.",
+      "acceptanceCriteria": [
+        "Preserve OCR/provider bbox, answer candidate, analysis candidate, layout-only, and raw refs through normalization and semantic assembly",
+        "Represent 17-20 shared material with table/chart assets and keep local stems free of shared-stem duplication",
+        "Add data-analysis visual context, understanding result, and quality gate payloads",
+        "Expose data-analysis payloads through backend question_quality.commercial_ocr without a DB migration",
+        "Route /banks into /workbench and redirect old /banks/:id/questions to workbench",
+        "Cover workbench and H5 shared-material behavior with Playwright and record evidence truthfully"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "COCR-M20A completed on branch mimo with baseline tag pre-data-analysis-ocr-api-first-20260505-221735. Detailed report: docs/commercial-ocr-phase-reports/COCR-M20A-data-analysis-first.md. Evidence: debug/e2e-commercial-ocr/2026-05-05T15-03-11-354Z/ and test-results/. Risks: real qwen/doubao/deepseek/mimo providers are still skipped by env; legacy page_understanding/semantic_groups/recrop_plan remain for compatibility."
     }
   ]
 }
