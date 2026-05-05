@@ -21,11 +21,28 @@ pnpm seed
 # 3. Start pdf-service
 echo "[3/5] Starting pdf-service on :8001..."
 cd "$PROJECT_ROOT/pdf-service"
-COMMERCIAL_OCR_ENABLED=true \
-PDF_PARSE_PRIMARY_PROVIDER=mock_commercial_ocr \
-PDF_PARSE_FALLBACK_PROVIDERS=local_parser,mock_commercial_ocr \
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  set -a
+  . "$PROJECT_ROOT/.env"
+  set +a
+fi
+if [ -f "$PROJECT_ROOT/backend/.env" ]; then
+  set -a
+  . "$PROJECT_ROOT/backend/.env"
+  set +a
+fi
+if [ -f "$PROJECT_ROOT/pdf-service/.env" ]; then
+  set -a
+  . "$PROJECT_ROOT/pdf-service/.env"
+  set +a
+fi
+COMMERCIAL_OCR_ENABLED="${COMMERCIAL_OCR_ENABLED:-true}" \
+COMMERCIAL_OCR_REAL_SMOKE="${COMMERCIAL_OCR_REAL_SMOKE:-false}" \
+PDF_PARSE_PRIMARY_PROVIDER="${PDF_PARSE_PRIMARY_PROVIDER:-mock_commercial_ocr}" \
+PDF_PARSE_FALLBACK_PROVIDERS="${PDF_PARSE_FALLBACK_PROVIDERS:-local_parser,mock_commercial_ocr}" \
 MIMO_ENABLED=false \
 MIMO_REAL_SMOKE=false \
+TENCENT_OCR_REAL_SMOKE="${TENCENT_OCR_REAL_SMOKE:-false}" \
 ./.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8001 &
 PDF_PID=$!
 sleep 3

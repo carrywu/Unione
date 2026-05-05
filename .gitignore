@@ -55,6 +55,9 @@ rest2.0ocrv1paper_cut_edu.js
 题本/
 答本/
 scripts/ralph/.last-branch
+.agent/reports/provider-health-report.json
+.agent/reports/provider-health-report.md
+.agent/reports/volcengine-ark-provider-report.md
 
 # Python caches
 .pytest_cache/

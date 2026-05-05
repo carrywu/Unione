@@ -85,6 +85,106 @@ def material_groups_for_page(assembly: Any) -> list[MaterialGroup]:
     ]
 
 
+def normalized_bbox(value: Any) -> list[float] | None:
+    if not isinstance(value, list) or len(value) != 4:
+        return None
+    try:
+        return [round(float(item), 2) for item in value]
+    except (TypeError, ValueError):
+        return None
+
+
+def merge_bboxes(boxes: list[list[float]]) -> list[float] | None:
+    if not boxes:
+        return None
+    return [
+        round(min(item[0] for item in boxes), 2),
+        round(min(item[1] for item in boxes), 2),
+        round(max(item[2] for item in boxes), 2),
+        round(max(item[3] for item in boxes), 2),
+    ]
+
+
+def redacted_ref(path: Any) -> str | None:
+    if not path:
+        return None
+    return project_relative_path(str(path))
+
+
+def provider_issue_reason(
+    *,
+    provider_status: str,
+    warnings: list[str],
+    result: Any | None,
+) -> str | None:
+    lowered_warnings = [str(item or "").strip().lower() for item in warnings if str(item or "").strip()]
+    provider_error = getattr(result, "provider_error", None) if result is not None else None
+    error_code = str((provider_error or {}).get("code") or "").strip().lower()
+    error_message = str((provider_error or {}).get("message") or "").strip().lower()
+    haystack = " ".join([provider_status.lower(), *lowered_warnings, error_code, error_message])
+
+    if provider_status == "skipped_unavailable":
+        if any(item.startswith("missing_baidu_") or item.startswith("missing_tencent_") for item in lowered_warnings):
+            return "key_missing"
+        if any("real_smoke_disabled" in item for item in lowered_warnings):
+            return "real_smoke_flag_false"
+        if any("endpoint" in item and "missing" in item for item in lowered_warnings):
+            return "endpoint_missing"
+        return "provider_unavailable"
+    if not haystack:
+        return None
+    if "single_page_smoke_only" in haystack:
+        return "input_not_supported"
+    if any(token in haystack for token in ("permission", "accessdenied", "denied", "unauthorized")):
+        return "permission_denied"
+    if any(token in haystack for token in ("quota", "limit", "thrott", "ratelimit")):
+        return "quota_exhausted"
+    if any(token in haystack for token in ("auth", "secret", "signature", "token")):
+        return "auth_failed"
+    if "timeout" in haystack:
+        return "request_timeout"
+    if any(token in haystack for token in ("malformed", "param", "request", "http")):
+        return "request_failed"
+    return "provider_error"
+
+
+def provider_question_bboxes(questions: list[Any]) -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    for item in questions:
+        bbox = normalized_bbox(question_value(item, "provider_bbox") or question_value(item, "bbox"))
+        question_no = question_value(item, "question_no")
+        if bbox is None or question_no in (None, ""):
+            continue
+        try:
+            normalized_question_no = int(question_no)
+        except (TypeError, ValueError):
+            continue
+        payload.append({"question_no": normalized_question_no, "bbox": bbox})
+    return payload
+
+
+def provider_material_bboxes(groups: list[MaterialGroup]) -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    for group in groups:
+        shared_boxes = [
+            bbox
+            for bbox in (normalized_bbox(asset.get("bbox")) for asset in group.shared_assets)
+            if bbox is not None
+        ]
+        merged = merge_bboxes(shared_boxes)
+        if merged is None:
+            continue
+        payload.append(
+            {
+                "material_id": group.material_id,
+                "group_type": group.group_type,
+                "question_range": list(group.question_range),
+                "bbox": merged,
+            }
+        )
+    return payload
+
+
 def provider_page_summary(
     *,
     candidate: dict[str, Any],
@@ -98,30 +198,62 @@ def provider_page_summary(
     groups = material_groups_for_page(assembly) if assembly is not None else []
     questions = list(assembly.normalized_questions) if assembly is not None else []
     bbox_count = sum(1 for item in questions if (item.provider_bbox or item.bbox))
+    question_bboxes = provider_question_bboxes(questions)
+    material_bboxes = provider_material_bboxes(groups)
+    material_group_candidates = [
+        {
+            "material_id": group.material_id,
+            "group_type": group.group_type,
+            "question_range": list(group.question_range),
+            "source_page_span": list(group.source_page_span),
+            "shared_assets_count": len(group.shared_assets),
+            "aggregated_bbox": next(
+                (
+                    item.get("bbox")
+                    for item in material_bboxes
+                    if item.get("material_id") == group.material_id
+                ),
+                None,
+            ),
+            "warnings": list(group.warnings),
+        }
+        for group in groups
+    ]
+    question_numbers = [item["question_no"] for item in question_bboxes]
+    question_range = []
+    if question_numbers:
+        question_range = [min(question_numbers), max(question_numbers)]
+    elif candidate.get("likely_question_range"):
+        question_range = list(candidate.get("likely_question_range") or [])
+    skipped_reason = provider_issue_reason(
+        provider_status=provider_status,
+        warnings=warnings,
+        result=result,
+    )
     return {
         "provider": provider_name,
         "page_no": int(candidate.get("page_no") or 0),
         "status": provider_status,
+        "skipped_reason": skipped_reason,
         "latency_ms": provider_latency_ms,
         "question_count": len(questions),
         "bbox_count": bbox_count,
-        "material_group_candidates": [
-            {
-                "material_id": group.material_id,
-                "group_type": group.group_type,
-                "question_range": list(group.question_range),
-                "source_page_span": list(group.source_page_span),
-                "shared_assets_count": len(group.shared_assets),
-                "warnings": list(group.warnings),
-            }
-            for group in groups
-        ],
+        "question_numbers": question_numbers,
+        "question_bboxes": question_bboxes,
+        "material_bboxes": material_bboxes,
+        "material_group_candidates": material_group_candidates,
+        "shared_material_detected": any(group.group_type == "shared_material" for group in groups),
+        "question_range": question_range,
         "likely_question_range": candidate.get("likely_question_range") or [],
         "has_table_or_chart": any(group.table_blocks or group.chart_blocks for group in groups),
         "has_answer_candidate": any(bool(item.ocr_answer_candidate) for item in questions),
         "has_analysis_candidate": any(bool(item.ocr_analysis_candidate) for item in questions),
+        "layout_only": provider_name.endswith("_layout"),
+        "fallback_used": False,
+        "errors": [getattr(result, "provider_error", None)] if getattr(result, "provider_error", None) else [],
         "warnings": warnings,
         "raw_response_ref": getattr(result, "raw_response_ref", None),
+        "raw_ref_redacted": redacted_ref(getattr(result, "raw_response_ref", None)),
     }
 
 
@@ -141,13 +273,22 @@ def local_provider_page_summary(
     candidate: dict[str, Any],
     local_group: dict[str, Any],
 ) -> dict[str, Any]:
+    question_numbers = [
+        int(question_value(item, "question_no") or 0)
+        for item in local_group.get("questions") or []
+        if int(question_value(item, "question_no") or 0) > 0
+    ]
     return {
         "provider": LOCAL_OCR_PROVIDER,
         "page_no": int(candidate.get("page_no") or 0),
         "status": "ok_local_fallback",
+        "skipped_reason": None,
         "latency_ms": 0,
         "question_count": len(local_group.get("questions") or []),
         "bbox_count": 0,
+        "question_numbers": question_numbers,
+        "question_bboxes": [],
+        "material_bboxes": [],
         "material_group_candidates": [
             {
                 "material_id": f"local-ocr-{local_group['question_range'][0]}-{local_group['question_range'][-1]}-p{local_group['page_no']}",
@@ -155,15 +296,22 @@ def local_provider_page_summary(
                 "question_range": list(local_group.get("question_range") or []),
                 "source_page_span": list(local_group.get("source_page_span") or []),
                 "shared_assets_count": 0,
+                "aggregated_bbox": None,
                 "warnings": list(local_group.get("warnings") or []),
             }
         ],
+        "shared_material_detected": len(list(local_group.get("question_range") or [])) >= 2,
+        "question_range": list(local_group.get("question_range") or []),
         "likely_question_range": candidate.get("likely_question_range") or list(local_group.get("question_range") or []),
         "has_table_or_chart": True,
         "has_answer_candidate": False,
         "has_analysis_candidate": False,
+        "layout_only": False,
+        "fallback_used": True,
+        "errors": [],
         "warnings": list(local_group.get("warnings") or []),
         "raw_response_ref": None,
+        "raw_ref_redacted": None,
     }
 
 
@@ -181,6 +329,8 @@ def run_provider_on_page(
             "provider_name": provider_name,
             "provider_status": "skipped",
             "warnings": [f"unknown_provider:{provider_name}"],
+            "provider_error": {"code": "unknown_provider", "message": provider_name},
+            "availability_reasons": [f"unknown_provider:{provider_name}"],
             "assembly": None,
             "quality_gate": None,
             "provider_result": None,
@@ -191,6 +341,8 @@ def run_provider_on_page(
             "provider_name": provider_name,
             "provider_status": "skipped_unavailable",
             "warnings": list(missing),
+            "provider_error": None,
+            "availability_reasons": list(missing),
             "assembly": None,
             "quality_gate": None,
             "provider_result": None,
@@ -222,6 +374,8 @@ def run_provider_on_page(
         "provider_name": result.provider_name,
         "provider_status": result.provider_status,
         "warnings": list(result.warnings),
+        "provider_error": result.provider_error,
+        "availability_reasons": [],
         "assembly": assembly,
         "quality_gate": quality_gate,
         "provider_result": result,
