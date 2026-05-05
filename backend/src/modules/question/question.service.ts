@@ -985,6 +985,11 @@ export class QuestionService {
       typeof commercial.quality_gate_question_status === 'object'
         ? (commercial.quality_gate_question_status as Record<string, any>)
         : null;
+    const dataAnalysisGate =
+      commercial?.data_analysis_quality_gate &&
+      typeof commercial.data_analysis_quality_gate === 'object'
+        ? (commercial.data_analysis_quality_gate as Record<string, any>)
+        : null;
     const layoutOnly = Array.isArray(questionGate?.warnings)
       ? questionGate.warnings.includes('layout_only_result')
       : false;
@@ -1000,6 +1005,10 @@ export class QuestionService {
           (qualityGate?.review_ready === true &&
             qualityGate?.extracted_but_incomplete !== true &&
             qualityGate?.needs_human_review !== true &&
+            (dataAnalysisGate == null ||
+              (dataAnalysisGate.review_ready === true &&
+                dataAnalysisGate.needs_human_review !== true &&
+                dataAnalysisGate.answer_conflict !== true)) &&
             commercial?.fallback_used !== true &&
             questionGate?.needs_human_review !== true)),
     );

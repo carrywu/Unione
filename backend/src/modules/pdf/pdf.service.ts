@@ -3525,10 +3525,24 @@ export class PdfService {
       commercial.visual_understanding && typeof commercial.visual_understanding === 'object'
         ? (commercial.visual_understanding as Record<string, any>)
         : null;
+    const dataAnalysisVisualContext =
+      commercial.data_analysis_visual_context && typeof commercial.data_analysis_visual_context === 'object'
+        ? (commercial.data_analysis_visual_context as Record<string, any>)
+        : null;
+    const dataAnalysisQualityGate =
+      commercial.data_analysis_quality_gate && typeof commercial.data_analysis_quality_gate === 'object'
+        ? (commercial.data_analysis_quality_gate as Record<string, any>)
+        : null;
     const materialGroups = this.toArrayOfObjects(assembly.material_groups);
     const materialById = new Map(
       materialGroups.map((group) => [this.safeDisplayText(group.material_id, ''), group]),
     );
+    const understandingByNo = new Map<number, Record<string, any>>();
+    this.toArrayOfObjects(commercial.data_analysis_understanding_results).forEach((item) => {
+      const questionNo = this.toOptionalNumber(item.question_no);
+      if (questionNo === null) return;
+      understandingByNo.set(questionNo, item);
+    });
     const questionStatusByNo = new Map<number, Record<string, any>>();
     this.toArrayOfObjects(qualityGate.per_question_status).forEach((item) => {
       const questionNo = this.toOptionalNumber(item.question_no);
@@ -3540,6 +3554,7 @@ export class PdfService {
       const questionNo = this.toOptionalNumber(question.question_no) ?? index + 1;
       const materialId = this.safeDisplayText(question.material_id, '') || null;
       const materialGroup = materialId ? materialById.get(materialId) || null : null;
+      const understanding = understandingByNo.get(questionNo) || null;
       const sharedAssets = this.toArrayOfObjects(materialGroup?.shared_assets);
       const questionStatus = questionStatusByNo.get(questionNo) || null;
       const questionRange =
@@ -3594,19 +3609,33 @@ export class PdfService {
               ? ''
               : question.analysis,
           ) || null,
-        answer_suggestion: this.firstMeaningfulText(question.answer) || null,
-        answer_confidence: this.toOptionalNumber(question.confidence),
+        answer_suggestion:
+          this.firstMeaningfulText(
+            understanding?.answer_suggestion,
+            question.answer,
+          ) || null,
+        answer_confidence:
+          this.toOptionalNumber(
+            understanding?.comprehension_confidence ?? question.confidence,
+          ),
         answer_unknown_reason:
-          this.firstMeaningfulText(question.answer) ? null : 'commercial_ocr_answer_missing',
+          this.firstMeaningfulText(understanding?.answer_suggestion, question.answer)
+            ? null
+            : 'commercial_ocr_answer_missing',
         analysis_suggestion:
           this.firstMeaningfulText(
+            understanding?.calculation_reasoning,
             String(question.analysis || '').trim().toLowerCase() === 'unknown'
               ? ''
               : question.analysis,
           ) || null,
-        analysis_confidence: this.toOptionalNumber(question.confidence),
+        analysis_confidence:
+          this.toOptionalNumber(
+            understanding?.comprehension_confidence ?? question.confidence,
+          ),
         analysis_unknown_reason:
           this.firstMeaningfulText(
+            understanding?.calculation_reasoning,
             String(question.analysis || '').trim().toLowerCase() === 'unknown'
               ? ''
               : question.analysis,
@@ -3617,10 +3646,15 @@ export class PdfService {
         preview_image_path: previewImagePath,
         visual_summary:
           this.firstMeaningfulText(
+            dataAnalysisVisualContext?.visual_summary,
             visualUnderstanding?.visual_grouping_summary,
             materialGroup?.shared_stem,
           ) || null,
-        visual_confidence: this.toOptionalNumber(visualUnderstanding?.confidence),
+        visual_confidence: this.toOptionalNumber(
+          understanding?.comprehension_confidence ??
+            dataAnalysisQualityGate?.comprehension_confidence ??
+            visualUnderstanding?.confidence,
+        ),
         source_page_refs: sourcePageRefs,
         source_bbox: this.toNumberArray(question.bbox),
         source_text_span:
@@ -3636,13 +3670,21 @@ export class PdfService {
         shared_material: Boolean(materialGroup),
         visual_parse_status: previewImagePath || sharedAssets.length ? 'available' : 'skipped',
         ai_audit_status:
-          questionStatus?.complete === true && qualityGate.review_ready === true
+          dataAnalysisQualityGate?.review_ready === true
+            ? 'passed'
+            : dataAnalysisQualityGate?.needs_human_review
+              ? 'warning'
+              : questionStatus?.complete === true && qualityGate.review_ready === true
             ? 'passed'
             : questionStatus?.needs_human_review
               ? 'warning'
               : 'failed',
         ai_audit_verdict:
-          questionStatus?.complete === true && qualityGate.review_ready === true
+          dataAnalysisQualityGate?.review_ready === true
+            ? '审核通过'
+            : dataAnalysisQualityGate?.needs_human_review
+              ? '需复核'
+              : questionStatus?.complete === true && qualityGate.review_ready === true
             ? '可通过'
             : questionStatus?.needs_human_review
               ? '需复核'
@@ -3655,9 +3697,15 @@ export class PdfService {
         }),
         ai_reviewed_before_human: true,
         risk_flags: warnings,
-        need_manual_fix: Boolean(question.needs_human_review || questionStatus?.needs_human_review || qualityGate.needs_human_review),
+        need_manual_fix: Boolean(
+          question.needs_human_review
+            || questionStatus?.needs_human_review
+            || qualityGate.needs_human_review
+            || dataAnalysisQualityGate?.needs_human_review,
+        ),
         can_add_to_paper: Boolean(
           qualityGate.review_ready &&
+            (dataAnalysisQualityGate == null || dataAnalysisQualityGate.review_ready === true) &&
             questionStatus?.complete !== false &&
             !question.needs_human_review &&
             !questionStatus?.needs_human_review,
@@ -3695,9 +3743,29 @@ export class PdfService {
         quality_gate: qualityGate,
         quality_gate_question_status: questionStatus,
         visual_understanding: visualUnderstanding,
+        data_analysis_visual_context: dataAnalysisVisualContext,
+        data_analysis_understanding_result: understanding,
+        data_analysis_quality_gate: dataAnalysisQualityGate,
         missing_fields: this.toStringArray(question.missing_fields),
         validation_warnings: this.toStringArray(question.validation_warnings),
         commercial_ocr_warnings: warnings,
+        question_quality: {
+          needs_review: Boolean(
+            question.needs_human_review
+              || questionStatus?.needs_human_review
+              || qualityGate.needs_human_review
+              || dataAnalysisQualityGate?.needs_human_review,
+          ),
+          commercial_ocr: {
+            quality_gate: qualityGate,
+            quality_gate_question_status: questionStatus,
+            visual_understanding: visualUnderstanding,
+            data_analysis_visual_context: dataAnalysisVisualContext,
+            data_analysis_understanding_result: understanding,
+            data_analysis_quality_gate: dataAnalysisQualityGate,
+            material_group: materialGroup,
+          },
+        },
       };
     });
   }
