@@ -7,8 +7,8 @@
           <div>
             <h1>选择题库</h1>
             <div class="header-meta">
-              <el-tag effect="plain" type="info">题干审核</el-tag>
-              <span>先选择要整理的题库，再进入题干审核工作台</span>
+              <el-tag effect="plain" type="info">资料分析工作台</el-tag>
+              <span>优先处理 17-20 共用材料题，直接进入 OCR API First 审核主流程</span>
             </div>
           </div>
         </div>
@@ -64,9 +64,8 @@
               </span>
             </div>
             <div class="bank-card-actions">
-              <el-button @click="router.push(`/banks/${bank.id}/questions`)">题目列表</el-button>
-              <el-button @click="router.push(`/banks/${bank.id}/review`)">审核</el-button>
-              <el-button type="primary" @click="enterWorkbench(bank.id)">制卷工作台</el-button>
+              <el-button @click="router.push(`/banks/${bank.id}/review`)">旧审核页</el-button>
+              <el-button type="primary" @click="enterWorkbench(bank.id)">进入工作台</el-button>
             </div>
           </article>
         </div>
@@ -80,7 +79,7 @@
         <div>
           <h1>{{ activeBank?.name || questionData.title }}</h1>
           <div class="header-meta">
-            <el-tag effect="plain" type="info">制卷审核</el-tag>
+            <el-tag effect="plain" type="info">资料分析 17-20 共用材料审核</el-tag>
             <el-tag effect="plain">{{ activeBank?.subject || '当前题库' }}</el-tag>
             <span class="save-state" :class="saveState">{{ saveStateText }}</span>
           </div>
@@ -91,9 +90,11 @@
         <el-button :disabled="currentQuestionIndex <= 0 || workbenchLoading" @click="selectQuestionByOffset(-1)">上一题</el-button>
         <el-button :disabled="currentQuestionIndex >= questions.length - 1 || workbenchLoading" @click="selectQuestionByOffset(1)">下一题</el-button>
         <el-button :disabled="!lastSnapshot" :icon="RefreshLeft" @click="handleUndo">撤销最近修复</el-button>
-        <el-button type="primary" :icon="DocumentChecked" :loading="saving" :disabled="!selectedQuestion" @click="manualSave">保存草稿</el-button>
-        <el-button :loading="saving" :disabled="!selectedQuestion" @click="markNeedsReview">标记需复核</el-button>
-        <el-button type="success" :icon="DocumentChecked" :loading="saving" :disabled="!selectedQuestion || !questionData.stem.trim()" @click="markStemReviewed">题干审核通过</el-button>
+        <el-button type="info" :loading="saving" :disabled="!selectedQuestion" @click="markPendingReview">待审核</el-button>
+        <el-button type="success" :icon="DocumentChecked" :loading="saving" :disabled="!selectedQuestion || !questionData.stem.trim()" @click="markStemReviewed">审核通过</el-button>
+        <el-button type="warning" :loading="saving" :disabled="!selectedQuestion" @click="markNeedsReview">需复核</el-button>
+        <el-button :disabled="!selectedBankId" @click="openH5Preview">打开 H5 预览</el-button>
+        <el-button type="primary" :disabled="!selectedBankId" @click="publishCurrentBank">发布到题库</el-button>
       </div>
     </header>
 
@@ -194,6 +195,109 @@
             </div>
             <p v-if="selectedQuestion?.analysis"><MathText :text="selectedQuestion.analysis" /></p>
           </div>
+
+          <section v-if="dataAnalysisMaterialGroup" class="data-analysis-card" data-testid="data-analysis-material-group">
+            <div class="data-analysis-head">
+              <strong>17-20 Shared Material</strong>
+              <el-tag size="small" effect="plain">{{ dataAnalysisMaterialGroup.group_type || 'data_analysis_material' }}</el-tag>
+            </div>
+            <div class="data-analysis-grid">
+              <span>question_range</span>
+              <p>{{ numberListText(dataAnalysisMaterialGroup.question_range) }}</p>
+              <span>shared_stem</span>
+              <p>{{ cleanDisplayText(dataAnalysisMaterialGroup.shared_stem || '共享材料缺失') }}</p>
+              <span>shared_assets</span>
+              <p>{{ `${assetCountText(dataAnalysisMaterialGroup.chart_blocks)} 图 / ${assetCountText(dataAnalysisMaterialGroup.table_blocks)} 表` }}</p>
+              <span>source_page_span</span>
+              <p>{{ numberListText(dataAnalysisMaterialGroup.source_page_span) }}</p>
+            </div>
+          </section>
+
+          <section v-if="dataAnalysisVisualContext" class="data-analysis-card" data-testid="data-analysis-visual-context">
+            <div class="data-analysis-head">
+              <strong>VLM Visual Context</strong>
+              <div class="data-tag-row">
+                <el-tag size="small" effect="plain">{{ dataAnalysisVisualContext.model_provider }}</el-tag>
+                <el-tag size="small" type="info" effect="plain">{{ dataAnalysisVisualContext.model_name }}</el-tag>
+              </div>
+            </div>
+            <div class="data-analysis-grid compact">
+              <span>chart_title_present</span>
+              <p>{{ booleanText(dataAnalysisVisualContext.chart_title_present) }}</p>
+              <span>table_header_present</span>
+              <p>{{ booleanText(dataAnalysisVisualContext.table_header_present) }}</p>
+              <span>unit_present</span>
+              <p>{{ booleanText(dataAnalysisVisualContext.unit_present) }}</p>
+              <span>legend_present</span>
+              <p>{{ booleanText(dataAnalysisVisualContext.legend_present) }}</p>
+              <span>material_complete</span>
+              <p>{{ booleanText(dataAnalysisVisualContext.source_material_complete) }}</p>
+              <span>visual_summary</span>
+              <p>{{ cleanDisplayText(dataAnalysisVisualContext.visual_summary || '未提供') }}</p>
+            </div>
+            <div class="data-tag-row" v-if="dataAnalysisVisualContext.critical_data_points_visible?.length">
+              <el-tag v-for="item in dataAnalysisVisualContext.critical_data_points_visible" :key="item" size="small" effect="plain">
+                {{ cleanDisplayText(item) }}
+              </el-tag>
+            </div>
+          </section>
+
+          <section v-if="dataAnalysisUnderstanding" class="data-analysis-card" data-testid="data-analysis-understanding">
+            <div class="data-analysis-head">
+              <strong>LLM Understanding</strong>
+              <div class="data-tag-row">
+                <el-tag size="small" effect="plain">{{ dataAnalysisUnderstanding.model_provider }}</el-tag>
+                <el-tag size="small" type="info" effect="plain">{{ dataAnalysisUnderstanding.model_name }}</el-tag>
+                <el-tag size="small" :type="dataAnalysisUnderstanding.conflict_with_ocr_answer ? 'danger' : 'success'" effect="plain">
+                  {{ confidencePercent(dataAnalysisUnderstanding.comprehension_confidence) }}
+                </el-tag>
+              </div>
+            </div>
+            <div class="data-analysis-grid">
+              <span>answer_suggestion</span>
+              <p><MathText :text="dataAnalysisUnderstanding.answer_suggestion || '-'" /></p>
+              <span>ocr_answer_agreement</span>
+              <p>{{ cleanDisplayText(dataAnalysisUnderstanding.ocr_answer_agreement) }}</p>
+              <span>formula_used</span>
+              <p>{{ cleanDisplayText(dataAnalysisUnderstanding.formula_used || '未提供') }}</p>
+              <span>calculation_reasoning</span>
+              <p data-testid="calculation-reasoning">{{ cleanDisplayText(dataAnalysisUnderstanding.calculation_reasoning || '未提供') }}</p>
+            </div>
+            <div class="data-tag-row" v-if="dataAnalysisUnderstanding.data_points_used?.length">
+              <el-tag v-for="item in dataAnalysisUnderstanding.data_points_used" :key="item" size="small" effect="plain">
+                {{ cleanDisplayText(item) }}
+              </el-tag>
+            </div>
+          </section>
+
+          <section v-if="dataAnalysisQualityGate" class="data-analysis-card" data-testid="data-analysis-quality-gate">
+            <div class="data-analysis-head">
+              <strong>Quality Gate</strong>
+              <div class="data-tag-row">
+                <el-tag size="small" :type="dataAnalysisQualityGate.review_ready ? 'success' : 'warning'" effect="plain">
+                  {{ dataAnalysisQualityGate.review_ready ? '审核通过' : '待审核' }}
+                </el-tag>
+                <el-tag size="small" v-if="dataAnalysisQualityGate.needs_human_review" type="danger" effect="plain">需复核</el-tag>
+              </div>
+            </div>
+            <div class="data-analysis-grid compact">
+              <span>shared_material</span>
+              <p>{{ booleanText(dataAnalysisQualityGate.has_shared_material) }}</p>
+              <span>shared_assets_preserved</span>
+              <p>{{ booleanText(dataAnalysisQualityGate.shared_assets_preserved) }}</p>
+              <span>llm_can_solve</span>
+              <p>{{ booleanText(dataAnalysisQualityGate.llm_can_solve_question) }}</p>
+              <span>answer_conflict</span>
+              <p>{{ booleanText(dataAnalysisQualityGate.answer_conflict) }}</p>
+              <span>confidence</span>
+              <p>{{ confidencePercent(dataAnalysisQualityGate.comprehension_confidence) }}</p>
+            </div>
+            <div class="data-tag-row" v-if="dataAnalysisQualityGate.blocking_reasons?.length">
+              <el-tag v-for="item in dataAnalysisQualityGate.blocking_reasons" :key="item" size="small" type="danger" effect="plain">
+                {{ cleanDisplayText(item) }}
+              </el-tag>
+            </div>
+          </section>
 
           <div v-if="aiPreaudit.visible" class="ai-preaudit-panel" :class="aiPreaudit.statusClass">
             <div class="ai-preaudit-head">
@@ -484,9 +588,19 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowLeft, Delete, DocumentChecked, Picture, Plus, Refresh, RefreshLeft, Search } from '@element-plus/icons-vue';
-import { getBanks, type Bank } from '@/api/bank';
+import { getBanks, publishBank, type Bank } from '@/api/bank';
 import { pdfProxyUrl } from '@/api/pdf';
-import { applyQuestionAiAction, getQuestion, getQuestions, updateQuestion, type Question, type QuestionAiAction } from '@/api/question';
+import {
+  applyQuestionAiAction,
+  getQuestion,
+  getQuestions,
+  updateQuestion,
+  type DataAnalysisQualityGate,
+  type DataAnalysisUnderstandingResult,
+  type DataAnalysisVisualContext,
+  type Question,
+  type QuestionAiAction,
+} from '@/api/question';
 import MathText from '@/components/MathText.vue';
 import PdfLocator from '@/components/PdfLocator.vue';
 import { mathTextToString } from '@/utils/mathText';
@@ -539,11 +653,25 @@ const aiQueueFilter = ref<AiQueueFilter>('all');
 const currentPdfPage = ref(1);
 
 const selectedBankId = computed(() => String(route.query.bankId || ''));
+const selectedTaskId = computed(() => String(route.query.taskId || ''));
 const activeBank = computed(() => banks.value.find((bank) => bank.id === selectedBankId.value));
 const currentQuestionIndex = computed(() => {
   if (!selectedQuestion.value) return -1;
   return questions.value.findIndex((question) => question.id === selectedQuestion.value?.id);
 });
+const commercialOcr = computed(() => selectedQuestion.value?.question_quality?.commercial_ocr || null);
+const dataAnalysisMaterialGroup = computed(() => commercialOcr.value?.material_group || null);
+const dataAnalysisVisualContext = computed<DataAnalysisVisualContext | null>(
+  () => commercialOcr.value?.data_analysis_visual_context || null,
+);
+const dataAnalysisUnderstanding = computed<DataAnalysisUnderstandingResult | null>(
+  () => commercialOcr.value?.data_analysis_understanding_result || null,
+);
+const dataAnalysisQualityGate = computed<DataAnalysisQualityGate | null>(
+  () => commercialOcr.value?.data_analysis_quality_gate || null,
+);
+const h5BaseUrl = import.meta.env.VITE_H5_URL || 'http://127.0.0.1:5173';
+const h5QuizUrl = computed(() => (selectedBankId.value ? `${h5BaseUrl}/quiz/${selectedBankId.value}` : ''));
 
 const questionData = reactive<QuestionData>({
   title: '',
@@ -740,7 +868,13 @@ watch(
 async function fetchWorkbenchQuestions(bankId: string) {
   workbenchLoading.value = true;
   try {
-    const result = await getQuestions({ bankId, page: 1, pageSize: 100, include_ai_action_logs: true });
+    const result = await getQuestions({
+      bankId,
+      page: 1,
+      pageSize: 100,
+      include_ai_action_logs: true,
+      ...(selectedTaskId.value ? { taskId: selectedTaskId.value } : {}),
+    });
     questions.value = result.list;
     const requestedQuestionId = String(route.query.questionId || '');
     const first = requestedQuestionId
@@ -767,7 +901,14 @@ async function loadQuestion(questionId: string) {
 
 async function selectQueueQuestion(question: Question) {
   await loadQuestion(question.id);
-  void router.replace({ path: '/workbench', query: { bankId: selectedBankId.value, questionId: question.id } });
+  void router.replace({
+    path: '/workbench',
+    query: {
+      bankId: selectedBankId.value,
+      questionId: question.id,
+      ...(selectedTaskId.value ? { taskId: selectedTaskId.value } : {}),
+    },
+  });
 }
 
 async function selectQuestionByOffset(offset: number) {
@@ -775,7 +916,14 @@ async function selectQuestionByOffset(offset: number) {
   const target = questions.value[nextIndex];
   if (!target) return;
   await loadQuestion(target.id);
-  void router.replace({ path: '/workbench', query: { bankId: selectedBankId.value, questionId: target.id } });
+  void router.replace({
+    path: '/workbench',
+    query: {
+      bankId: selectedBankId.value,
+      questionId: target.id,
+      ...(selectedTaskId.value ? { taskId: selectedTaskId.value } : {}),
+    },
+  });
 }
 
 function hydrateQuestionData(question: Question | null) {
@@ -948,6 +1096,23 @@ function aiConfidenceText(question: Question | null | undefined) {
   return Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : '';
 }
 
+function confidencePercent(value: number | null | undefined) {
+  const confidence = Number(value);
+  return Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : '-';
+}
+
+function booleanText(value: boolean | null | undefined) {
+  return value ? 'true' : 'false';
+}
+
+function numberListText(value: number[] | undefined) {
+  return Array.isArray(value) && value.length ? value.join(' - ') : '-';
+}
+
+function assetCountText(value: Array<unknown> | undefined) {
+  return Array.isArray(value) ? String(value.length) : '0';
+}
+
 function isLowAiConfidence(question: Question | null | undefined) {
   const confidence = Number(question?.ai_answer_confidence);
   return Number.isFinite(confidence) && confidence < 0.7;
@@ -1041,9 +1206,9 @@ function buildQuestionPayload(needsReview = selectedQuestion.value?.needs_review
   };
 }
 
-async function manualSave() {
+async function markPendingReview() {
   if (!selectedQuestion.value) return;
-  const shouldContinue = await confirmUnresolvedAiRisks('保存草稿');
+  const shouldContinue = await confirmUnresolvedAiRisks('标记待审核');
   if (!shouldContinue) return;
   saveState.value = 'saving';
   window.clearTimeout(saveTimer);
@@ -1051,7 +1216,7 @@ async function manualSave() {
   try {
     await updateQuestion(selectedQuestion.value.id, buildQuestionPayload(true));
     await loadQuestion(selectedQuestion.value.id);
-    ElMessage.success('题干草稿已保存');
+    ElMessage.success('已标记为待审核');
   } finally {
     saving.value = false;
   }
@@ -1081,6 +1246,23 @@ async function markStemReviewed() {
   } finally {
     saving.value = false;
   }
+}
+
+function openH5Preview() {
+  if (!h5QuizUrl.value) return;
+  window.open(h5QuizUrl.value, '_blank', 'noopener,noreferrer');
+}
+
+async function publishCurrentBank() {
+  if (!selectedBankId.value) return;
+  await ElMessageBox.confirm('确认发布当前题库？', '发布到题库', {
+    type: 'warning',
+    confirmButtonText: '确认发布',
+    cancelButtonText: '取消',
+  });
+  await publishBank(selectedBankId.value);
+  ElMessage.success('题库已发布');
+  await fetchBanks();
 }
 
 async function handleAcceptAiSuggestion(scope: 'answer' | 'analysis' | 'both') {
@@ -2154,5 +2336,50 @@ h1 {
   color: #273449;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.data-analysis-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  border: 1px solid #d7dfec;
+  border-radius: 14px;
+  background: #f8fbff;
+  padding: 14px;
+}
+
+.data-analysis-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.data-analysis-grid {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 8px 12px;
+}
+
+.data-analysis-grid.compact {
+  grid-template-columns: 180px minmax(0, 1fr);
+}
+
+.data-analysis-grid span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.data-analysis-grid p {
+  margin: 0;
+  color: #1f2937;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.data-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 </style>

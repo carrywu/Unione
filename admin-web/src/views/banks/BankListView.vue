@@ -18,7 +18,7 @@
       <el-table v-loading="loading" :data="banks" row-key="id">
         <el-table-column prop="name" label="题库名称" min-width="220">
           <template #default="{ row }">
-            <el-button link type="primary" @click="router.push(`/banks/${row.id}/questions`)">
+            <el-button link type="primary" @click="router.push(`/workbench?bankId=${row.id}`)">
               {{ row.name }}
             </el-button>
           </template>
@@ -37,6 +37,7 @@
             <el-button link type="primary" @click="router.push(`/banks/${row.id}/edit`)">编辑</el-button>
             <el-button link type="primary" @click="router.push(`/banks/${row.id}/upload`)">上传 PDF</el-button>
             <el-button link type="primary" @click="router.push(`/banks/${row.id}/answer-book`)">解析册匹配</el-button>
+            <el-button link type="primary" @click="router.push(`/workbench?bankId=${row.id}`)">资料分析工作台</el-button>
             <el-button link type="success" @click="handlePublish(row.id)">发布</el-button>
             <el-button link type="danger" @click="handleDelete(row.id)">删除</el-button>
           </template>

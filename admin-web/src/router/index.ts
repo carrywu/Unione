@@ -6,7 +6,6 @@ import BankListView from '@/views/banks/BankListView.vue';
 import BankCreateView from '@/views/banks/BankCreateView.vue';
 import BankUploadView from '@/views/banks/BankUploadView.vue';
 import BankReviewView from '@/views/banks/BankReviewView.vue';
-import BankQuestionsView from '@/views/banks/BankQuestionsView.vue';
 import QuestionPreviewView from '@/views/banks/QuestionPreviewView.vue';
 import AnswerBookMatchView from '@/views/banks/AnswerBookMatchView.vue';
 import UserListView from '@/views/users/UserListView.vue';
@@ -32,7 +31,17 @@ const router = createRouter({
         { path: 'banks/:id/upload', component: BankUploadView, meta: { title: '上传 PDF' } },
         { path: 'banks/:id/answer-book', component: AnswerBookMatchView, meta: { title: '题册解析匹配' } },
         { path: 'banks/:id/review', component: BankReviewView, meta: { title: '题目审核' } },
-        { path: 'banks/:id/questions', component: BankQuestionsView, meta: { title: '题目列表' } },
+        {
+          path: 'banks/:id/questions',
+          redirect: (to) => ({
+            path: '/workbench',
+            query: {
+              bankId: String(to.params.id || ''),
+              ...(to.query.taskId ? { taskId: String(to.query.taskId) } : {}),
+            },
+          }),
+          meta: { title: '题目列表' },
+        },
         { path: 'banks/:id/questions/:questionId/preview', component: QuestionPreviewView, meta: { title: '题目预览' } },
         { path: 'materials', component: MaterialListView, meta: { title: '材料管理' } },
         { path: 'pdf/tasks', component: TaskListView, meta: { title: '解析任务' } },

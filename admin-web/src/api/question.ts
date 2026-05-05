@@ -1,6 +1,93 @@
 import http from './http';
 import type { PageResult } from './bank';
 
+export interface CommercialOcrOverlayHighlight {
+  page: number;
+  bbox: number[];
+  label?: string;
+  kind?: string;
+}
+
+export interface DataAnalysisVisualContext {
+  model_provider: string;
+  model_name: string;
+  source_material_complete: boolean;
+  chart_title_present: boolean;
+  table_header_present: boolean;
+  unit_present: boolean;
+  legend_present: boolean;
+  table_or_chart_readable: boolean;
+  material_group_visual_consistent: boolean;
+  suspected_crop_errors: string[];
+  suspected_ocr_errors: string[];
+  critical_data_points_visible: string[];
+  visual_summary: string;
+  warnings: string[];
+}
+
+export interface DataAnalysisUnderstandingResult {
+  model_provider: string;
+  model_name: string;
+  question_no: number;
+  can_understand_material: boolean;
+  can_solve_question: boolean;
+  answer_suggestion?: string | null;
+  calculation_reasoning: string;
+  formula_used: string;
+  data_points_used: string[];
+  missing_information: string[];
+  ocr_answer_agreement: 'agree' | 'disagree' | 'no_ocr_answer' | 'uncertain' | string;
+  conflict_with_ocr_answer: boolean;
+  comprehension_confidence: number;
+  needs_human_review: boolean;
+  warnings: string[];
+}
+
+export interface DataAnalysisQualityGate {
+  has_shared_material: boolean;
+  has_valid_question_range: boolean;
+  children_share_same_material_id: boolean;
+  shared_assets_preserved: boolean;
+  table_header_complete: boolean;
+  unit_complete: boolean;
+  chart_title_complete: boolean;
+  local_stem_not_polluted: boolean;
+  llm_can_understand_material: boolean;
+  llm_can_solve_question: boolean;
+  calculation_reasoning_present: boolean;
+  answer_conflict: boolean;
+  comprehension_confidence: number;
+  review_ready: boolean;
+  needs_human_review: boolean;
+  blocking_reasons: string[];
+  warnings: string[];
+}
+
+export interface CommercialOcrQuestionQuality {
+  effective_provider?: string | null;
+  fallback_used?: boolean;
+  provider_result?: Record<string, unknown> | null;
+  quality_gate?: Record<string, unknown> | null;
+  visual_understanding?: Record<string, unknown> | null;
+  data_analysis_visual_context?: DataAnalysisVisualContext | null;
+  data_analysis_understanding_result?: DataAnalysisUnderstandingResult | null;
+  data_analysis_quality_gate?: DataAnalysisQualityGate | null;
+  material_group?: {
+    material_id?: string;
+    group_type?: string;
+    question_range?: number[];
+    shared_stem?: string;
+    shared_assets?: Array<Record<string, unknown>>;
+    table_blocks?: Array<Record<string, unknown>>;
+    chart_blocks?: Array<Record<string, unknown>>;
+    source_page_span?: number[];
+    warnings?: string[];
+  } | null;
+  bbox_overlay?: {
+    highlights?: CommercialOcrOverlayHighlight[];
+  } | null;
+}
+
 export interface Question {
   id: string;
   bank_id: string;
@@ -111,7 +198,9 @@ export interface Question {
   ai_can_solve_question?: boolean;
   ai_reviewed_before_human?: boolean;
   ai_review_error?: string | null;
-  question_quality?: Record<string, unknown>;
+  question_quality?: (Record<string, unknown> & {
+    commercial_ocr?: CommercialOcrQuestionQuality | null;
+  }) | null;
   ai_action_logs?: QuestionAiActionLog[];
   material?: {
     id: string;
