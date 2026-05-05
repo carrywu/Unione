@@ -278,6 +278,21 @@ export class Question {
   @Column({ name: 'correct_rate', type: 'float', default: 0 })
   correct_rate: number;
 
+  @Column({ name: 'force_published', default: false })
+  force_published: boolean;
+
+  @Column({ name: 'force_publish_reason', type: 'text', nullable: true })
+  force_publish_reason?: string;
+
+  @Column({ name: 'force_publish_operator', nullable: true })
+  force_publish_operator?: string;
+
+  @Column({ name: 'force_publish_at', type: 'timestamp', nullable: true })
+  force_publish_at?: Date;
+
+  @Column({ name: 'force_publish_warnings', type: 'json', nullable: true })
+  force_publish_warnings?: string[];
+
   @CreateDateColumn({ name: 'created_at' })
   created_at: Date;
 

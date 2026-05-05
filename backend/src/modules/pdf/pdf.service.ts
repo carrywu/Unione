@@ -155,6 +155,17 @@ export class PdfService {
         question.status = QuestionStatus.Published;
         question.review_status = QuestionReviewStatus.Approved;
         question.needs_review = false;
+        if (isForce) {
+          question.force_published = true;
+          question.force_publish_reason = body.force_reason || '';
+          question.force_publish_operator = 'admin';
+          question.force_publish_at = new Date();
+          const warnings: string[] = [];
+          if (!question.answer) warnings.push('answer_missing');
+          if (question.parse_warnings?.length) warnings.push(...question.parse_warnings);
+          if (question.ai_review_error) warnings.push('ai_review_error');
+          question.force_publish_warnings = warnings;
+        }
         await this.questionRepository.save(question);
       }
     }
