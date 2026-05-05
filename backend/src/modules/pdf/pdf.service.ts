@@ -123,6 +123,10 @@ export class PdfService {
       throw new BadRequestException('只有已完成的解析任务才能发布结果');
     }
 
+    if (body.force_publish && !body.force_reason) {
+      throw new BadRequestException('强制发布必须提供理由 (force_reason)');
+    }
+
     const taskQuestions = await this.questionRepository.find({
       where: { parse_task_id: task.id },
     });
@@ -135,12 +139,15 @@ export class PdfService {
         commercialQuestionsByNo.set(questionNo, question);
       });
     }
-    const publishable = taskQuestions.filter((question) =>
-      this.isPublishableParsedQuestion(
-        question,
-        commercialQuestionsByNo.get(question.index_num) || null,
-      ),
-    );
+
+    const isForce = Boolean(body.force_publish);
+    const publishable = taskQuestions.filter((question) => {
+      const cq = commercialQuestionsByNo.get(question.index_num) || null;
+      if (isForce) {
+        return this.isForcePublishable(question, cq);
+      }
+      return this.isPublishableParsedQuestion(question, cq);
+    });
     const reviewCount = taskQuestions.length - publishable.length;
 
     if (publishable.length) {
@@ -177,6 +184,8 @@ export class PdfService {
       skipped_count: reviewCount,
       bank_status: bank.status,
       total_count: totalCount,
+      force_published: isForce,
+      force_reason: isForce ? body.force_reason : undefined,
     };
   }
 
@@ -5361,6 +5370,51 @@ export class PdfService {
       (!hasAiPreauditSignal ||
         (aiStatus === 'passed' && !question.ai_review_error))
     );
+  }
+
+  /**
+   * Relaxed publish gate for force-publish scenario.
+   * Still blocks truly dangerous cases:
+   *   - answer completely missing
+   *   - layout-only OCR (no real text content)
+   *   - incomplete shared material group (17-20)
+   * Allows warning-level issues through:
+   *   - needs_review=true
+   *   - parse_warnings present
+   *   - fallback_used=true
+   *   - analysis=unknown
+   *   - quality gate warnings
+   */
+  private isForcePublishable(
+    question: Question,
+    commercialQuestion?: Record<string, any> | null,
+  ) {
+    // Hard block: answer must exist
+    const answerPresent = Boolean(
+      this.firstMeaningfulText(question.answer, commercialQuestion?.answer),
+    );
+    if (!answerPresent) return false;
+
+    // Hard block: layout-only OCR
+    const commercialQuestionGate =
+      commercialQuestion?.quality_gate_question_status &&
+      typeof commercialQuestion.quality_gate_question_status === 'object'
+        ? (commercialQuestion.quality_gate_question_status as Record<string, any>)
+        : null;
+    const layoutOnly = this.toStringArray(commercialQuestionGate?.warnings).includes(
+      'layout_only_result',
+    );
+    if (layoutOnly) return false;
+
+    // Hard block: incomplete shared material group
+    const commercialQualityGate =
+      commercialQuestion?.quality_gate && typeof commercialQuestion.quality_gate === 'object'
+        ? (commercialQuestion.quality_gate as Record<string, any>)
+        : null;
+    if (commercialQualityGate?.extracted_but_incomplete === true) return false;
+
+    // All other warning-level issues are allowed through with force
+    return true;
   }
 
   private buildQuestionSignature(input: {
