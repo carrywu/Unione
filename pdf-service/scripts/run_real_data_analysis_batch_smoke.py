@@ -117,6 +117,8 @@ def provider_issue_reason(
     warnings: list[str],
     result: Any | None,
 ) -> str | None:
+    if provider_status in {"ok", "partial", "ok_local_fallback"}:
+        return None
     lowered_warnings = [str(item or "").strip().lower() for item in warnings if str(item or "").strip()]
     provider_error = getattr(result, "provider_error", None) if result is not None else None
     error_code = str((provider_error or {}).get("code") or "").strip().lower()

@@ -38,6 +38,22 @@ class RealCommercialOcrScriptsTest(unittest.TestCase):
         self.assertEqual(summary["errors"][0]["code"], "AuthFailure.SignatureFailure")
         self.assertTrue(str(summary["raw_ref_redacted"]).endswith("failure.json"))
 
+    def test_provider_page_summary_clears_skipped_reason_for_success(self):
+        result = SimpleNamespace(
+            raw_response_ref="/tmp/provider/success.json",
+            provider_error={"code": "http_request_failed", "message": "request failed earlier"},
+        )
+        summary = provider_page_summary(
+            candidate={"page_no": 1},
+            provider_name="baidu_paper_cut_edu",
+            provider_status="ok",
+            provider_latency_ms=10,
+            assembly=None,
+            result=result,
+            warnings=["provider_http_error"],
+        )
+        self.assertIsNone(summary["skipped_reason"])
+
     def test_compare_page_summaries_prefers_commercial_when_bboxs_exist(self):
         commercial = {
             "provider": "baidu_paper_cut_edu",
